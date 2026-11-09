@@ -4286,6 +4286,15 @@ struct menumodel {
 #define MENU_MAX_COLS   32
 #define MENU_MAX_BLOCKS 1024
 
+// Stacked dialog layers, and every dialog open at once across them. The game
+// had 6 layers and 10 dialogs, and menuPushDialog() refuses a deeper push
+// outright: a room's Room Setup > Simulants > Add Simulant died that way,
+// because the Online page, the Briefing Room, the Game Lobby, Room Setup and
+// the Simulants page already fill five layers and the Add or Edit page is the
+// sixth - offline, where the Simulants page is the second, all of them fit.
+#define MENU_MAX_LAYERS   12
+#define MENU_MAX_DIALOGS  32
+
 struct menurow {
 	s16 height;
 	u16 itemindex;
@@ -4305,10 +4314,11 @@ struct menu {
 	// had 10: the solo pause menu is four siblings, Extended Options one more,
 	// and Dab's Mod Options is five pages that swipe, which is ten exactly -
 	// so there is room to spare, as menuPushDialog() drops a sibling that
-	// does not fit without a word.
-	struct menudialog dialogs[16];
+	// does not fit without a word (it logs that refusal now; it used to be
+	// silent, and a page that never opened looked like a dead button).
+	struct menudialog dialogs[MENU_MAX_DIALOGS];
 	/*0x460*/ s16 numdialogs;
-	/*0x464*/ struct menulayer layers[6];
+	/*0x464*/ struct menulayer layers[MENU_MAX_LAYERS];
 	/*0x4f4*/ s16 depth; // index into layers. 1-indexed?
 	/*0x4f8*/ struct menudialog *curdialog;
 	// Rows, columns and item data for every item of every stacked dialog (the

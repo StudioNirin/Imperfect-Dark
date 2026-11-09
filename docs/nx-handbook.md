@@ -202,6 +202,14 @@ ROM and all mods carry over, and the fork is the same game lineage.
 - Screenshot-based verification: dialogs need the 1.5 s hold; per-instance
   binary dirs for multi-client tests (`cp -l`).
 
+- **A dead menu button is usually a refused push, not a dead handler.**
+  `menuPushDialog()` opens a page only while the menu's dialog stack has room
+  (`MENU_MAX_LAYERS`, `MENU_MAX_DIALOGS` in `src/include/types.h`), and it used
+  to refuse in silence - no log, no sound - so a live lobby's Simulants rows
+  looked broken rather than full (netplay.md: "A live room's Simulants pages").
+  It logs `menu: push of dialog ... refused` now; look for that line before
+  reading a handler.
+
 ## 9. Open threads (as of 2026-11-09)
 
 - The hosted lobby (`deploy/lobby/`) is built and container-tested but not

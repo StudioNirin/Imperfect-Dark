@@ -1716,7 +1716,8 @@ void menuPushDialog(struct menudialogdef *dialogdef)
 	if (dialogdef) {
 		menuUnsetModel(&g_Menus[g_MpPlayerNum].menumodel);
 
-		if (g_Menus[g_MpPlayerNum].depth < 6 && g_Menus[g_MpPlayerNum].numdialogs < ARRAYCOUNT(g_Menus[0].dialogs)) {
+		if (g_Menus[g_MpPlayerNum].depth < MENU_MAX_LAYERS
+				&& g_Menus[g_MpPlayerNum].numdialogs < MENU_MAX_DIALOGS) {
 			struct menulayer *layer = &g_Menus[g_MpPlayerNum].layers[g_Menus[g_MpPlayerNum].depth];
 			struct menudialogdef *sibling;
 			struct menudialog *dialog;
@@ -1785,6 +1786,16 @@ void menuPushDialog(struct menudialogdef *dialogdef)
 				}
 			}
 		}
+#ifndef PLATFORM_N64
+		else {
+			// A page that did not fit used to vanish without a sound, a log
+			// line or a word: a room's Add Simulant and Edit Simulant rows
+			// looked dead instead of full (tools/ci/netlobbysimtest.sh).
+			sysLogPrintf(LOG_ERROR, "menu: push of dialog %p refused (depth %d/%d, dialogs %d/%d)",
+					dialogdef, g_Menus[g_MpPlayerNum].depth, MENU_MAX_LAYERS,
+					g_Menus[g_MpPlayerNum].numdialogs, MENU_MAX_DIALOGS);
+		}
+#endif
 	}
 }
 

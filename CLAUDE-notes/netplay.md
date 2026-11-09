@@ -186,6 +186,12 @@
   between two home routers; a campaign room reopened after its first
   mission (nobody could join after that); the lobby answering a WireGuard
   peer from the wrong address; how to steer one joiner's traffic.
+- **A live room's Simulants pages (2026-11-09, no wire change)** — the
+  section of that name: `menuPushDialog()`'s dialog-stack cap, refused with no
+  log, which is what made a live room's Add Simulant and Edit Simulant rows
+  dead; why a room's page stack is one deeper than Create Room's and why it
+  must stay that way; `MENU_MAX_LAYERS` and `MENU_MAX_DIALOGS`; and
+  `netlobbysimtest.sh`.
 
 ## The shape
 
@@ -4300,3 +4306,56 @@ joined across builds (the session's own check, as any room).
   (one run: 8.06 against 7.33, under the half-again bar). Before the fix the
   base passed 7 runs of 7 and the merge 6 of 8 (one the no-view state, one
   that bar).
+
+## A live room's Simulants pages (2026-11-09, no wire change)
+
+The user: Add Simulant and a simulant's page work in Create Room, and do
+nothing at all once the room is live. Nothing about the simulant code is
+involved: it is the menu's dialog stack.
+
+- **The buttons were not dead, the push was refused.** `menuPushDialog()`
+  (src/game/menu.c) opened a page only `if (depth < 6 && numdialogs < 10)`,
+  against `layers[6]` and `dialogs[16]` in `struct menu` (src/include/types.h),
+  and refused with no log, no sound and no word: the click is simply gone. The
+  same struct's other fixed tables (`MENU_MAX_ROWS`, `MENU_MAX_COLS`,
+  `MENU_MAX_BLOCKS`) had been widened for this class of overflow already, and
+  `func0f0f1d6c()` logs the rows one; this never did. They are
+  `MENU_MAX_LAYERS` (12) and `MENU_MAX_DIALOGS` (32) now, and a refusal logs
+  `menu: push of dialog %p refused (depth d/12, dialogs n/32)` at LOG_ERROR.
+  Everything else that walks the stack iterates `depth` or `ARRAYCOUNT(layers)`,
+  so no other number cared; `g_Menus` is runtime-only, so the 2 KB per menu is
+  all it cost.
+- **A room's pages stand one deeper than Create Room's.** The Game Lobby is
+  pushed over the Briefing Room (the Briefing Room's own tick pushes it, and
+  `netLobbyMenuFrame()` builds Online > Briefing > Game Lobby after a match)
+  and Room Settings over the Game Lobby: Mode, Online, Briefing, Game Lobby,
+  Room Setup, Simulants is the sixth page, and its Add or Edit page is the
+  seventh. Create Room is the fifth, so the same rows answered there. Offline
+  the Simulants page is the second, which is why only the Combat Simulator ever
+  showed any of it - and why the dead buttons looked intermittent: after a
+  match the Game Lobby goes over the Perfect Menu instead, which is shallower.
+- **Do not flatten the lobby's stack instead.** `lobbyNameEntryUp()`
+  (netlobbymenu.c) scans the live layers for the Online and Mode pages to know
+  whether Name Entry is up, and Leave and Back land through them. And the
+  simulant's Character and Stats pages - the cap's seventh offline, its eighth
+  from a room - were out of reach of *every* lobby, Create Room included, so a
+  shallower stack would still have to give one of them up.
+- **Two test artifacts that both look exactly like the bug.**
+  `--net-test-sims` only sets the slot flags, and a slot that is on with no bot
+  behind it opens the Edit page and has `menudialogMpSimulant`'s own tick close
+  it again on the empty name; make the simulant through
+  `mpAddChangeSimulantMenuHandler` (what the Add page's list does) instead. And
+  a pop is an animation: a page pushed while the page above it is still popping
+  is closed when that animation finishes, so the stack has to settle (~800 ms)
+  between a pop and a push. Popping in a loop in one frame pops far past the
+  page you wanted for the same reason.
+- **Gate**: `tools/ci/netlobbysimtest.sh` - one offscreen host in a LAN room of
+  its own (`--net-lobby-script host --net-lobby-mode lan`, no joiner, so it
+  waits for a READY that never comes), no pdlobbyd. It drives
+  `--net-test-lobby-simulants` (netlobbymenu.c), which pushes the Online and
+  Briefing pages first - the stack the script leaves behind is two shallower
+  than a player's and the bug hides without them - then Room Setup, Simulants,
+  Add Simulant, a simulant made from the Add page's list, that simulant's page
+  and its character page, logging the depth at each (4, 5, 6, 7, 7, 8) and
+  shots of three. Before the caps it stopped at "Add Simulant was refused at
+  depth 6".

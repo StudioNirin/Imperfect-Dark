@@ -94,6 +94,10 @@ extern struct menudialogdef g_NetRoomSettingsMenuDialog;
 extern struct menudialogdef g_MpArenaMenuDialog;
 extern struct menudialogdef g_MpLimitsMenuDialog;
 extern struct menudialogdef g_MpSimulantsMenuDialog;
+extern struct menudialogdef g_MpAddSimulantMenuDialog;
+extern struct menudialogdef g_MpEditSimulantMenuDialog;
+extern struct menudialogdef g_MpEditSimulant4MbMenuDialog;
+extern struct menudialogdef g_MpSimulantCharacterMenuDialog;
 
 char *mpMenuTextArenaName(struct menuitem *item);
 char *mpMenuTextScenarioShortName(struct menuitem *item);
@@ -5981,6 +5985,281 @@ static void modePagesTestTick(void)
 	step++;
 }
 
+/**
+ * --net-test-lobby-simulants (tools/ci/netlobbysimtest.sh): a live room's
+ * Simulants chain, walked by the two buttons' own handlers. A room's pages
+ * stand one deeper than Create Room's - the Game Lobby stays stacked under
+ * Room Settings, because lobbyNameEntryUp() reads the stack to find its way
+ * back out - and menuPushDialog() refused a push past the sixth layer with no
+ * sound and no word: once the room was live, Add Simulant and a simulant's
+ * own page did nothing (the user, 2026-11-09). Runs under
+ * --net-lobby-script host with no joiner, which sits in the Game Lobby
+ * waiting for a READY that never comes, and it pushes the Online page and the
+ * Briefing Room under that first: that is the stack a player's live room
+ * stands on, and the two pages shallower one the script leaves behind hides
+ * the bug. It walks the rest with the buttons' own handlers - Room Setup,
+ * Simulants, Add Simulant, a simulant made from the Add page's list, that
+ * simulant's page, and one page deeper still (its character carousel, which
+ * no lobby could open at all: the Edit page was the cap's sixth) - logging
+ * the menu depth at every page and shots of them: PASS with all of them up,
+ * FAIL naming the one that was refused.
+ */
+static s32 simTestPageUp(struct menudialogdef *def)
+{
+	struct menudialog *dialog = g_Menus[g_MpPlayerNum].curdialog;
+
+	return dialog && dialog->definition == def && dialog->state == MENUDIALOGSTATE_POPULATED;
+}
+
+static void simTestQuit(s32 failed)
+{
+	sysLogPrintf(failed ? LOG_ERROR : LOG_NOTE, "lobby sim test: %s",
+			failed ? "FAIL a page of the Simulants chain was refused" : "PASS every page of the Simulants chain opened");
+	fflush(stdout);
+	exit(failed ? 1 : 0);
+}
+
+static void simTestTick(void)
+{
+	static s32 step = -1;
+	static u64 at = 0;
+	static s32 failed = 0;
+	static struct menuitem slotitem;
+	static s32 simslot = -1; // the simulant this test makes to have something to edit
+	const u64 now = sysGetMicroseconds() / 1000;
+	struct menu *menu = &g_Menus[g_MpPlayerNum];
+	union handlerdata data;
+
+	if (step < 0) {
+		step = sysArgCheck("--net-test-lobby-simulants") ? 0 : 99;
+		at = now;
+	}
+
+	if (step == 99) {
+		return;
+	}
+
+	memset(&data, 0, sizeof(data));
+
+	// a page that never came up is a refused push: menuPushDialog() drops it
+	// and leaves the page under it current, which is the whole shape of the bug
+	if ((step == 2 || step == 4) && now - at > 8000) {
+		sysLogPrintf(LOG_ERROR, "lobby sim test: FAIL step %d: the page never came up (depth %d)", step, menu->depth);
+		failed = 1;
+		step = 10; // shot what is up before giving up, so a red run has a page
+		at = now;
+		return;
+	}
+
+	switch (step) {
+	case 0:
+		if (g_MenuData.root == 0 || !menu->curdialog) {
+			return; // the boot's menus are still closing
+		}
+
+		// the stack a player's live room stands on: the Online page and the
+		// Briefing Room under the Game Lobby, the chain netLobbyMenuFrame()
+		// builds after a match too. Pushing the Game Lobby alone leaves the
+		// chain two pages shallower than the room the user was in, and the
+		// refused push this test is for never happens.
+		if (!isCurrent(&g_NetRoomMenuDialog)) {
+			if (!isCurrent(&g_NetBriefingMenuDialog)) {
+				if (!isCurrent(&g_NetOnlineMenuDialog)) {
+					menuPushDialog(&g_NetOnlineMenuDialog);
+					return;
+				}
+
+				menuPushDialog(&g_NetBriefingMenuDialog);
+				return;
+			}
+
+			netLobbyMenuPushRoom();
+			return;
+		}
+
+		if (!simTestPageUp(&g_NetRoomMenuDialog)) {
+			return;
+		}
+
+		sysLogPrintf(LOG_NOTE, "lobby sim test: the Game Lobby is up at depth %d", menu->depth);
+		step = 1;
+		at = now;
+		break;
+	case 1: // the host's SETTINGS row, as handlerHostOnly opens it
+		menuPushDialog(&g_NetRoomSettingsMenuDialog);
+		step = 2;
+		at = now;
+		break;
+	case 2:
+		if (!simTestPageUp(&g_NetRoomSettingsMenuDialog)) {
+			return;
+		}
+
+		sysLogPrintf(LOG_NOTE, "lobby sim test: Room Setup is up at depth %d", menu->depth);
+		step = 3;
+		at = now;
+		break;
+	case 3: // the Simulants row of the setup pages
+		menuPushDialog(&g_MpSimulantsMenuDialog);
+		step = 4;
+		at = now;
+		break;
+	case 4:
+		if (!simTestPageUp(&g_MpSimulantsMenuDialog)) {
+			return;
+		}
+
+		sysLogPrintf(LOG_NOTE, "lobby sim test: Simulants is up at depth %d", menu->depth);
+		screenshotRequest();
+		sysLogPrintf(LOG_NOTE, "lobby sim test: shot the room's Simulants page");
+		step = 5;
+		at = now;
+		break;
+	case 5: // the capture lands on a later frame's swap: hold the page up
+		if (now - at < 1500) {
+			return;
+		}
+
+		step = 6;
+		at = now;
+		break;
+	case 6: // Add Simulant...: the row's own handler, as the button runs it
+		menuhandlerMpAddSimulant(MENUOP_SET, NULL, &data);
+		step = 7;
+		at = now;
+		break;
+	case 7:
+		if (now - at < 300) {
+			return;
+		}
+
+		if (isCurrent(&g_MpAddSimulantMenuDialog)) {
+			sysLogPrintf(LOG_NOTE, "lobby sim test: Add Simulant is up at depth %d", menu->depth);
+		} else {
+			sysLogPrintf(LOG_ERROR, "lobby sim test: FAIL Add Simulant was refused at depth %d", menu->depth);
+			failed = 1;
+		}
+
+		step = 8;
+		at = now;
+		break;
+	case 8: // back to the Simulants page one pop a frame: a pop is an
+		// animation, and a page pushed over a dialog still popping gets
+		// closed when that animation finishes
+		if (simslot < 0) {
+			// a slot that is merely on, with no bot behind it, is popped by
+			// menudialogMpSimulant's own tick, which would look like a refused
+			// push: make a simulant the way this page's list makes one
+			mpClearSimSlots();
+			simslot = mpGetSlotForNewBot();
+			data.list.value = 0;
+			mpAddChangeSimulantMenuHandler(MENUOP_SET, NULL, &data);
+		}
+
+		if (!isCurrent(&g_MpSimulantsMenuDialog)) {
+			if (menu->depth < 2) {
+				sysLogPrintf(LOG_ERROR, "lobby sim test: FAIL step 8: the Simulants page was popped away");
+				failed = 1;
+				step = 11;
+				at = now;
+				return;
+			}
+
+			menuPopDialog();
+			at = now; // the settle clock runs from the last pop
+			return;
+		}
+
+		// the popped page is still sliding away: a page pushed under that is
+		// closed when the animation finishes, so let the stack settle first
+		if (now - at < 800) {
+			return;
+		}
+
+		if (!simTestPageUp(&g_MpSimulantsMenuDialog)) {
+			return;
+		}
+
+		if (simslot < 0 || simslot >= MAX_BOTS || g_BotConfigsArray[simslot].base.name[0] == '\0') {
+			sysLogPrintf(LOG_NOTE, "lobby sim test: no simulant could be made, so the Edit page is not tested");
+			step = 10;
+			at = now;
+			break;
+		}
+
+		sysLogPrintf(LOG_NOTE, "lobby sim test: simulant \"%.15s\" made in slot %d: pressing its row",
+				g_BotConfigsArray[simslot].base.name, simslot + 1);
+		slotitem.type = MENUITEMTYPE_SELECTABLE;
+		slotitem.param = simslot;
+		menuhandlerMpSimulantSlot(MENUOP_SET, &slotitem, &data);
+		step = 9;
+		at = now;
+		break;
+	case 9:
+		if (now - at < 300) {
+			return;
+		}
+
+		if (isCurrent(&g_MpEditSimulantMenuDialog) || isCurrent(&g_MpEditSimulant4MbMenuDialog)) {
+			sysLogPrintf(LOG_NOTE, "lobby sim test: Edit Simulant is up at depth %d", menu->depth);
+			screenshotRequest();
+			sysLogPrintf(LOG_NOTE, "lobby sim test: shot the simulant's own page");
+			step = 12;
+			at = now;
+			break;
+		}
+
+		sysLogPrintf(LOG_ERROR, "lobby sim test: FAIL Edit Simulant was refused at depth %d (dialogs %d, the Add page is%s current)",
+				menu->depth, menu->numdialogs, isCurrent(&g_MpAddSimulantMenuDialog) ? "" : " not");
+		failed = 1;
+		step = 10;
+		at = now;
+		break;
+	case 10:
+		screenshotRequest();
+		sysLogPrintf(LOG_NOTE, "lobby sim test: shot the page that is up");
+		step = 11;
+		at = now;
+		break;
+	case 11:
+		if (now - at < 1500) {
+			return;
+		}
+
+		simTestQuit(failed);
+		break;
+	case 12: // one page deeper: the character carousel, the page the cap hid
+		// even from the Create Room page (Edit is its sixth, this its seventh)
+		if (now - at < 1500) {
+			return; // the shot above lands on a later frame's swap
+		}
+
+		menuPushDialog(&g_MpSimulantCharacterMenuDialog);
+		step = 13;
+		at = now;
+		break;
+	case 13:
+		if (now - at < 300) {
+			return;
+		}
+
+		if (isCurrent(&g_MpSimulantCharacterMenuDialog)) {
+			sysLogPrintf(LOG_NOTE, "lobby sim test: Simulant Character is up at depth %d", menu->depth);
+		} else {
+			sysLogPrintf(LOG_ERROR, "lobby sim test: FAIL the Simulant Character page was refused at depth %d", menu->depth);
+			failed = 1;
+		}
+
+		screenshotRequest();
+		sysLogPrintf(LOG_NOTE, "lobby sim test: shot the simulant's character page");
+		step = 10;
+		at = now;
+		break;
+	default:
+		break;
+	}
+}
+
 static void onlineTestTick(void)
 {
 	static s32 step = -1;
@@ -6177,6 +6456,7 @@ void netLobbyMenuFrame(void)
 
 	onlineTestTick();
 	modePagesTestTick();
+	simTestTick();
 
 	// The online profile (netprofile.c) is left as Name Entry closes; a
 	// campaign room's host plays its menus with Name Entry gone from them,
