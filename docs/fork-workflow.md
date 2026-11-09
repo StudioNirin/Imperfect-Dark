@@ -2,7 +2,9 @@
 
 The short version of how a change gets from an idea to players. Upstream's own
 notes (`CLAUDE-notes/`, `docs/`) still explain the engine itself; this page is
-about *this* repo: where things run, what to type, and what CI does.
+about *this* repo: where things run, what to type, and what CI does. The full
+accumulated reference - how versions and updates work, how to change a file,
+how players migrate - is `nx-handbook.md` next door.
 
 ## Layout
 
