@@ -239,6 +239,61 @@ static bool patchnotesParseHeader(const char *line, s32 *num, char *date, u32 da
 	return true;
 }
 
+/**
+ * This build's release stamp: "nx-<number>-<date>", or "" when there are no
+ * notes.
+ *
+ * <number> is the newest patch notes entry and <date> its date, read from the
+ * copy baked into this build, so the stamp gets a fresh number exactly when
+ * the notes do - which is to say, whenever a batch of fixes has been pushed.
+ * Check for Updates shows it beside the commit hash, and the release job puts
+ * the same stamp into the release's version, so a newer one is visible in the
+ * "X is out" notice before anything is downloaded. It is a label for people
+ * to read; which builds may play together stays decided by the commit hash.
+ */
+const char *patchnotesVersionSuffix(void)
+{
+	static char suffix[64];
+	static bool resolved = false;
+	const char *at;
+	s32 best = 0;
+	char bestdate[32];
+
+	// Only marked done once the text is in place: the updater's worker thread
+	// and the menu can both ask, and a second caller must never see the
+	// half-written stamp. Two threads computing it is harmless either way.
+	if (resolved) {
+		return suffix;
+	}
+
+	bestdate[0] = '\0';
+	at = patchnotesBuiltIn();
+
+	while (at && *at) {
+		const char *eol = strchr(at, '\n');
+		u32 linelen = eol ? (u32)(eol - at) : (u32)strlen(at);
+		char line[PATCHNOTES_MAXLINE];
+		char date[32];
+		s32 num;
+
+		patchnotesCleanLine(at, linelen, line, sizeof(line));
+		at = eol ? eol + 1 : NULL;
+
+		if (patchnotesParseHeader(line, &num, date, sizeof(date)) && num > best) {
+			best = num;
+			snprintf(bestdate, sizeof(bestdate), "%s", date);
+		}
+	}
+
+	if (best > 0) {
+		snprintf(suffix, sizeof(suffix), "nx-%d-%s", best, bestdate);
+	}
+
+	resolved = true;
+
+	return suffix;
+}
+
 static bool patchnotesAppend(char *out, u32 outsize, u32 *len, const char *text)
 {
 	u32 add = (u32)strlen(text);

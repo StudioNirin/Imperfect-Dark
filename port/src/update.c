@@ -40,6 +40,7 @@
 #include "versioninfo.h"
 #include "langpack.h"
 #include "config.h"
+#include "patchnotes.h"
 
 /**
  * See update.h for what this is. This file is the how.
@@ -884,7 +885,10 @@ static int updateWorker(void *arg)
 			if (g_Force) {
 				snprintf(msg, sizeof(msg), "Ready to install %s again.", g_Version);
 			} else {
-				snprintf(msg, sizeof(msg), "%s is out. You have %s.", g_Version, VERSION_HASH);
+				const char *stamp = patchnotesVersionSuffix();
+
+				snprintf(msg, sizeof(msg), "%s is out. You have %s%s%s.", g_Version, VERSION_HASH,
+						stamp[0] ? " " : "", stamp);
 			}
 
 			SDL_UnlockMutex(g_Lock);

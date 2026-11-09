@@ -31,6 +31,9 @@
 # CMake reads the newest number when it configures, and configures again by
 # itself when this file changes, so an ordinary rebuild picks up an entry.
 
+notes 70 2026-11-09
+Menus: version lines (the update screen, update notices, the log) now show a release stamp like nx-70-2026-11-09 next to the commit hash, so a newer build is easy to spot
+
 notes 69 2026-11-09
 Online: a team match's Change Team opens a picker of all eight team colours instead of cycling Red and Yellow, with Spectate for anyone but the host, and the lobby button now names your team
 

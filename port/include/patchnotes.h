@@ -22,6 +22,11 @@
 // The newest entry this build was configured with. 0 when there was no file.
 s32 patchnotesBuildNumber(void);
 
+// This build's release stamp: "nx-<number>-<date>" from the newest patch notes
+// entry, "" when there are none. Shown beside the commit hash in the updater,
+// and written into the release's version by the release job.
+const char *patchnotesVersionSuffix(void);
+
 // The text a DESCRIPTION_PATCHNOTES scrollable shows, for whichever of the two
 // pages is open. Formatted for menuitemScrollableRender(): "|" starts a heading.
 char *patchnotesGetText(void);

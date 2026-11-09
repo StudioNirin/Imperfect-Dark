@@ -15,6 +15,7 @@
 #include "system.h"
 #include "crashreport.h"
 #include "video.h"
+#include "patchnotes.h"
 
 #ifdef PLATFORM_WIN32
 
@@ -96,7 +97,12 @@ void sysInit(void)
 	}
 
 #ifdef VERSION_HASH
-	sysLogPrintf(LOG_NOTE, "version: " VERSION_BRANCH " " VERSION_HASH " (" VERSION_TARGET ")");
+	{
+		const char *stamp = patchnotesVersionSuffix();
+
+		sysLogPrintf(LOG_NOTE, "version: %s %s%s%s (%s)", VERSION_BRANCH, VERSION_HASH,
+				stamp[0] ? " " : "", stamp, VERSION_TARGET);
+	}
 #endif
 
 	char timestr[256];
@@ -536,5 +542,13 @@ void sysCpuRelax(void)
 
 const char *sysGetVersionString(void)
 {
-	return VERSION_BRANCH " " VERSION_HASH " (" VERSION_TARGET ")";
+	static char version[128];
+	const char *stamp = patchnotesVersionSuffix();
+
+	// The release stamp beside the hash: crash and trace reports name a build
+	// in the same words a player sees in the updater.
+	snprintf(version, sizeof(version), "%s %s%s%s (%s)", VERSION_BRANCH, VERSION_HASH,
+			stamp[0] ? " " : "", stamp, VERSION_TARGET);
+
+	return version;
 }

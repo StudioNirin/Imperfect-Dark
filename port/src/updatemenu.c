@@ -51,9 +51,11 @@ static bool g_UpdateFocusAction = false;
 static char *menutextUpdateStatus(struct menuitem *item)
 {
 	const char *msg = updateGetMessage();
+	const char *stamp = patchnotesVersionSuffix();
 
-	snprintf(g_UpdateText, sizeof(g_UpdateText), langTr("This build: %s %s (%s)\n%s\n"),
-			VERSION_BRANCH, VERSION_HASH, VERSION_CHANNEL, langTr(msg[0] ? msg : "Not checked yet."));
+	snprintf(g_UpdateText, sizeof(g_UpdateText), langTr("This build: %s %s%s%s (%s)\n%s\n"),
+			VERSION_BRANCH, VERSION_HASH, stamp[0] ? " " : "", stamp, VERSION_CHANNEL,
+			langTr(msg[0] ? msg : "Not checked yet."));
 
 	if (g_SwitchBackup[0]) {
 		u32 len = strlen(g_UpdateText);
@@ -938,8 +940,12 @@ void updatenoticeMainMenuTick(struct menudialogdef *menudef, struct menuinputs *
 
 static char *menutextUpdateNotice(struct menuitem *item)
 {
-	snprintf(g_NoticeText, sizeof(g_NoticeText), langTr("%s is out.\nThis build is %s (%s).\n"),
-			g_NoticeVersion, VERSION_HASH, VERSION_CHANNEL);
+	const char *stamp = patchnotesVersionSuffix();
+
+	// g_NoticeVersion is the release's own name, which the release job writes
+	// with that release's stamp, so both builds show theirs.
+	snprintf(g_NoticeText, sizeof(g_NoticeText), langTr("%s is out.\nThis build is %s%s%s (%s).\n"),
+			g_NoticeVersion, VERSION_HASH, stamp[0] ? " " : "", stamp, VERSION_CHANNEL);
 
 	return g_NoticeText;
 }

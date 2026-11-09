@@ -265,6 +265,15 @@ jobs:
           VERSION="${{ github.ref_type == 'tag' && github.ref_name || '' }}"
           VERSION="${VERSION:-dev-$COMMIT}"
 
+          # The release stamp the build carries inside it (see
+          # patchnotesVersionSuffix() in port/src/patchnotes.c): the newest
+          # patch notes entry and its date. Name the release with it too, so
+          # the "X is out" notice shows the fresh number before anybody
+          # downloads. The version field the game reads is 32 characters; a
+          # dev name plus this stamp stays inside it.
+          STAMP="$(awk '/^notes +[0-9]/ { if ($2 + 0 > best + 0) { best = $2; d = $3 } } END { if (best) printf "nx-%s-%s", best, d }' patchnotes.txt 2>/dev/null || true)"
+          [ -n "$STAMP" ] && VERSION="$VERSION-$STAMP"
+
           {
             echo "version $VERSION"
             echo "commit $COMMIT"
