@@ -4977,11 +4977,11 @@ static char *textTeamName(struct menuitem *item)
 static MenuItemHandlerResult handlerTeamName(s32 operation, struct menuitem *item, union handlerdata *data)
 {
 	if (operation == MENUOP_GETCOLOUR) {
-		// the colour itself, at whatever alpha the menu has for the row;
-		// Spectate is not a team and keeps the menu's own colour
+		// the row in its team's colour, with the same lift the roster's header
+		// gives it so Brown and Pink stay readable as text; Spectate is not a
+		// team and keeps the menu's own colour
 		if (item->param != 8) {
-			const u32 c = g_TeamColours[item->param & 7];
-			data->label.colour2 = (c & 0xffffff00) | (data->label.colour2 & 0xff);
+			data->label.colour2 = lobbyTeamColour(item->param, 1, data->label.colour2 & 0xff);
 		}
 
 		return 0;

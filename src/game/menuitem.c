@@ -2887,6 +2887,23 @@ Gfx *menuitemSelectableRender(Gfx *gdl, struct menurendercontext *context)
 				context->dialog->colourweight);
 	}
 
+	// The row's own colour, taken before the dimmed, focused and disabled
+	// effects go on top of it. This is the hook menuitemLabelRender has; a
+	// selectable row had no reason to want it until the lobby's team picker
+	// began tinting each row with its team's colour.
+	if (context->item->flags & MENUITEMFLAG_LABEL_CUSTOMCOLOUR) {
+		union handlerdata data;
+
+		data.label.colour1 = leftcolour;
+		data.label.colour2 = leftcolour;
+
+		if (context->item->handlervoid) {
+			context->item->handlervoid(MENUOP_GETCOLOUR, context->item, &data);
+		}
+
+		leftcolour = data.label.colour2;
+	}
+
 	if (context->dialog->dimmed) {
 		leftcolour = (colourBlend(leftcolour, 0, 127) & 0xffffff00) | (leftcolour & 0xff);
 	}
