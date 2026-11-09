@@ -23,6 +23,9 @@ on:
       - 'CLAUDE.md'
       - 'CLAUDE-notes/**'
       - 'DabDavisGitHub.md'
+      # The packaging script makes archives out of a finished build; it is in
+      # neither the download nor the binary, so it does not need a build.
+      - 'tools/package/**'
   workflow_dispatch:
 
 env:
