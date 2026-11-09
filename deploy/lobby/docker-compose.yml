@@ -1,0 +1,50 @@
+# The netplay lobby for the fork's players: pdlobbyd and its TLS front.
+#
+# Host networking is not a shortcut: the UDP rendezvous answers REGISTER and
+# ECHO with the sender's address as the lobby saw it, and NAT punches are
+# aimed at that address. Behind a bridge network every player would appear
+# as the docker bridge address and no pair would ever connect.
+#
+#   cp .env.example .env   # set LOBBY_DOMAIN first
+#   docker compose up -d --build
+#
+# See README.md for the firewall and what to tell players to type.
+
+services:
+  lobby:
+    build:
+      context: ../..
+      dockerfile: deploy/lobby/Dockerfile
+    image: imperfect-dark-lobby
+    # PDLOBBYD_HOST stays the loopback: Caddy on the same host talks to it
+    # and nobody else should. The UDP rendezvous binds every address.
+    environment:
+      PDLOBBYD_HOST: "127.0.0.1"
+      PDLOBBYD_PORT: "${LOBBY_HTTP_PORT:-8091}"
+      PDLOBBYD_UDP_HOST: "0.0.0.0"
+      PDLOBBYD_UDP_PORT: "${LOBBY_UDP_PORT:-27101}"
+      PDLOBBYD_AUTH: "${LOBBY_AUTH:-open}"
+      PDLOBBYD_RELAY_PORTS: "${LOBBY_RELAY_PORTS:-27110-27141}"
+    network_mode: host
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    # :443, and Let's Encrypt's TLS-ALPN challenge answers there too; the
+    # compose host network gives it without publishing anything
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      LOBBY_DOMAIN: "${LOBBY_DOMAIN:?set LOBBY_DOMAIN in .env}"
+      LOBBY_HTTP_PORT: "${LOBBY_HTTP_PORT:-8091}"
+      # "admin@..." for real certificates; "internal" for a LAN copy whose
+      # clients cannot check them (the game will not accept those)
+      LOBBY_TLS_EMAIL: "${LOBBY_TLS_EMAIL:-admin@${LOBBY_DOMAIN}}"
+
+volumes:
+  caddy-data:
+  caddy-config:

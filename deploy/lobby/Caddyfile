@@ -1,0 +1,24 @@
+# The lobby's public face: TLS and certificates, nothing else. The path
+# prefix is part of what the game expects (Net.LobbyServer ends in /pdlobby)
+# and handle_path strips it, so the lobby sees the un-prefixed paths it
+# serves (the same arrangement the original nginx had).
+
+{$LOBBY_DOMAIN} {
+	tls {$LOBBY_TLS_EMAIL}
+
+	handle_path /pdlobby/* {
+		reverse_proxy 127.0.0.1:{$LOBBY_HTTP_PORT:8091}
+	}
+
+	# what a browser sees
+	handle / {
+		redir /pdlobby/ping 302
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 20MiB
+			roll_keep 5
+		}
+	}
+}

@@ -26,6 +26,9 @@ on:
       # The packaging script makes archives out of a finished build; it is in
       # neither the download nor the binary, so it does not need a build.
       - 'tools/package/**'
+      # Same for the lobby's container files: nothing here compiles into the
+      # game, and the lobby image builds on its own host.
+      - 'deploy/**'
   workflow_dispatch:
 
 env:

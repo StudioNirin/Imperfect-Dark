@@ -40,3 +40,6 @@ lang/_source/
 !/payload/README.txt
 /dist/
 /run/
+
+# local compose config, per machine
+.env
