@@ -1,0 +1,50 @@
+name: Upstream watch
+
+# Dab's Mod is the source of this fork and may still get fixes. This says so:
+# it fetches DabDavis/perfect-dark-dabs-mod's dabs-mod branch once a day and
+# keeps one issue open listing the commits this branch does not have, so
+# anything worth merging is waiting as a list rather than being something
+# someone has to think to look for. Nothing is merged or pushed by it.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch the upstream branch
+        run: |
+          git remote add dabs https://github.com/DabDavis/perfect-dark-dabs-mod.git
+          git fetch dabs dabs-mod
+      - name: Report what we do not have
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          count="$(git rev-list --count HEAD..dabs/dabs-mod)"
+          if [ "$count" = "0" ]; then
+            echo "Nothing upstream that this branch lacks."
+            exit 0
+          fi
+          log="$(git log --oneline --no-decorate HEAD..dabs/dabs-mod | head -100)"
+          body="$(printf 'DabDavis/perfect-dark-dabs-mod `dabs-mod` has %s commit(s) this branch does not have.\n\n```\n%s\n```\n\nNothing has been merged. Check whether any of it is worth taking, then close this when the branch is level again.' "$count" "$log")"
+          gh label create upstream --color 0e8a16 \
+            --description "Commits in DabDavis/perfect-dark-dabs-mod not yet merged" --force >/dev/null
+          existing="$(gh issue list --state open --label upstream --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body "$body"
+            echo "Updated issue #$existing with the current list."
+          else
+            gh issue create --title "Upstream has $count commit(s) we do not have" \
+              --body "$body" --label upstream
+          fi
