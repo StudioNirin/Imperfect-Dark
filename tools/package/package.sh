@@ -218,6 +218,12 @@ for platform in "${platforms[@]}"; do
 
 		cp -a "$PAYLOAD/." "$stage/"
 		rm -f "$stage/README.txt"
+		# a full package ships the ROM, so the clean package's marker next to
+		# it would only be noise; added-content's marker stays unless the
+		# payload brought actual added-content files
+		rm -f "$stage/data/put_your_rom_here.txt"
+		find "$stage/added-content" ! -name put_goldeneye_rom_and_xbla_releases_here.txt ! -type d | grep -q . \
+			&& rm -f "$stage/added-content/put_goldeneye_rom_and_xbla_releases_here.txt" || true
 
 		# What went in, so this zip can be traced back file by file, and so
 		# the list below is the list of what to delete to be clean again.
