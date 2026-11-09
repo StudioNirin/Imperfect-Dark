@@ -6249,6 +6249,19 @@ s32 netLobbyMenuPushChat(void)
 	return inputIsTextInputActive();
 }
 
+// The team picker, over the Game Lobby: --net-test-lobby-team-dialog opens it
+// there so a test can screenshot the picker itself, as PushChat does for Chat
+s32 netLobbyMenuPushTeamDialog(void)
+{
+	netLobbyMenuPushRoom();
+
+	if (!isCurrent(&s_TeamDialog)) {
+		menuPushDialog(&s_TeamDialog);
+	}
+
+	return isCurrent(&s_TeamDialog);
+}
+
 // The lobby test's screenshots: is that page the one on screen?
 s32 netLobbyMenuPageUp(s32 room)
 {

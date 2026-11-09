@@ -269,6 +269,8 @@ static s32 s_ScriptNoEcho = 0;     // --net-test-no-echo: the list's PING as if 
 static s32 s_ScriptShots = 0;      // --net-lobby-shots: the menus up, screenshots of them (netlobbyuitest.sh)
 static s32 s_ScriptShotStep = 0;   // 0 nothing yet, 1 menu up, 2 shot taken
 static s32 s_ScriptChatAtLaunch = 0; // --net-test-chat-at-launch: join: the Game Lobby's Chat open as each later match launches
+static s32 s_ScriptTeamDialog = 0;   // --net-test-lobby-team-dialog: the Game Lobby's team picker open and screenshotted
+static u64 s_ScriptTeamAt = 0;
 static u64 s_ScriptShotAt = 0;
 
 void netLobbyMenuPushRoom(void);     // netlobbymenu.c
@@ -276,6 +278,7 @@ void netLobbyMenuPushRoomAfterMatch(void); // netlobbymenu.c
 void netLobbyMenuPushBriefing(void); // netlobbymenu.c
 s32 netLobbyMenuPageUp(s32 room);     // netlobbymenu.c
 s32 netLobbyMenuPushChat(void);       // netlobbymenu.c
+s32 netLobbyMenuPushTeamDialog(void); // netlobbymenu.c
 void screenshotRequest(void);        // screenshot.h
 extern struct menudialogdef g_MpEndscreenSavePlayerMenuDialog;
 
@@ -4512,6 +4515,7 @@ void netLobbyArgs(void)
 		s_ScriptSkipLadder = sysArgCheck("--net-test-skip-ladder");
 		s_ScriptNoEcho = sysArgCheck("--net-test-no-echo");
 		s_ScriptChatAtLaunch = sysArgCheck("--net-test-chat-at-launch");
+		s_ScriptTeamDialog = sysArgCheck("--net-test-lobby-team-dialog");
 
 		if (sysArgGetString("--net-lobby-room")) {
 			s_ScriptRoom = sysArgGetString("--net-lobby-room");
@@ -4563,6 +4567,69 @@ static s32 lobbyScriptAwaitSide(const char *who, u64 now)
 	}
 
 	return 1;
+}
+
+/**
+ * --net-test-lobby-team-dialog: the team picker over the Game Lobby, shot
+ * once both pages are fully open (a lobby page slides its windows in as it
+ * goes PREOPEN -> OPENING -> POPULATING -> POPULATED), then closed and the
+ * script moves on. Returns 1 while the picker is up, so the caller holds
+ * everything else.
+ */
+static s32 lobbyScriptTeamDialogTick(u64 now)
+{
+	struct menudialog *dialog = g_Menus[g_MpPlayerNum].curdialog;
+
+	if (!s_ScriptTeamDialog) {
+		return 0;
+	}
+
+	if (s_ScriptTeamDialog == 1) {
+		// the Game Lobby fully up before the picker goes over its windows
+		if (!netLobbyMenuPageUp(1)) {
+			netLobbyMenuPushRoom();
+			return 1;
+		}
+
+		if (!dialog || dialog->state != MENUDIALOGSTATE_POPULATED) {
+			return 1;
+		}
+
+		if (!netLobbyMenuPushTeamDialog()) {
+			return 1;
+		}
+
+		s_ScriptTeamDialog = 2;
+		s_ScriptTeamAt = now;
+		sysLogPrintf(LOG_NOTE, "lobby script: team picker up over the Game Lobby");
+		return 1;
+	}
+
+	if (s_ScriptTeamDialog == 2) {
+		if (!dialog || dialog->state != MENUDIALOGSTATE_POPULATED) {
+			return 1;
+		}
+
+		if (now - s_ScriptTeamAt < 250) {
+			return 1;
+		}
+
+		screenshotRequest();
+		sysLogPrintf(LOG_NOTE, "lobby script: shot the team picker");
+		// the capture happens at a later frame's swap: hold the picker up like
+		// the other shot steps do, or the pop's slide is what gets drawn
+		s_ScriptTeamDialog = 3;
+		s_ScriptTeamAt = now;
+		return 1;
+	}
+
+	if (now - s_ScriptTeamAt < 1500) {
+		return 1;
+	}
+
+	menuPopDialog();
+	s_ScriptTeamDialog = 0;
+	return 0;
 }
 
 static s32 lobbyScriptBackInRoom(void)
@@ -4843,6 +4910,12 @@ static void lobbyScriptTick(void)
 							break;
 						}
 
+						// --net-test-lobby-team-dialog: the host's picker (no
+						// Spectate row) before it launches
+						if (lobbyScriptTeamDialogTick(now)) {
+							break;
+						}
+
 						netLobbyLaunch(0);
 						lobbyScriptStep(2, "host: a member is ready; LAUNCH");
 						break;
@@ -5020,6 +5093,11 @@ static void lobbyScriptTick(void)
 					&& (lobbyLocal() || netRdvLadder() == NETRDV_LADDER_DONE || netRdvLadder() == NETRDV_LADDER_FAILED || now - s_ScriptAt > 20000)) {
 				// --net-lobby-side N: this member's room team first
 				if (lobbyScriptAwaitSide("join", now)) {
+					break;
+				}
+
+				// --net-test-lobby-team-dialog: the picker, with the team asked for
+				if (lobbyScriptTeamDialogTick(now)) {
 					break;
 				}
 
