@@ -63,12 +63,14 @@ offers it to everyone running a fork build. That is the whole release train;
 there is nothing else to run.
 
 Every version a player sees is a commit hash plus a release stamp,
-`nx-<n>-<date>`, where `<n>` and `<date>` are the newest `patchnotes.txt`
-entry: the stamp rolls forward on its own whenever an entry is added (the game
-derives it from the notes baked into the build; the release job derives it from
-the same file for the release's version). A fresh stamp is therefore exactly
-"newer content to read" - the hash is what changes for any commit, and it alone
-decides which builds may play together.
+`nx-<n>-<date>`, where `<n>` counts this fork's own `patchnotes.txt` entries
+from 1: the `# mod-base 69` line in that file marks the last entry that
+predates the fork's own work, so entry 70 stamps `nx-1` and every new entry
+raises the number by one. The stamp rolls forward on its own whenever an entry
+is added (the game derives it from the notes baked into the build; the release
+job derives it from the same file for the release's version). A fresh stamp is
+therefore exactly "newer fork content to read" - the hash is what changes for
+any commit, and it alone decides which builds may play together.
 
 ## Packaging to hand someone
 

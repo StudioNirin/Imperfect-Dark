@@ -240,16 +240,21 @@ static bool patchnotesParseHeader(const char *line, s32 *num, char *date, u32 da
 }
 
 /**
- * This build's release stamp: "nx-<number>-<date>", or "" when there are no
- * notes.
+ * This build's release stamp: "nx-<n>-<date>", or "" when there is nothing to
+ * stamp.
  *
- * <number> is the newest patch notes entry and <date> its date, read from the
- * copy baked into this build, so the stamp gets a fresh number exactly when
- * the notes do - which is to say, whenever a batch of fixes has been pushed.
- * Check for Updates shows it beside the commit hash, and the release job puts
- * the same stamp into the release's version, so a newer one is visible in the
- * "X is out" notice before anything is downloaded. It is a label for people
- * to read; which builds may play together stays decided by the commit hash.
+ * <n> counts this fork's own patch notes entries: the newest entry's number
+ * less the base marked by a "# mod-base <n>" line in the file, which names
+ * the newest entry that predates the fork's own work. The fork's first entry
+ * is nx-1, and the number climbs with every entry after it; a build whose
+ * newest entry is at or below the base carries no stamp. <date> is the newest
+ * entry's date. All of it is read from the copy baked into this build, so the
+ * stamp gets a fresh number exactly when the notes do - which is to say,
+ * whenever a batch of fixes has been pushed. Check for Updates shows it beside
+ * the commit hash, and the release job puts the same stamp into the release's
+ * version, so a newer one is visible in the "X is out" notice before anything
+ * is downloaded. It is a label for people to read; which builds may play
+ * together stays decided by the commit hash.
  */
 const char *patchnotesVersionSuffix(void)
 {
@@ -257,6 +262,7 @@ const char *patchnotesVersionSuffix(void)
 	static bool resolved = false;
 	const char *at;
 	s32 best = 0;
+	s32 base = -1;
 	char bestdate[32];
 
 	// Only marked done once the text is in place: the updater's worker thread
@@ -282,11 +288,22 @@ const char *patchnotesVersionSuffix(void)
 		if (patchnotesParseHeader(line, &num, date, sizeof(date)) && num > best) {
 			best = num;
 			snprintf(bestdate, sizeof(bestdate), "%s", date);
+			continue;
+		}
+
+		if (base < 0 && strncmp(line, "# mod-base ", 11) == 0) {
+			int value;
+
+			if (sscanf(line, "# mod-base %d", &value) == 1 && value >= 0) {
+				base = value;
+			}
 		}
 	}
 
-	if (best > 0) {
-		snprintf(suffix, sizeof(suffix), "nx-%d-%s", best, bestdate);
+	// With no base line the count is just the entry number; with one, entries
+	// at or below it are not this fork's work and stamp nothing.
+	if (best > 0 && best > base) {
+		snprintf(suffix, sizeof(suffix), "nx-%d-%s", best - base, bestdate);
 	}
 
 	resolved = true;

@@ -31,6 +31,18 @@
 # CMake reads the newest number when it configures, and configures again by
 # itself when this file changes, so an ordinary rebuild picks up an entry.
 
+# The nx- release stamp counts this fork's own entries only, starting at 1:
+# the base line below is the highest DabDavis-era number, so entry 70 is the
+# fork's nx-1 and every new entry raises the stamp by one. Builds whose newest
+# entry is at or below the base carry no stamp at all. The base changes only
+# how the stamp reads - entry numbers keep counting up and alone decide what
+# an update shows.
+#
+# mod-base 69
+
+notes 71 2026-11-09
+Menus: the release stamp beside the commit hash now numbers this fork's own builds from nx-1, instead of continuing Dab's patch numbers
+
 notes 70 2026-11-09
 Menus: version lines (the update screen, update notices, the log) now show a release stamp like nx-70-2026-11-09 next to the commit hash, so a newer build is easy to spot
 
