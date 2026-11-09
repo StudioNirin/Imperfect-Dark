@@ -31,3 +31,12 @@ cmake-build-debug
 # Generated English source catalogs (tools/langpack/extract.py): GoldenEye's
 # English is Rare's text and is never committed
 lang/_source/
+
+# Local only, never committed: archived reference builds, the ROM and
+# third-party content used to assemble a full package, and build output.
+# payload/README.txt is tracked; everything beside it is not.
+/reference/
+/payload/*
+!/payload/README.txt
+/dist/
+/run/
