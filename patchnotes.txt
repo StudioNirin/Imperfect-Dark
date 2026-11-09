@@ -31,6 +31,9 @@
 # CMake reads the newest number when it configures, and configures again by
 # itself when this file changes, so an ordinary rebuild picks up an entry.
 
+notes 69 2026-11-09
+Online: a team match's Change Team opens a picker of all eight team colours instead of cycling Red and Yellow, with Spectate for anyone but the host, and the lobby button now names your team
+
 notes 68 2026-10-21
 Goldfinger 64: on Windows the one-time conversion no longer freezes at 24/27, and a conversion that stopped part way is cleared from the mod list and runs again on the next start (thanks echoremastered)
 

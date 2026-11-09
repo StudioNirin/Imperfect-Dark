@@ -3298,7 +3298,7 @@ static MenuItemHandlerResult handlerSetupTeams(s32 operation, struct menuitem *i
 static void hostTeamSend(void)
 {
 	if (s_HostTeamTouched) {
-		netLobbySetHostTeam(g_PlayerConfigsArray[0].base.team);
+		netLobbySetTeam(g_PlayerConfigsArray[0].base.team);
 	}
 }
 
@@ -4961,18 +4961,95 @@ static s32 roomIsOpen(void)
 }
 
 /**
- * Change Team in a team match: Red, Yellow, watching (a member), Red. With
- * no teams the roster shows none, so the row is Spectate or Play, and a
- * host (who cannot watch its own room) has none.
+ * The team picker: the eight colours, and Spectate for a member (a host
+ * plays its own room). Picking one sends it and closes the dialog; the Game
+ * Lobby's row then says which is yours.
+ */
+static char *textTeamName(struct menuitem *item)
+{
+	if (item->param == 8) {
+		return "Spectate\n";
+	}
+
+	return langGet(L_OPTIONS_008 + item->param);
+}
+
+static MenuItemHandlerResult handlerTeamName(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_GETCOLOUR) {
+		// the colour itself, at whatever alpha the menu has for the row;
+		// Spectate is not a team and keeps the menu's own colour
+		if (item->param != 8) {
+			const u32 c = g_TeamColours[item->param & 7];
+			data->label.colour2 = (c & 0xffffff00) | (data->label.colour2 & 0xff);
+		}
+
+		return 0;
+	}
+
+	if (operation == MENUOP_CHECKHIDDEN) {
+		return item->param == 8 && netLobbyIsHost();
+	}
+
+	if (operation == MENUOP_CHECKDISABLED) {
+		return !roomIsOpen();
+	}
+
+	if (operation == MENUOP_SET) {
+		if (item->param == 8) {
+			netLobbySetSpectator(1);
+		} else {
+			netLobbySetTeam(item->param);
+		}
+	}
+
+	return 0;
+}
+
+#define TEAMROW(t) \
+	{ MENUITEMTYPE_SELECTABLE, t, MENUITEMFLAG_LABEL_CUSTOMCOLOUR | MENUITEMFLAG_SELECTABLE_CLOSESDIALOG, (uintptr_t)&textTeamName, 0, handlerTeamName }
+
+static struct menuitem s_TeamItems[] = {
+	TEAMROW(0), TEAMROW(1), TEAMROW(2), TEAMROW(3),
+	TEAMROW(4), TEAMROW(5), TEAMROW(6), TEAMROW(7),
+	{ MENUITEMTYPE_SEPARATOR, 0, 0, 0, 0, NULL },
+	TEAMROW(8),
+	{ MENUITEMTYPE_SELECTABLE, 0, MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SELECTABLE_CLOSESDIALOG, (uintptr_t)"Back\n", 0, NULL },
+	{ MENUITEMTYPE_END },
+};
+
+static struct menudialogdef s_TeamDialog = {
+	MENUDIALOGTYPE_DEFAULT,
+	(uintptr_t)"Team",
+	s_TeamItems,
+	NULL,
+	MENUDIALOGFLAG_LITERAL_TEXT,
+	NULL,
+};
+
+/**
+ * The Game Lobby's team row: which colour is yours in a team match, Spectate
+ * or Play when the room has no teams, Change Side in counter-op, whose two
+ * sides keep the old cycle.
  */
 static char *textTeam(struct menuitem *item)
 {
+	static char text[32];
+
 	if (lobbyCounterOp()) {
 		return "Change Side\n";
 	}
 
 	if (lobbyTeamsOn()) {
-		return "Change Team\n";
+		const s32 team = netLobbyMyTeam();
+
+		if (team < 0) {
+			return "Team: Spectate\n";
+		}
+
+		// langGet's team names carry their newline
+		snprintf(text, sizeof(text), "Team: %s", langGet(L_OPTIONS_008 + team));
+		return text;
 	}
 
 	return netLobbyMyTeam() < 0 ? "Play\n" : "Spectate\n";
@@ -4989,8 +5066,10 @@ static MenuItemHandlerResult handlerTeam(s32 operation, struct menuitem *item, u
 	}
 
 	if (operation == MENUOP_SET) {
-		if (lobbyTeamsOn()) {
+		if (lobbyCounterOp()) {
 			netLobbyCycleTeam();
+		} else if (lobbyTeamsOn()) {
+			menuPushDialog(&s_TeamDialog);
 		} else {
 			netLobbySetSpectator(netLobbyMyTeam() >= 0);
 		}

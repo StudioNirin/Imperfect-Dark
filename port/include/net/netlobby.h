@@ -169,11 +169,11 @@ const struct netlobbyroom *netLobbyGetRoom(void);
 s32 netLobbyIsHost(void);
 s32 netLobbyMyReady(void);
 s32 netLobbyMemberTeam(const char *user); // a member's team by account, -1 none or watching
-s32 netLobbyMyTeam(void);            // 0, 1, or -1 a spectator
+s32 netLobbyMyTeam(void);            // 0-7, or -1 a spectator
 void netLobbySetReady(s32 ready);
-void netLobbyCycleTeam(void);        // team 1 -> team 2 -> spectator -> team 1
+void netLobbyCycleTeam(void);        // counter-op: swap sides (a member can step out to watch)
 void netLobbySetSpectator(s32 on);   // a room without teams: watch (a member only) or play
-void netLobbySetHostTeam(s32 team); // host: its own team (0-7) from the room's Teams page; sent once in the room
+void netLobbySetTeam(s32 team);      // 0-7, host or member; sent once in the room
 s32 netLobbyHandicapOf(const char *user);           // the room's Handicaps page, by account: 0-255, 0x80 stock
 void netLobbyHandicapSet(const char *user, s32 handicap);
 void netLobbyHandicapsReset(void);

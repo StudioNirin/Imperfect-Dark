@@ -2597,7 +2597,7 @@ void netLobbyCreate(const struct netlobbycreate *c)
 		s_RoomAtMs = lobbyNowMs();
 
 		if (s_HostTeamWanted > 0) {
-			netLobbySetHostTeam(s_HostTeamWanted);
+			netLobbySetTeam(s_HostTeamWanted);
 		}
 
 		s_HostTeamWanted = -1;
@@ -2826,13 +2826,13 @@ void netLobbyCycleTeam(void)
 }
 
 /**
- * The room's Teams page: the host's own row is its team in the room (the
- * launch puts every member's room team on its slot), so a change there goes
- * to the lobby; made before the room exists (Create Room), once it does
+ * A team, host or member: the launch puts every member's room team on its
+ * slot, so a change goes to the lobby. The host's own can be chosen before
+ * the room exists (Create Room), and is sent once it does.
  */
 static s32 s_HostTeamWanted = -1;
 
-void netLobbySetHostTeam(s32 team)
+void netLobbySetTeam(s32 team)
 {
 	char body[48];
 
@@ -4279,7 +4279,7 @@ void netLobbyTick(void)
 
 		// the team the host picked on Create Room's Teams page
 		if (s_MainIsHost && s_HostTeamWanted > 0) {
-			netLobbySetHostTeam(s_HostTeamWanted);
+			netLobbySetTeam(s_HostTeamWanted);
 		}
 
 		s_HostTeamWanted = -1;
