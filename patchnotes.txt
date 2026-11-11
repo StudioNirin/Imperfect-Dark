@@ -40,6 +40,10 @@
 #
 # mod-base 69
 
+notes 75 2026-11-11
+The Xbox 360 release's models are on for a new install, which - with the textures, rooms, font, skies and reflections that were already on - means the whole release look for anyone who has added the content
+A machine that has not added Perfect Dark's XBLA package keeps the N64's fog range and character tables, which it used to be given the release's of whether it owned them or not
+
 notes 74 2026-11-11
 A new install starts the way this fork plays: every installed mod's maps in the Combat Simulator, Akimbo and Akimbo Triggers on for everyone, the crosshair taking its colour from health (green while whole), the text in English (UK), and the sound muted while another window has the focus
 A game that has already run an older build keeps every setting it has, these included - they are defaults for a fresh install, not a migration

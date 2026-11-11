@@ -604,7 +604,19 @@ static inline u32 xblaMeshVertexAmount(const struct xblameshbuilt *m, u32 i, u32
 	return m->venv[i * 2 + 1];
 }
 
-static s32 optEnabled;
+// On in a fresh pd.ini since 2026-11-11, on the argument that whoever installed
+// the Xbox 360 content installed it to be drawn.
+//
+// This is not only the models. It is the last of the seven switches ANDed by
+// xblaSwitchGetEnabled() (xblaswitch.c) - textures, stages, font, explosions,
+// skies and reflections all default on - so this one being on is what makes that
+// read true, and xblaTablesTick() switches the release's own data with it: 13
+// table fields, one of them the fog's range, and 23 head/body types. The numbers
+// are compiled in, not read from the package, so a machine with no .7z gets the
+// release's heads and fog too. That is why a default here moves gameplay, and it
+// is what tools/ci/dodgetest.sh pins back off for: the arithmetic of a dodge is
+// not what that gate is about.
+static s32 optEnabled = 1;
 
 // Whether any model has loaded from a file the release alone has (Agent 4,
 // xblaagent4.c), which keeps its mesh with the meshes off: it has no N64 form

@@ -21,6 +21,7 @@
 #include "lib/vi.h"
 #include "game/env.h"
 #include "xblaswitch.h"
+#include "xblaimport.h"
 #include "xblatables.h"
 
 #ifndef PLATFORM_N64
@@ -114,7 +115,15 @@ static void xblaTabReapplyFog(void)
 
 void xblaTablesTick(void)
 {
-	const s32 want = xblaSwitchGetEnabled() ? 1 : 0;
+	// The release's numbers belong in the game with the release's art. They are
+	// compiled in - xblatablesdata.h has them whether or not anybody added the
+	// content - so the switches alone would put the release's fog range and its 23
+	// head/body types into a build that has no package and draws every N64 model.
+	// That is what a player who never opted in would have got from this file on
+	// 2026-11-11, when Mod.XblaMeshes became the default and closed
+	// xblaSwitchGetEnabled()'s AND for everybody. The importer caches its answer
+	// (xblaImportIsAvailable), so this is asked every frame as it always was.
+	const s32 want = (xblaSwitchGetEnabled() && xblaImportIsAvailable()) ? 1 : 0;
 	s32 fields = 0;
 	s32 types = 0;
 	s32 fog = 0;

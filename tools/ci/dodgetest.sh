@@ -19,9 +19,21 @@
 # The released half is checked, weakly - in hold-to-crouch the button drives the
 # stance anyway, and the run has no buttons held.
 #
-# A run whose player is dead, falling, or out of MOVEMODE_WALK by frame 300 means
-# the arena interfered with the test rather than the dodge being wrong, and is
-# reported as a run that failed (exit 2) rather than as a wrong answer.
+# A run whose player is dead or out of MOVEMODE_WALK by frame 300 means the arena
+# interfered with the test rather than the dodge being wrong, and is reported as a
+# run that failed (exit 2) rather than as a wrong answer. Being airborne at that
+# frame is only noted: with a simulant in the arena the player gets bumped, and
+# the sample is one frame taken 300 after the tap. That reading is earned - the
+# check used to treat falling as a failure too, and on 2026-11-11 it sent a hunt
+# for a physics change that turned out to be a shoulder charge (--mpsims 0 and the
+# case is clean; --mpsims 1 and the player is off the ground and fine a moment
+# later, dodge and all).
+#
+# The run pins its own picture off. Mod.XblaMeshes is the last of the switches
+# xblaSwitchGetEnabled() ANDs, and with it on the release's own head/body tables
+# come in (xblatables.c), which decides what body the dodge is performed in and so
+# where the player is left. A fresh install has it on since 2026-11-11; this gate
+# is about the arithmetic of a dodge, so it asks for the N64's look.
 #
 #   dodgetest.sh [BIN]    BIN is a file in build/ or a path (default pd.x86_64)
 #
@@ -45,7 +57,12 @@ rm -rf "$OUT"; mkdir -p "$OUT"
 # The dodge is off by default in a player's pd.ini, and with it off every tap is
 # refused before it is looked at - so the run says which option it needs.
 mkdir -p "$OUT/save"
-printf '[Mod]\nCombatRoll=2\n' > "$OUT/save/pd.ini"
+# The dodge's arithmetic is what is measured here, so the picture is pinned off.
+# Mod.XblaMeshes is the last of the switches xblaSwitchGetEnabled() ANDs, and with
+# it on the release's own head/body tables come in (xblatables.c), which changes
+# what body a chr is - and where a dodge leaves the player standing. A fresh
+# install has it on since 2026-11-11; this run does not want it.
+printf '[Mod]\nCombatRoll=2\nXblaMeshes=0\n' > "$OUT/save/pd.ini"
 
 ( cd "$BUILD" && SDL_VIDEODRIVER=${SDL_VIDEODRIVER:-offscreen} timeout -k 5 240 "$BIN" \
 	--savedir "$OUT/save" --skip-intro --no-sound --boot-stage "$STAGE" --mpsims "$SIMS" \
@@ -87,9 +104,11 @@ for name, expected in want.items():
 	if name not in cases:
 		fails.append("%s: never ran" % name); continue
 	got = cases[name]
-	if got["dead"] or got["falling"] or got["mode"] != 0:
-		print("run disturbed: %s dead=%d falling=%d mode=%d" % (name, got["dead"], got["falling"], got["mode"]))
+	if got["dead"] or got["mode"] != 0:
+		print("run disturbed: %s dead=%d mode=%d" % (name, got["dead"], got["mode"]))
 		sys.exit(2)
+	if got["falling"]:
+		print("note %-24s airborne at the sampled frame - a bump, not a dodge fault" % name)
 
 	if expected is None:
 		# Half a gesture is a crouch, and nothing else: no shove, no move.

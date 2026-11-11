@@ -31,7 +31,7 @@ or a section heading, don't read one whole.
 - [crash-reports.md](CLAUDE-notes/crash-reports.md) — Crash reports
 - [updater.md](CLAUDE-notes/updater.md) — Check for Updates
 - [texture-packs.md](CLAUDE-notes/texture-packs.md) — Texture packs
-- [xbla.md](CLAUDE-notes/xbla.md) — The Xbox 360 XBLA release: its textures, and drawing its models
+- [xbla.md](CLAUDE-notes/xbla.md) — The Xbox 360 XBLA release: its textures, and drawing its models; `Mod.XblaMeshes` is the last of the switches `xblaSwitchGetEnabled()` ANDs and the release's data tables follow it, so it is a gameplay switch (2026-11-11)
 - [level-sheen.md](CLAUDE-notes/level-sheen.md) — Level Reflections, and the all-surface Level Sheen that was removed
 - [model-packs.md](CLAUDE-notes/model-packs.md) — Model packs and the asset dump
 - [fojo-collab.md](CLAUDE-notes/fojo-collab.md) — The Friends of Joanna collab tree, `../pd-fojo-monorepo-collab/`

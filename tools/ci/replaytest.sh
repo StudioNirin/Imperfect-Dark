@@ -46,6 +46,15 @@
 # to the old golden for all 3000 frames (nothing clones: nobody fires). Re-record
 # gesolo once; every other case is unchanged.
 #
+# Goldens recorded before the fresh-install defaults of 2026-11-11 are stale for
+# every case but optmatch, which writes Akimbo itself: a savedir written fresh now
+# starts with Akimbo and AkimboTriggers on, the crosshair tinted by health, English
+# (UK) text and sound muted while unfocused - and Mod.XblaMeshes on, which is the
+# last switch xblaSwitchGetEnabled() ANDs, so the release's table fields (the fog's
+# range among them) and its 23 head/body types are in play (xblatables.c). Of those
+# only the last reaches the simulation: re-record once, or pin XblaMeshes=0 in
+# caseini() to keep the old goldens meaning what they meant.
+#
 # Two binaries that convert GoldenEye differently (a GECONVERT_VERSION bump
 # between them) each run from a folder of their own under OUT, with their own
 # mods/GoldenEye Arenas (stage()); the first GE case then converts twice.

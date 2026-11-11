@@ -4737,3 +4737,67 @@ loaded), and a translucent one lets the shot through, as the game's own
 translucent default-surface triangles do. The release's own surface types
 are not known (4J's table was never read for them). Replay 8/8 same (the
 N64 look has no stand-ins).
+
+## Meshes are the last switch in the AND (2026-11-11)
+
+Found while deciding whether `Mod.XblaMeshes` could default on.
+
+`xblaSwitchGetEnabled()` (`port/src/xblaswitch.c`) is the AND of seven switches:
+meshes, textures, stages, font, explosions, skies, reflections. Every one of them
+defaults **on** except `Mod.XblaMeshes`. So that key is not the models on its own
+row in the Xbox 360 (XBLA) page - it is the thing that keeps the whole release
+look off in a fresh config, and turning it on engages the release's room geometry
+as well (`xblaStageWant()` is `xblaStageGetEnabled() && xblaMeshGetEnabled()`, and
+`Mod.XblaStages` is already on).
+
+It also moves data. `xblaTablesTick()` (`port/src/xblatables.c`) asks
+`xblaSwitchGetEnabled()` and rewrites the live tables between the N64's values and
+the release's: 13 fields - one of them the environment fog's range, which it then
+re-applies through `xblaTabReapplyFog()` - and 23 head/body type ids. **The
+release's numbers are compiled into `xblatables.c`; none of this reads the
+package.** So they arrive on a machine that has no `.7z` at all, and a head/body
+type is a body: it has extent, and things are measured against it.
+
+Measured on a machine with no package (`xbla: no package; put Perfect Dark XBLA.7z
+in build/added-content`), same binary, same seed, `--fixed-step`, one setting
+apart:
+
+```
+Mod.XblaMeshes=0   left dodge: falling 0        no "xblatables:" line
+Mod.XblaMeshes=1   left dodge: falling 1        "the release's tables: 13 of 13 fields, 23 of 23 head/body types"
+```
+
+That is `tools/ci/dodgetest.sh` catching a gameplay difference from a picture
+setting, and it is why the gate now pins `XblaMeshes=0` in the pd.ini it writes for
+its own run, and why `replaytest.sh`'s header says its goldens predate this. The
+claim that defaulting the meshes on "costs a machine without the content nothing"
+is false: it changes which head and body types the game runs on.
+
+It defaults on since 2026-11-11 (owner's decision; `patchnotes.txt` entry 75),
+which makes a fresh install the whole release look for anyone who has added the
+content, and - which is the part nobody signed up for - did so for anyone who has
+not. Fixed the same day: `xblaTablesTick()` now asks
+`xblaSwitchGetEnabled() && xblaImportIsAvailable()`. The values are in
+`xblatablesdata.h`, compiled in, so before that a player with no package and no
+opt-in was running the release's fog range and 23 head/body types while drawing
+every N64 model. Measured both ways with one binary in two directories (the
+`added-content` a run reads is the one beside **the executable**, not the working
+directory - which is also how you get a package-less install to test against: copy
+the binary somewhere with a `data/` symlink and nothing else):
+
+```
+package present, default on   "xbla: using ..." + "the release's tables: 13 of 13 fields, 23 of 23 head/body types"
+no package, default on       "xbla: no package; put Perfect Dark XBLA.7z in ..." + no xblatables line at all
+```
+
+**What is still open.** With the tables fixed and no package anywhere on disk,
+`Mod.XblaMeshes=1` still shifts one case of `tools/ci/dodgetest.sh`: the left dodge
+leaves the player airborne at the sampled frame where `XblaMeshes=0` does not. Same
+binary, same savedir, same seed, one key apart, in a directory that has no content
+at all - so something reading `xblaMeshGetEnabled()` reaches movement without any of
+the release's data behind it, and it is not the tables. It is not the dodge either:
+direction, shove (14.76 every arc), which move is chosen, `blocked 0` and the ending
+stance are identical in every combination, and `--mpsims 0` - no second body in the
+arena - clears it in every case. Unfound so far; the callers to start from are
+`geroom.c`, `xblaStageWant()` and `handtint.c`, all of which read the switch without
+asking whether there is anything to draw.
