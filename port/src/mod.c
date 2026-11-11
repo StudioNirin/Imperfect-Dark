@@ -2831,7 +2831,11 @@ static char selectedModName[MOD_NAME_LEN];
 // mods named are mounted for their maps alone, beside whatever mod is
 // loaded, and the mod loader gives each map its own stage and arena.
 #define MOD_MAPMODS_LEN 2048
-static char mapModsSetting[MOD_MAPMODS_LEN];
+// Every installed mod's maps, on in a fresh pd.ini since 2026-11-11: the arenas
+// the page exists to reach are the point of installing a mod's maps at all. An
+// install that has run an older build keeps its own list - this is a default and
+// not a migration, so Mod.SettingsRevision (main.c) is untouched by it.
+static char mapModsSetting[MOD_MAPMODS_LEN] = "*";
 static s32 numMapDirsMounted;
 static s32 modMapsMount(void);
 

@@ -40,6 +40,10 @@
 #
 # mod-base 69
 
+notes 74 2026-11-11
+A new install starts the way this fork plays: every installed mod's maps in the Combat Simulator, Akimbo and Akimbo Triggers on for everyone, the crosshair taking its colour from health (green while whole), the text in English (UK), and the sound muted while another window has the focus
+A game that has already run an older build keeps every setting it has, these included - they are defaults for a fresh install, not a migration
+
 notes 73 2026-11-11
 Combat Roll: there is no roll button any more - tap a crouch button twice with a direction held, and the dodge goes wherever the stick points, diagonals included
 Combat Roll: a dodge ends crouched if the crouch button is still held on its last frame, and standing if it was let go

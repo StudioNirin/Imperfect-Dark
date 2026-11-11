@@ -52,9 +52,11 @@ static s32 deviceChannels = 0; // the default device's own, 0 when SDL cannot sa
  * mixes on as before (the queue, the music, timing and netplay's sounds are
  * untouched), and a recording keeps the sound: only the speakers go quiet.
  * A tester on two monitors wanted the game silent while working in another
- * window, without backing out to the audio menu (F3 20261011-072446).
+ * window, without backing out to the audio menu (F3 20261011-072446). On in a
+ * fresh pd.ini since 2026-11-11: a game that goes on talking over whatever is
+ * in the other window is not what somebody meant by turning this on once.
  */
-static s32 muteUnfocused = 0;
+static s32 muteUnfocused = 1;
 static f32 outGain = 1.0f; // the gain the last buffer queued ended at: 1 heard, 0 muted
 static s16 *gainBuf = NULL;
 static u32 gainBufSize = 0;

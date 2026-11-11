@@ -72,7 +72,11 @@ static struct langpack *g_Cur = NULL;
 static u32 g_Generation = 1;
 static s32 g_LogMissing = 0;
 
-static char g_LanguageSetting[LANGPACK_CODELEN] = "";
+// A fresh install reads English (UK): our own pack of British spellings over the
+// ROM's English (CLAUDE-notes/languages.md). langpackInit() looks the code up
+// among the packs this build actually embedded, so a build with no en-GB pack
+// says so and comes up in English (US) rather than in nothing. --lang wins.
+static char g_LanguageSetting[LANGPACK_CODELEN] = "en-GB";
 
 PD_CONSTRUCTOR static void langpackConfigInit(void)
 {

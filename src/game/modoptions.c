@@ -23,7 +23,16 @@
  * remembered, and a key (F, the Spectator) that flew them out of their body.
  * So a fresh install plays like the original, and the Settings Preset at the
  * top of Dab's Mod Options (optionsmenu.c, g_ModPresets) turns the additions
- * on as a set. Smooth Text and Thin Text Outlines were on too, as fixes
+ * on as a set.
+ *
+ * Akimbo and its two-hand pad layout are the one addition that is on, since
+ * 2026-11-11: two of the gun is this fork's own taste and there is no reason for
+ * somebody's first evening to be without it. Every preset still turns them off
+ * (optionsmenu.c, "the ways of playing, off in every preset"), and its matcher
+ * insists on that, so a fresh config reads Custom in the Settings Preset dropdown
+ * instead of naming one - which is the honest answer, not a bug to fix.
+ *
+ * Smooth Text and Thin Text Outlines were on too, as fixes
  * rather than looks, until 2026-09-13: they change how every line of text is
  * drawn, so they are off with the rest and the text is the ROM's. A pd.ini
  * written by an older build keeps its values; only a config with no line for
@@ -52,8 +61,8 @@ struct modoptions g_ModOptions = {
 	MODALARM_GUARDS_DEFAULT,  // alertedguards
 	MODALARM_SPEED_DEFAULT,   // guardspawnspeed
 	MODALARM_WEAPONS_STAGE,   // guardweapons
-	MODAKIMBO_OFF,            // akimbo
-	false,                    // akimbotriggers
+	MODAKIMBO_EVERYONE,       // akimbo: the one addition on for a fresh install
+	true,                     // akimbotriggers: the two-hand pad layout it needs
 	false,                    // explosionshake: the Video page's slider scales it when on
 	false,                    // codaiming
 	true,                     // codaimlock: what COD Style Aiming means until it is turned off

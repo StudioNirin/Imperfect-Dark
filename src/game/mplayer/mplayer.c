@@ -378,7 +378,7 @@ struct mpweapon g_MpWeapons[NUM_MPWEAPONS] = {
 	.crosshaircolour = 0x00ff0028, \
 	.crosshairsize = 2, \
 	.crosshairedgeboundary = 0.7f, \
-	.crosshairhealth = CROSSHAIR_HEALTH_OFF, \
+	.crosshairhealth = CROSSHAIR_HEALTH_ON_GREEN, /* green to red with health */ \
 	.usereloads = false, \
 }
 
