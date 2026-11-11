@@ -4,6 +4,8 @@
 
 - **The dodge replaced the combat roll's button, and its seams are the note** — [dodge.md](CLAUDE-notes/dodge.md): there is no roll bind any more (`CK_0800` stays in the enum and the key-name table because every saved `pd.ini` has a line for it, but its defaults, its bind row and `inputMigrateRollBind()` are gone); the gesture is the **same crouch button twice** inside `ROLL_TAP_WINDOW`, read in `bmoveProcessInput()`'s own press loop and **not** in the `CONTROLMODE_PC` crouch-cycling block above it, because the gesture has to work for a pad too; the direction is `movedata.analogwalk`/`analogstrafe` (the raw stick or keys - every write to those is before the press loop) and **never** `speedforwards`/`speedsideways`, which are the mover's eased copy of the input from a moment back; the basis is `bond2.unk00`, the flat look direction, **not** `chrGetSideVector()`, because a player's body carries the walk's `angleoffset` lean and a dodge aimed along that goes somewhere the camera is not pointing; **the back arc's cosine must not sit on 135°** - a keyboard diagonal is exactly ±42/±42, so its cosine is exactly `-0.70710678`, and with the seam there the rounding of one float picked between a hop and a roll (this is what `tools/ci/dodgetest.sh` caught first run; `DODGE_BACK_COS` is `-0.65f`, about 130°, so the back gets the diagonals); the stick vector is **normalised before the impulse** or a diagonal throws further than a straight line, which the gate also pins by requiring one shove for every arc; **the back is a different move and not a re-skin** - `ANIM_000B/0C/0D/027` turn the body over a *fore-aft* axis, which is why they travel sideways and why the same tilt on a backward or forward shove reads as a topple (filmed: `--test-anim-play`, `build/animpoll/fwd-66-vs-b.mp4`), so `ANIM_0066` - `chrAvoid()`'s "getting away from it" bucket, of a set Rare comments as "jumps backwards or to the side" - is the hop, and the two dodges it could have used instead *turn the body* (`0x64` ends canted right, `0x65` ends facing where it went), which a player's dodge cannot do because the body faces where the camera does and the push does all the steering; **a one-shot animation only lands on a driven body** (`chrCanPlayOneShotAnim()` is `chrIsThirdPersonBody()`, which is `aibot != NULL || actiontype == ACT_BONDMULTI`, and `ACT_BONDMULTI` is only set for a player's own body when they are in third person or they are somebody else's player in a match) - so in first person the local player never sees their own dodge, other players in a match always do, and `bwalkTryDodge()` asks for the animation and does not wait on it, because the push is the move; and **the stance at the end is read at the frame `ROLL_BUSY` lifts**, from `joyGetButtons(contpad1, DODGE_CROUCH_BUTTONS)`, standing only through `bwalkCanUncrouch()` - in `CROUCHMODE_HOLD` that changes nothing, since the button drives the stance anyway, so the rule is for the toggle modes, where a double tap would otherwise leave the stance wherever the second tap switched it to
 
+- **`Mod.XblaMeshes` changes one animation variant of a dodge and nothing else, and the way to have known that was to log where the body is** — the section of that name: with the switch on, `bodyReleaseMaleHeads()` (`src/game/bodyreset.c`) drops Penny out of the male guard head lists, `bodyReset()` deals heads with `rngRandom() % headsavailablelen`, and every random draw after the deal - the roll's own variant among its four, and each simulant decision - comes off a shifted stream; `--test-dodge` therefore prints the body's position and its height above its own ground line, which shows all eight cases byte-identical with `--mpsims 0` and the *runs* (not the moves) diverging with a simulant in the arena
+
 ## Why the gesture is where it is
 
 `bmoveProcessInput()` has two places a crouch button is read. The one that looks
@@ -117,3 +119,45 @@ third person camera has to be given room (`--test-anim-face`), or it clamps onto
 the body's back and the film is of Bond's coat from inside. gdb cannot do any of
 this on this machine: `ptrace_scope` is 1, so a probe cannot attach to the run -
 see the comment above `lvTestAnimTick()`.
+
+## The picture switch, and the case that was never the dodge
+
+`tools/ci/dodgetest.sh` was reporting the left dodge airborne at its sampled frame
+with `Mod.XblaMeshes=1` and not with `=0`, which read as a picture switch reaching
+movement. It does not reach movement. It reaches the **random stream**.
+
+`bodyReleaseMaleHeads()` (`src/game/bodyreset.c`) takes Penny out of the male guard
+head lists when the release's meshes are on - 4J remodelled her head as a woman, so
+dealing it to a male guard puts a woman's face on a man's body - and the team list
+substitutes Ben R. `bodyReset()` deals those heads with
+`rngRandom() % headsavailablelen`, so a list one entry shorter changes the modulus
+of the deal *and* the position of every draw that follows it in the level. The
+dodge's variant is one of those draws: `chrPlayRollAnimation()` takes
+`flip = rngRandom() % 2` when both hands are holding.
+
+The measurement that says so, same binary, same seed, one pd.ini key apart:
+
+| | both settings | only what differs |
+|---|---|---|
+| `--mpsims 0`, package present | all eight cases byte-identical: position, height above ground, 14.76 shove, move chosen, stance at the end, travelled distance | which of `0xb 0xc 0xd 0x27` plays - the same move, a different variant |
+| `--mpsims 1` | the same eight numbers at the tap | the whole minute after it: the simulant's AI runs off the shifted stream, so the player has been standing on a different floor of the Combat Simulator by frame 300 |
+
+The airborne bit was the second row: a body standing somewhere else, over a drop,
+at the frame the gate happens to sample. It reproduces with **no package anywhere on
+disk**, because the head list is the switch's own doing and none of the release's
+data is involved.
+
+Two things to keep. First, `--test-dodge` now logs `pos (x y z) above N` at the
+sample and `moved N (dx dy dz) above N` at the end, because a `falling 1` comes in
+two kinds that are indistinguishable in the shove numbers and are not the same
+finding: a different position is something having moved the body, an identical
+position with a different ground line is a collision test having been asked a
+different question. Only the first is the dodge's doing, and only the second would
+have been interesting. Second, `dodgetest.sh` pins the look off, and the reason
+recorded in its header is now the right one - a gate about dodge arithmetic must not
+be run on a head list of one length or another.
+
+The netplay half is already safe, and was made safe on purpose: online the heads are
+dealt from the **host's** look on every machine (`netLookData()`), and the comment at
+that line says why - "the RNG's draws follow the list". See
+`CLAUDE-notes/xbla.md`, "What that turned out to be".

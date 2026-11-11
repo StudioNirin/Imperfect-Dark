@@ -25,15 +25,23 @@
 # frame is only noted: with a simulant in the arena the player gets bumped, and
 # the sample is one frame taken 300 after the tap. That reading is earned - the
 # check used to treat falling as a failure too, and on 2026-11-11 it sent a hunt
-# for a physics change that turned out to be a shoulder charge (--mpsims 0 and the
-# case is clean; --mpsims 1 and the player is off the ground and fine a moment
-# later, dodge and all).
+# for a physics change that does not exist. With Mod.XblaMeshes on, the release's
+# rule about Penny's head makes the male guard head list one shorter
+# (bodyReleaseMaleHeads(), src/game/bodyreset.c), the RNG's draws follow that list,
+# and every simulant decision in the level is therefore taken from a stream one
+# draw along - so by the sampled frame the player has been standing somewhere else
+# in the arena for a minute, on a different floor, rather than having moved
+# differently. --mpsims 0 makes the two settings byte-identical. The whole reading
+# is in CLAUDE-notes/dodge.md.
 #
-# The run pins its own picture off. Mod.XblaMeshes is the last of the switches
-# xblaSwitchGetEnabled() ANDs, and with it on the release's own head/body tables
-# come in (xblatables.c), which decides what body the dodge is performed in and so
-# where the player is left. A fresh install has it on since 2026-11-11; this gate
-# is about the arithmetic of a dodge, so it asks for the N64's look.
+# The run pins its own picture off, and not for the reason first written in this
+# paragraph. What Mod.XblaMeshes changes about a run is not the art on the body but
+# the length of the male guard head list, which sets the modulus of every
+# rngRandom() drawn after it - including chrPlayRollAnimation()'s own draw for the
+# roll's variant, and every simulant decision. Ask for the N64's look and the eight
+# cases come out byte-identical with the switch either way, package present or
+# absent. A fresh install has it on since 2026-11-11; this gate is about the
+# arithmetic of a dodge, so it pins the look off anyway.
 #
 #   dodgetest.sh [BIN]    BIN is a file in build/ or a path (default pd.x86_64)
 #

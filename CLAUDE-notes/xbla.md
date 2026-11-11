@@ -4790,14 +4790,32 @@ package present, default on   "xbla: using ..." + "the release's tables: 13 of 1
 no package, default on       "xbla: no package; put Perfect Dark XBLA.7z in ..." + no xblatables line at all
 ```
 
-**What is still open.** With the tables fixed and no package anywhere on disk,
-`Mod.XblaMeshes=1` still shifts one case of `tools/ci/dodgetest.sh`: the left dodge
-leaves the player airborne at the sampled frame where `XblaMeshes=0` does not. Same
-binary, same savedir, same seed, one key apart, in a directory that has no content
-at all - so something reading `xblaMeshGetEnabled()` reaches movement without any of
-the release's data behind it, and it is not the tables. It is not the dodge either:
-direction, shove (14.76 every arc), which move is chosen, `blocked 0` and the ending
-stance are identical in every combination, and `--mpsims 0` - no second body in the
-arena - clears it in every case. Unfound so far; the callers to start from are
-`geroom.c`, `xblaStageWant()` and `handtint.c`, all of which read the switch without
-asking whether there is anything to draw.
+**What that turned out to be.** Closed the same evening, and the switch reaches
+gameplay by a route nobody had written down: `bodyReleaseMaleHeads()`
+(`src/game/bodyreset.c`). With the release's meshes on, Penny comes out of the male
+guard head lists - 4J remodelled her head as a woman, so a male guard dealt her head
+is a woman's face on a man's body - and the team list takes Ben R in her place.
+`bodyReset()` then deals heads with `rngRandom() % headsavailablelen`, so a list one
+entry shorter changes the modulus of the deal *and the position of every draw that
+follows it in the level*. The dodge's own variant is one of those draws
+(`chrPlayRollAnimation()`'s `flip = rngRandom() % 2`), and so is everything a
+simulant decides.
+
+`--test-dodge` now logs the body's position and its height above its own ground
+line, which is what settled it. With no second body in the arena (`--mpsims 0`) all
+eight cases are byte-identical between the two settings - same position, same
+`above 0.0`, same 14.76 shove, same stance, same travelled distance - and the only
+difference is which of the four roll animations plays (`0xb`, `0xc`, `0xd`, `0x27`:
+the same move, a different one of its variants). With a simulant present the two
+runs' AI diverges from the deal onwards, so by the sampled frame the player has been
+standing on a different floor of the Combat Simulator for a minute; that, and not an
+airborne dodge, is what the gate was reporting. It reproduces with no package on
+disk at all, because the head list is the switch's doing and not the content's.
+
+So the callers first pointed at - `geroom.c`, `xblaStageWant()`, `handtint.c` - are
+innocent, and start from `bodyreset.c` instead if this comes up again. The important
+half is the one the fork already handled: online, `netLookData()` makes the *host's*
+look deal the heads on every machine, with the comment "the RNG's draws follow the
+list". That is why a per-player picture switch was never allowed to deal heads from
+the player's own setting, and it is a second and much better reason for treating
+`Mod.XblaMeshes` as a gameplay switch than the table swap it was found behind.

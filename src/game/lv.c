@@ -2721,6 +2721,13 @@ struct dodgetestcase {
  * Each scenario clears the roll's own records first: a roll may not be thrown
  * inside ROLL_COOLDOWN of the last, and DODGE_TEST_STEP is what keeps the
  * scenarios from leaning on each other.
+ *
+ * The body's position and its height above the ground go in the log because a
+ * `falling 1` comes in two kinds that look identical in the shove numbers and
+ * are not: one has a different position, which is something having moved the
+ * body, and one has the same position and a ground line that answered
+ * differently, which is a collision test asked a different question. Only the
+ * first is the dodge's doing.
  */
 static void lvTestDodgeTick(void)
 {
@@ -2735,7 +2742,9 @@ static void lvTestDodgeTick(void)
 		{ DODGE_TEST_STICK, 0.f, 0, "one-tap-only" },
 	};
 	struct player *player = g_Vars.players[g_Vars.currentplayernum];
+	static struct coord s_start;
 	const struct dodgetestcase *test;
+	struct coord pos = { 0.f, 0.f, 0.f };
 	s32 which;
 	s32 into;
 
@@ -2767,6 +2776,14 @@ static void lvTestDodgeTick(void)
 		player->crouchtapbutton = 0;
 		player->crouchtap60 = 0;
 		player->dodgesettlepending = false;
+
+		if (player->prop != NULL) {
+			s_start = player->prop->pos;
+		}
+	}
+
+	if (player->prop != NULL) {
+		pos = player->prop->pos;
 	}
 
 	if (into == 0 || (into == 8 && test->twotaps)) {
@@ -2792,15 +2809,22 @@ static void lvTestDodgeTick(void)
 		}
 
 		sysLogPrintf(LOG_NOTE,
-				"dodgetest: %s: along %.2f aside %.2f push %.2f anim %#x rolling %d blocked %d (dead %d falling %d mode %d)",
+				"dodgetest: %s: along %.2f aside %.2f push %.2f anim %#x rolling %d blocked %d (dead %d falling %d mode %d) pos (%.1f %.1f %.1f) above %.1f",
 				test->name, along, aside, push,
 				player->prop != NULL && player->prop->chr != NULL
 					? modelGetAnimNum(player->prop->chr->model) : 0,
 				bwalkIsRolling(), push <= 0.f, player->isdead, player->isfalling,
-				player->bondmovemode);
+				player->bondmovemode, pos.x, pos.y, pos.z,
+				player->vv_manground - player->vv_ground);
 	} else if (into == 60) {
-		sysLogPrintf(LOG_NOTE, "dodgetest: %s: after: stance %d rolling %d",
-				test->name, player->crouchpos, bwalkIsRolling());
+		sysLogPrintf(LOG_NOTE,
+				"dodgetest: %s: after: stance %d rolling %d moved %.2f (dx %.1f dy %.1f dz %.1f)"
+				" above %.1f falling %d",
+				test->name, player->crouchpos, bwalkIsRolling(),
+				sqrtf((pos.x - s_start.x) * (pos.x - s_start.x)
+						+ (pos.z - s_start.z) * (pos.z - s_start.z)),
+				pos.x - s_start.x, pos.y - s_start.y, pos.z - s_start.z,
+				player->vv_manground - player->vv_ground, player->isfalling);
 	}
 }
 #endif
