@@ -79,6 +79,20 @@ s32 g_ExitFrame = 0; // --exit-frame N: quit when the level reaches frame N, so 
 s32 g_SkipCutscenes = 0; // --skip-cutscenes: every cutscene skipped as soon as it lets itself be, so a headless mission run reaches play (playerTickCutscene)
 s32 g_AlarmAtFrame = 0; // --alarm-at N: raise the alarm at that level frame, so a headless run exercises what the alarm sets off (lvTick)
 s32 g_ShotFrame = 0; // --screenshot-frame N: take one at that level frame, so two runs can be compared at the same moment (lvTick)
+s32 g_PoseAnims[8]; // --test-anim ID[,ID...]: our own body held in each animation in turn (lvTestAnimTick)
+s32 g_PoseFrame = -1; // --test-anim-frame N: the frame every slot starts on, or -1 for its own default
+s32 g_PoseFrames[8]; // --test-anim-frame N[,N...]: ... one per slot, when the list has one entry each
+s32 g_NumPoseFrames = 0;
+f32 g_PoseSpeeds[8]; // --test-anim-speed S[,S...]: how fast each slot plays; a slot the list leaves out plays at 1
+s32 g_NumPoseSpeeds = 0;
+f32 g_PoseSpeed = 1.f; // ... and for every slot the list leaves out
+s32 g_PoseAtFrame = 420; // --test-anim-at N: the level frame the first pose goes on
+s32 g_PoseEach = 75; // --test-anim-each N: how many level frames each pose is held for
+f32 g_PoseFace = -999.f; // --test-anim-face DEGREES: which way to look, so the camera is not in the wall behind a spawn
+s32 g_PosePlay = false; // --test-anim-play: play each animation and shoot it frame by frame, instead of freezing one frame
+s32 g_PosePush = 0; // --test-anim-push FWD|BACK|LEFT|RIGHT: shove the body along while the animation plays
+s32 g_TestDodge = false; // --test-dodge: the crouch double tap put through every direction (lvTestDodgeTick)
+s32 g_NumPoseAnims = 0;
 s32 g_TickExtraSleep = true;
 
 s32 g_SkipIntro = false;
@@ -373,6 +387,71 @@ int main(int argc, const char **argv)
 	g_ExitFrame = sysArgGetInt("--exit-frame", 0);
 	g_StateHashEvery = sysArgGetInt("--state-hash", 0);
 	g_ShotFrame = sysArgGetInt("--screenshot-frame", 0);
+	g_TestDodge = sysArgCheck("--test-dodge");
+
+	// --test-anim 0x64,0x65: our own body held in each named animation in turn,
+	// one screenshot each, for the animations the game never asks of a player
+	{
+		const char *pose = sysArgGetString("--test-anim");
+		char *end;
+
+		while (pose != NULL && *pose != '\0' && g_NumPoseAnims < ARRAYCOUNT(g_PoseAnims)) {
+			g_PoseAnims[g_NumPoseAnims++] = (s32)strtol(pose, &end, 0);
+			pose = *end == ',' ? end + 1 : end;
+		}
+
+		if (g_NumPoseAnims > 0) {
+			// The start frame and the speed are lists too, because a move only
+			// looks like itself played as it is played in the game: the roll is
+			// frames 20 to 98 at 1.5, and chrAvoid()'s dodge is from 0 at 0.6.
+			const char *framelist = sysArgGetString("--test-anim-frame");
+			const char *speedlist = sysArgGetString("--test-anim-speed");
+
+			while (framelist != NULL && *framelist != '\0' && g_NumPoseFrames < ARRAYCOUNT(g_PoseFrames)) {
+				g_PoseFrames[g_NumPoseFrames++] = (s32)strtol(framelist, &end, 0);
+				framelist = *end == ',' ? end + 1 : end;
+			}
+
+			if (g_NumPoseFrames == 1) {
+				g_PoseFrame = g_PoseFrames[0];
+			}
+
+			while (speedlist != NULL && *speedlist != '\0' && g_NumPoseSpeeds < ARRAYCOUNT(g_PoseSpeeds)) {
+				g_PoseSpeeds[g_NumPoseSpeeds++] = (f32)strtod(speedlist, &end);
+				speedlist = *end == ',' ? end + 1 : end;
+			}
+
+			if (g_NumPoseSpeeds == 1) {
+				g_PoseSpeed = g_PoseSpeeds[0];
+			}
+			g_PoseAtFrame = sysArgGetInt("--test-anim-at", g_PoseAtFrame);
+			g_PoseEach = sysArgGetInt("--test-anim-each", g_PoseEach);
+			g_PoseFace = (f32)sysArgGetInt("--test-anim-face", (s32)g_PoseFace);
+			g_PosePlay = sysArgCheck("--test-anim-play");
+			const char *push = sysArgGetString("--test-anim-push");
+			if (push != NULL) {
+				switch (push[0]) {
+				case 'f':
+				case 'F':
+					g_PosePush = 1;
+					break;
+				case 'b':
+				case 'B':
+					g_PosePush = 2;
+					break;
+				case 'l':
+				case 'L':
+					g_PosePush = 3;
+					break;
+				default:
+					g_PosePush = 4;
+					break;
+				}
+			}
+			sysLogPrintf(LOG_NOTE, "test-anim: %d animations, each held %d frames from level frame %d",
+					g_NumPoseAnims, g_PoseEach, g_PoseAtFrame);
+		}
+	}
 	g_AlarmAtFrame = sysArgGetInt("--alarm-at", 0);
 	g_SkipCutscenes = sysArgCheck("--skip-cutscenes");
 	xblaMeshSetVerbose(sysArgCheck("--xbla-mesh-verbose"));

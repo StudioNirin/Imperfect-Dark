@@ -105,6 +105,7 @@
 #include "lib/lib_06440.h"
 #include "lib/lib_317f0.h"
 #include "lib/main.h"
+#include "lib/model.h"
 #include "lib/mtx.h"
 #include "lib/music.h"
 #include "lib/rng.h"
@@ -150,6 +151,20 @@
 extern s32 g_ExitFrame;
 extern s32 g_AlarmAtFrame;
 extern s32 g_ShotFrame;
+extern s32 g_PoseAnims[]; // --test-anim ID[,ID...] (lvTestAnimTick)
+extern s32 g_PoseFrame;
+extern s32 g_PoseFrames[];
+extern s32 g_NumPoseFrames;
+extern f32 g_PoseSpeeds[];
+extern s32 g_NumPoseSpeeds;
+extern f32 g_PoseSpeed;
+extern s32 g_PoseAtFrame;
+extern s32 g_PoseEach;
+extern f32 g_PoseFace;
+extern s32 g_PosePlay;
+extern s32 g_PosePush;
+extern s32 g_TestDodge;
+extern s32 g_NumPoseAnims;
 #endif
 
 struct sndstate *g_MiscSfxAudioHandles[3];
@@ -2492,6 +2507,304 @@ s32 lvGetSlowMotionType(void)
 	return SLOWMOTION_OFF;
 }
 
+#ifndef PLATFORM_N64
+// How far into each slot the picture is taken, and an end frame past any
+// animation's own - see lvTestAnimTick().
+#define POSE_SHOT_AFTER 15
+#define POSE_ENDFRAME 99999.0f
+// Long enough for the longest animation the probe is pointed at, and a frame
+// more: --test-anim-play takes a shot every level frame of the slot.
+#define POSE_PLAY_SHOTS 70
+
+// --test-anim-push: which way to shove the body while the animation plays.
+// Whether a move reads right is a question about its travel as much as about
+// its pose - a side roll's tilt is across the way it goes, and the same tilt on
+// a forward shove is a different move - so a pose can be asked for one way and
+// pushed another. The shove is the roll's own impulse, and it is applied in
+// bondCalculateNewPosition() beside bondforcespeed's whatever the movement mode
+// says, so no part of the roll itself is being pretended here.
+#define POSE_PUSH_FWD 1
+#define POSE_PUSH_BACK 2
+#define POSE_PUSH_LEFT 3
+#define POSE_PUSH_RIGHT 4
+
+/**
+ * --test-anim: our own body held in one animation at a time, and photographed.
+ *
+ * Some animations exist that the game never asks of a player. The four that
+ * chrAvoid() picks between are a guard dodging something thrown at him, and
+ * nothing else plays them, so there is otherwise no way to see one - and the
+ * combat roll has to choose between them and the rolls it already uses.
+ * (attach -ex 'call ...' by gdb cannot do it here either: ptrace_scope 1 lets a
+ * process trace its own descendants, and a gate's gdb is a sibling of the run.)
+ *
+ * Each animation named on the command line is put on the body in turn, one slot
+ * of g_PoseEach level frames each, with a screenshot part way through a slot.
+ *
+ * --test-anim-play plays each one instead, one screenshot per level frame, so
+ * that the shots can be encoded into a film. A still says which way a body ends
+ * up facing and little else; whether a hop goes forwards or backwards is in how
+ * it leaves the ground, which only motion shows.
+ *
+ * Speed 0 freezes the pose. Moving the end frame past the animation's own is
+ * what holds it there: chrIsOneShotAnimPlaying() decides a one shot still owns
+ * the body from the animation number and that end frame, and while it says yes
+ * playerChooseThirdPersonAnimation() leaves the animation and its speed exactly
+ * as they were started (chraction.c, player.c). Without the end frame the
+ * chooser takes the walk back on the next tick and the picture is of Bond
+ * standing where a jump was.
+ */
+static void lvTestAnimTick(void)
+{
+	struct player *player = g_Vars.players[g_Vars.currentplayernum];
+	struct chrdata *chr;
+	s32 slot;
+	s32 animnum;
+	s32 startframe;
+	s32 start;
+	f32 speed;
+
+	if (g_NumPoseAnims <= 0 || player == NULL || player->prop == NULL
+			|| player->prop->chr == NULL || player->prop->chr->model == NULL) {
+		return;
+	}
+
+	chr = player->prop->chr;
+
+	// The body this poses is the one the run draws, and solo play only builds
+	// one because it means to look at it - so the view is asked for well before
+	// the first pose rather than on the frame of it.
+	if (g_Vars.lvframenum == 30) {
+		player->thirdperson = true;
+	}
+
+	// Which way to look. The camera sits behind the body, and an arena spawn can
+	// have its back to a wall, which clamps the camera to a few units and leaves
+	// the picture inside Bond's coat.
+	if (g_PoseFace > -900.f && g_Vars.lvframenum >= 30) {
+		player->vv_theta = g_PoseFace;
+	}
+
+	if (g_Vars.lvframenum < g_PoseAtFrame) {
+		return;
+	}
+
+	slot = (g_Vars.lvframenum - g_PoseAtFrame) / g_PoseEach;
+
+	if (slot >= g_NumPoseAnims) {
+		return;
+	}
+
+	s32 intoSlot = (g_Vars.lvframenum - g_PoseAtFrame) % g_PoseEach;
+
+	if (intoSlot != 0) {
+		if (g_PosePlay) {
+			// One shot per level frame. --fixed-step makes that one shot per frame
+			// of the animation, so the shots play back as a film of the move: the
+			// log line below says the animation's own frame number beside each.
+			if (intoSlot < POSE_PLAY_SHOTS) {
+				sysLogPrintf(LOG_NOTE, "test-anim: playshot %#x frame %.0f of %d at x %.0f z %.0f",
+						g_PoseAnims[slot], modelGetCurAnimFrame(chr->model),
+						animGetNumFrames(g_PoseAnims[slot]), chr->prop->pos.x, chr->prop->pos.z);
+
+				screenshotRequest();
+			}
+		} else if (intoSlot == POSE_SHOT_AFTER) {
+			if (player->isdead) {
+				sysLogPrintf(LOG_WARNING, "test-anim: player %d is dead; this shot is not the pose",
+						g_Vars.currentplayernum);
+			}
+
+			sysLogPrintf(LOG_NOTE, "test-anim: shot at %#x: body %d frame %.0f, third person %d, dist %.0f",
+					chr->oneshotanim, chr->bodynum, modelGetCurAnimFrame(chr->model),
+					playerIsThirdPerson(player), player->thirdpersondist);
+
+			screenshotRequest();
+		}
+
+		return;
+	}
+
+	animnum = g_PoseAnims[slot];
+
+	// Where each slot starts and how fast it runs. One value on the command line
+	// is every slot; a slot the list does not reach starts at the top at 1x.
+	startframe = g_NumPoseFrames > 1 ? g_PoseFrames[slot] : g_PoseFrame;
+	speed = g_NumPoseSpeeds > 1 ? g_PoseSpeeds[slot] : g_PoseSpeed;
+
+	if (g_PosePlay) {
+		chr->oneshotanim = animnum;
+		modelSetAnimation(chr->model, animnum, 0, (f32)(startframe >= 0 ? startframe : 0), speed, 0.0f);
+
+		if (g_PosePush != 0) {
+			struct coord *look = &player->bond2.unk00;
+			struct coord pushdir;
+
+			// bond2's flat look direction, and its right hand: the same basis
+			// bwalkTryRoll() writes its push out of.
+			switch (g_PosePush) {
+			case POSE_PUSH_FWD:
+				pushdir.x = look->x;
+				pushdir.z = look->z;
+				break;
+			case POSE_PUSH_BACK:
+				pushdir.x = -look->x;
+				pushdir.z = -look->z;
+				break;
+			case POSE_PUSH_LEFT:
+				pushdir.x = look->z;
+				pushdir.z = -look->x;
+				break;
+			default:
+				pushdir.x = -look->z;
+				pushdir.z = look->x;
+				break;
+			}
+
+			player->rollspeed.x = pushdir.x * ROLL_IMPULSE;
+			player->rollspeed.z = pushdir.z * ROLL_IMPULSE;
+		}
+
+		sysLogPrintf(LOG_NOTE, "test-anim: body %d head %d playing animation %#x of %d frames from %d at %.2fx, push %d, at level frame %d",
+				chr->bodynum, chr->headnum, animnum, animGetNumFrames(animnum),
+				startframe >= 0 ? startframe : 0, speed, g_PosePush, g_Vars.lvframenum);
+
+		return;
+	}
+
+	start = startframe >= 0 ? startframe : animGetNumFrames(animnum) / 3;
+
+	chr->oneshotanim = animnum;
+	modelSetAnimation(chr->model, animnum, 0, start, 0.0f, 0.0f);
+
+	if (chr->model->anim) {
+		chr->model->anim->endframe = POSE_ENDFRAME;
+	}
+
+	sysLogPrintf(LOG_NOTE, "test-anim: body %d head %d held in animation %#x frame %d of %d at level frame %d",
+			chr->bodynum, chr->headnum, animnum, start, animGetNumFrames(animnum), g_Vars.lvframenum);
+}
+#endif
+
+#ifndef PLATFORM_N64
+// --test-dodge: the stick's own units - a keyboard key arrives as forty-two and
+// a stick has five units taken off it by the deadzone - and the room a scenario
+// gets. ROLL_COOLDOWN is sixty, so a scenario of its own is a hundred and twenty,
+// and the stance is read at sixty, which is past ROLL_BUSY lifting.
+#define DODGE_TEST_STICK 42.f
+#define DODGE_TEST_STEP 120
+#define DODGE_TEST_START 300
+
+// --test-dodge: one gesture, and what it was made of.
+struct dodgetestcase {
+	f32 forwards;
+	f32 sideways;
+	s32 twotaps;
+	const char *name;
+};
+
+/**
+ * --test-dodge: the gesture put through without a hand on a pad.
+ *
+ * Nothing in the joystick layer takes a fake press, so the taps are made by
+ * calling the gesture's own entry point with the button a real press would have
+ * carried, on a movedata carrying nothing but the stick. What is left out is the
+ * physical press and the physical stick; what is put through is the pairing of
+ * the two taps, the window between them, the cooldown, which way the dodge goes
+ * and which move it plays - all of it the code a player gets.
+ *
+ * What cannot be reached this way is the stance a dodge ends in when the button
+ * is still held at the end: that is read off the real buttons, so that half of
+ * the rule is a hand on a pad. The released half is here, weakly, because in
+ * hold-to-crouch the button drives the stance anyway.
+ *
+ * Each scenario clears the roll's own records first: a roll may not be thrown
+ * inside ROLL_COOLDOWN of the last, and DODGE_TEST_STEP is what keeps the
+ * scenarios from leaning on each other.
+ */
+static void lvTestDodgeTick(void)
+{
+	static const struct dodgetestcase cases[] = {
+		{ DODGE_TEST_STICK, 0.f, 1, "forward" },
+		{ -DODGE_TEST_STICK, 0.f, 1, "back" },
+		{ 0.f, DODGE_TEST_STICK, 1, "right" },
+		{ 0.f, -DODGE_TEST_STICK, 1, "left" },
+		{ DODGE_TEST_STICK, DODGE_TEST_STICK, 1, "forward-right" },
+		{ -DODGE_TEST_STICK, -DODGE_TEST_STICK, 1, "back-left" },
+		{ 0.f, 0.f, 1, "two-taps-no-direction" },
+		{ DODGE_TEST_STICK, 0.f, 0, "one-tap-only" },
+	};
+	struct player *player = g_Vars.players[g_Vars.currentplayernum];
+	const struct dodgetestcase *test;
+	s32 which;
+	s32 into;
+
+	if (!g_TestDodge || player == NULL) {
+		return;
+	}
+
+	which = (g_Vars.lvframenum - DODGE_TEST_START) / DODGE_TEST_STEP;
+	into = (g_Vars.lvframenum - DODGE_TEST_START) % DODGE_TEST_STEP;
+
+	if (which < 0 || which >= (s32)ARRAYCOUNT(cases)) {
+		return;
+	}
+
+	test = &cases[which];
+
+	if (into == 0) {
+		// The body has to be one the animation chooser is driving before it will
+		// take a one shot at all (chrIsThirdPersonBody), which for our own body
+		// means third person - the same reason the roll's animation is asked for
+		// and not waited on. Every other player in a match is a driven body, which
+		// is who sees these moves for real.
+		player->thirdperson = true;
+
+		player->rolltime60 = 0;
+		player->rollspeed.x = 0;
+		player->rollspeed.y = 0;
+		player->rollspeed.z = 0;
+		player->crouchtapbutton = 0;
+		player->crouchtap60 = 0;
+		player->dodgesettlepending = false;
+	}
+
+	if (into == 0 || (into == 8 && test->twotaps)) {
+		struct movedata md;
+
+		bmoveResetMoveData(&md);
+		md.analogwalk = test->forwards;
+		md.analogstrafe = test->sideways;
+
+		bmoveDodgeTap(BUTTON_FULL_CROUCH, &md);
+	}
+
+	if (into == 12) {
+		struct coord *look = &player->bond2.unk00;
+		f32 push = sqrtf(player->rollspeed.x * player->rollspeed.x
+					+ player->rollspeed.z * player->rollspeed.z);
+		f32 along = 0.f;
+		f32 aside = 0.f;
+
+		if (push > 0.f) {
+			along = (player->rollspeed.x * look->x + player->rollspeed.z * look->z) / push;
+			aside = (player->rollspeed.z * look->x - player->rollspeed.x * look->z) / push;
+		}
+
+		sysLogPrintf(LOG_NOTE,
+				"dodgetest: %s: along %.2f aside %.2f push %.2f anim %#x rolling %d blocked %d (dead %d falling %d mode %d)",
+				test->name, along, aside, push,
+				player->prop != NULL && player->prop->chr != NULL
+					? modelGetAnimNum(player->prop->chr->model) : 0,
+				bwalkIsRolling(), push <= 0.f, player->isdead, player->isfalling,
+				player->bondmovemode);
+	} else if (into == 60) {
+		sysLogPrintf(LOG_NOTE, "dodgetest: %s: after: stance %d rolling %d",
+				test->name, player->crouchpos, bwalkIsRolling());
+	}
+}
+#endif
+
 void lvTick(void)
 {
 #ifndef PLATFORM_N64
@@ -2699,6 +3012,14 @@ void lvTick(void)
 			sysLogPrintf(LOG_NOTE, "alarm-at %d: raising the alarm", g_AlarmAtFrame);
 			alarmActivate();
 		}
+
+		// --test-anim: our own body held in each named animation in turn, with
+		// a screenshot of each (lvTestAnimTick)
+		lvTestAnimTick();
+
+		// --test-dodge: the crouch double tap put through every direction, and
+		// what came out of each (lvTestDodgeTick)
+		lvTestDodgeTick();
 
 		// --exit-frame: a measured run ends on a level frame, not a clock
 		if (g_ExitFrame > 0 && g_Vars.lvframenum >= g_ExitFrame) {
