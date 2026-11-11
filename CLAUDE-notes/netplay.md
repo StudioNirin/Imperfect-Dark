@@ -193,6 +193,17 @@
   must stay that way; `MENU_MAX_LAYERS` and `MENU_MAX_DIALOGS`; and
   `netlobbysimtest.sh`.
 
+- **`netpredicttest` is red on the dev box, and what that does and does not
+  say (2026-11-11)** — the section of that name: three red runs whose failures
+  *moved* (the level clock 55-62 ticks apart; `relay: 10.9 corrections a
+  minute` not moving at all), the box out of memory under a model runtime
+  holding 82% of it, the fork's whole netcode delta over `dabs/dabs-mod` being
+  +90 lines of lobby team colours and 5 lines of per-player save fields (those
+  5 removed change nothing), and the three ways to settle it that do not have
+  the assistant in the way: a quiet box with a clone of `cc90f3635` interleaved
+  against HEAD, an F3 `[netplay]` pacing line from a real match, and CI, which
+  runs none of the net gates today.
+
 ## The shape
 
 One host, up to eleven clients (`MAX_PLAYERS` is 12 since phase 8; a room
@@ -4359,3 +4370,66 @@ involved: it is the menu's dialog stack.
   and its character page, logging the depth at each (4, 5, 6, 7, 7, 8) and
   shots of three. Before the caps it stopped at "Add Simulant was refused at
   depth 6".
+
+## `netpredicttest` is red on the dev box, and what that does and does not say (2026-11-11, no wire change)
+
+Left deliberately unresolved. The gate was run four times on the working tree
+of 2026-11-11 and was red every time, and the *failures were not the same
+failures*:
+
+| run | what was different | result |
+|---|---|---|
+| 1 | `Mod.XblaMeshes` defaulting on | `FAIL level clock: client 3537, host 3599 ticks apart, over 30` |
+| 2 | nothing | `FAIL relay: 10.9 corrections a minute, over 10`, `relay: prediction`, `sims: a run of corrections after the respawn at command 1120`, `sims: measure`, `skipdeath: the death and respawn ticks disagree or the respawn was slow` |
+| 3 (control) | `XblaMeshes` default back off | `FAIL level clock: client 3544, host 3599` |
+| 4 | this fork's 5 added `PF()` fields out of `s_Fields[]` | the two `relay` failures, `10.9` unchanged |
+
+**Ruled out: the fork's work.** `git log cc90f3635..HEAD -- port/src/net` (23
+commits above `dabs/dabs-mod`, the DabDavis dev branch, which is the ancestor
+and already has both `netpredict.c` and this gate) is `netlobby.c` +90/-9 of
+lobby team colours and `netpredict.c` +5 - the dodge's tap state in the
+per-player save list. Run 4 took those 5 lines out and the numbers came back
+the same. No commit above the baseline touches `tools/ci/netpredicttest.sh`,
+so both sides ran the same assertions and the same thresholds, and the verdicts
+are comparable across the two trees. `replaytest.sh self` (an exact 20-second
+loopback match) said `same match`, and `same solo`; `netcontenttest`'s `xbla`
+case exited 0 on both sides.
+
+**Note the difference between the two kinds of failure.** The level-clock delta
+moved with conditions (62 ticks, 55 ticks) while `relay`'s **10.9 corrections a
+minute did not move at all** across three configurations of the same seed.
+Treat the timing cases as load-shaped until a quiet box says otherwise, and the
+corrections figure as a candidate real finding.
+
+**What the box was doing during run 4**: `load average 8.68` on 32 cores;
+61 GiB of RAM with **662 MiB free and 7.4 GiB in swap**; `basalt` - the model
+runtime serving the very session running the gate - at **293% CPU and 82% of
+memory**; `kswapd0` active. A check that asks how many level frames two
+processes, each of which boots a level and reads a 32 MB ROM, agree on in a
+minute is measuring page reclaim before it measures netcode.
+
+**Not established**: whether the gate was green on this box before 2026-11-11.
+There is no golden here, no CI number to compare to (no workflow runs the net
+gates: `rg netpredicttest .github/workflows` is empty), and no run taken while
+the machine was demonstrably idle.
+
+To settle it - see `CLAUDE-notes/project-list.md`'s entry of the same date for
+the short form and the suggestion for a runner that refuses to start on a busy
+box:
+
+- **Interleave the ancestor against HEAD.** `git clone "$PWD" /tmp/pd-base &&
+  git -C /tmp/pd-base checkout cc90f3635`, build `-j8`, symlink
+  `build/data/pd.ntsc-final.z64` at the payload ROM, and run *that tree's own*
+  `tools/ci/netpredicttest.sh` - it resolves `BUILD` from its own location, so
+  it cannot reach the working `build/`. Run `B H B H B H` so a slow period hits
+  both arms. Do it with the box's own work stopped: the point of the exercise is
+  a machine that is doing nothing else.
+- **Measure real play instead of the harness.** F3's `[netplay]` section
+  (`netTracePacing()` and `netRulesTraceSync()` in `port/src/net/nettrace.c`)
+  from an ordinary match over a real connection: a player's actual
+  corrections-per-minute is what the gate's `over 10` threshold is a statement
+  about. If a real match with real ping sits well under it while loopback
+  exceeds it, the threshold is wrong for loopback and the netcode is fine.
+- **Give it a machine that has nothing else on it.** `netpredicttest.sh` needs
+  no `pdlobbyd`, only `build/data/pd.ntsc-final.z64` and an offscreen video
+  driver, so it can run in CI. Nobody's local box is the reference.

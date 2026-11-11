@@ -180,3 +180,30 @@ Two pieces to use them:
 Unplaced doors need a door definition (sound, speed, portal) that no setup
 gives them; vehicles need GoldenEye's vehicle handling (getank.c,
 gexplusveh.c) or stay static.
+
+## `netpredicttest`'s red runs: tell a real corrections problem from a box with no memory left (added 2026-11-11)
+
+Full state in `CLAUDE-notes/netplay.md`'s section of that name. Short form: the
+gate has been red in four consecutive runs on the dev box, the level-clock
+failures move between runs, `relay: 10.9 corrections a minute` does not, and the
+netcode is +90 lines of lobby team colours and 5 lines of per-player save fields
+above the `dabs/dabs-mod` ancestor, with those 5 tested out and changing nothing.
+
+Two things to decide, and one to build:
+
+- **Is `relay`'s corrections figure real?** Run the ancestor tree's own gate
+  interleaved with HEAD's on an idle machine. If it says 10.9 too, it is
+  long-standing and either accepted or fixed on its own merits, not a fork
+  regression.
+- **Does it matter in play?** Take an F3 `[netplay]` pacing line from a real
+  match. A threshold that loopback exceeds and real connections do not is a
+  threshold problem.
+- **Build the runner that makes the measurement honest.** A ~30-line wrapper
+  around the gate that records `uptime` and `free -h` before and after, and
+  *refuses to start* unless 5-minute load is under ~2 and available memory is
+  over some floor, writing its numbers and its own health check to one log.
+  The reason this matters here: **the heaviest process on this machine during
+  the red runs was the model runtime serving the session that ran the gate** -
+  293% of 32 cores, 82% of 61 GiB. A wrapper that refuses to run then is the
+  way to get a number that means something at 3 a.m. or from CI, with nobody
+  and nothing else in the way.

@@ -1,6 +1,19 @@
 #!/bin/bash
 # netpredicttest.sh — does the client's own player run ahead and agree with the host?
 #
+# What a red run here did NOT tell us on 2026-11-11: the gate was red in four
+# runs on the dev box and the failures moved between them (the level clock 55-62
+# ticks apart; `relay: 10.9 corrections a minute` identical across three
+# configurations of the same seed). That box had 662 MiB free of 61 GiB, swap in
+# use, and a model runtime at 293% CPU and 82% of memory - which is to say, the
+# session running the gate was the heaviest thing on the machine. And the
+# netcode above the ancestor this tree was cut from (dabs/dabs-mod, cc90f3635)
+# is +90 lines of lobby team colours plus 5 lines of per-player save fields,
+# with those 5 taken out and the numbers unchanged. Read
+# CLAUDE-notes/netplay.md's "netpredicttest is red on the dev box" - and take a
+# run only on a box quiet enough to say so - before calling a red run here a
+# regression.
+#
 # Loopback (PLANS/NETPLAY.md "Prediction", phase 5a): a listen host and one
 # client on 127.0.0.1, offscreen on the GPU, the 0x32 match with no sims
 # (flat ground, nothing to bump into), Start Armed, jumping on. The client's
