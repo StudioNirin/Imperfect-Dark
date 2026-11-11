@@ -9846,6 +9846,38 @@ void chrPlayRollAnimation(struct chrdata *chr, bool toleft)
 
 	chr->oneshotanim = animcfg->animnum;
 }
+
+/**
+ * Throw the body into the backward hop.
+ *
+ * ANIM_0066 is one of the four dodges chrAvoid() picks between - the comment on
+ * that set says the chr "jumps backwards or to the side as if avoiding
+ * something, then looks at whatever it was that just went past", and of the four
+ * this is the one that branch reaches when the chr is getting away from the
+ * thing, which is the same move a player's backward dodge is. The other two it
+ * could have reached instead turn the body as they go - one of them ends up
+ * facing the way it travelled - and a player's dodge cannot: the body faces
+ * where the camera faces and the push does all the steering.
+ *
+ * Started, ended and played at chrAvoid()'s own numbers, so that this is Rare's
+ * move on a player rather than a pose of ours dressed up as one. And, exactly as
+ * with the roll, it is asked for and not waited on: bwalkTryDodge()'s push is the
+ * move, so a look whose skeleton has no such thing loses the dressing and keeps
+ * the dodge.
+ */
+void chrPlayHopAnimation(struct chrdata *chr)
+{
+	if (g_NetReplaying) return; // netplay: a prediction replay moves the player and does nothing else (netpredict.c)
+
+	if (!chrCanPlayOneShotAnim(chr)) {
+		return;
+	}
+
+	modelSetAnimation(chr->model, ANIM_0066, false, 0.f, DODGE_HOP_ANIMSPEED, DODGE_ANIMMERGE);
+	modelSetAnimEndFrame(chr->model, DODGE_HOP_ENDFRAME);
+
+	chr->oneshotanim = ANIM_0066;
+}
 #endif
 
 void func0f03c03c(void)

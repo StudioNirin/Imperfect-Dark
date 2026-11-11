@@ -13,7 +13,9 @@ s32 bwalkTryMoveUpwards(f32 amount);
 bool bwalkCanMoveUpwards(f32 amount);
 void bwalkTryJump(void);
 #ifndef PLATFORM_N64
-void bwalkTryRoll(void);
+// The dodge, from the movement input itself: where the player is holding the
+// stick or the keys, in their own frame, not where they happen to be going
+bool bwalkTryDodge(f32 forwards, f32 sideways);
 bool bwalkIsRolling(void);
 #endif
 bool bwalkCalculateNewPosition(struct coord *vel, f32 rotateamount, bool apply, f32 extrawidth, s32 arg4);

@@ -37,6 +37,7 @@ or a section heading, don't read one whole.
 - [fojo-collab.md](CLAUDE-notes/fojo-collab.md) — The Friends of Joanna collab tree, `../pd-fojo-monorepo-collab/`
 - [performance.md](CLAUDE-notes/performance.md) — Measuring a crowded match, `--rng-seed`/`--fixed-step`/`--exit-frame`, where the frame goes; above 60 FPS: `--fixed-fps N` and the shapes the framerate fixes took
 - [third-person.md](CLAUDE-notes/third-person.md) — The third person camera, and why melee, rockets and beams came out of it; Sitting in the Institute's chairs
+- [dodge.md](CLAUDE-notes/dodge.md) — The dodge: a crouch button's double tap in place of the roll button; the raw input and the look basis and not the eased speeds; why the back arc's cosine is not on 135°; why the back is a hop and the rest are rolls; why a first person player never sees their own dodge
 - [settings.md](CLAUDE-notes/settings.md) — Defaults and the Settings Preset
 - [weapons.md](CLAUDE-notes/weapons.md) — Weapon numbers, `flags2`, converting a `weaponnum` comparison
 - [randomizer.md](CLAUDE-notes/randomizer.md) — The Randomizer: a mission dealt again from its own pieces

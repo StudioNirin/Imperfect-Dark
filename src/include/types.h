@@ -3039,6 +3039,14 @@ struct player {
 	// carries the simulant side of the same move.
 	struct coord rollspeed;
 	s32 rolltime60;
+	// The dodge's gesture, and nothing the other players need: which crouch
+	// button was tapped first and on what frame, and whether a dodge is still
+	// running that has yet to settle the stance it ends in. What the gesture
+	// produces - the push, the frame it started, and the stance - are all read
+	// off fields above and below this that the netcode already carries.
+	u32 crouchtapbutton;
+	s32 crouchtap60;
+	bool dodgesettlepending;
 	// Where the camera ended up on the last frame it was behind a living
 	// player. Death stops the camera here and turns it to watch the body fall,
 	// so the two are read together: a distance of 0 means there is no frozen

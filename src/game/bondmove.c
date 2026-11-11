@@ -771,6 +771,52 @@ static s32 bmoveUseDownStep(s32 samplenum, s32 numsamples)
 	return 1;
 }
 
+#ifndef PLATFORM_N64
+/**
+ * The dodge's gesture: the same crouch button tapped twice, with a direction on
+ * the stick, and a plain crouch every other time.
+ *
+ * Called with whatever of the crouch buttons went down on this sample, so a tap
+ * of some other button leaves the count alone, and so the first tap still does
+ * everything crouching was going to do - the stance handling above has already
+ * had this frame, and the stance the dodge ends in is settled there rather than
+ * here.
+ *
+ * The direction is read off the movement input itself and not off speedforwards
+ * and speedsideways. Those are the mover's own numbers, eased towards what the
+ * stick asked for a moment back, and a player who dodges on the way past a
+ * doorway would go where the last second was taking them rather than where they
+ * are pointing now. A dodge is the opposite of a moment.
+ */
+void bmoveDodgeTap(u32 crouchbutton, struct movedata *movedata)
+{
+	struct player *player = g_Vars.currentplayer;
+
+	if (crouchbutton == 0 || !modCanPlayerRoll()) {
+		return;
+	}
+
+	if (player->crouchtapbutton == crouchbutton
+			&& g_Vars.lvframe60 - player->crouchtap60 <= ROLL_TAP_WINDOW
+			&& bwalkTryDodge(movedata->analogwalk, movedata->analogstrafe)) {
+		// The pair is spent. Without this the second tap of a dodge is also the
+		// first tap of the next one, which is not what a half second of holding a
+		// crouch button means.
+		player->crouchtapbutton = 0;
+		player->crouchtap60 = 0;
+
+		// The stance at the end of it is decided when the dodge is over, by
+		// whether the button is still being held then.
+		player->dodgesettlepending = true;
+
+		return;
+	}
+
+	player->crouchtapbutton = crouchbutton;
+	player->crouchtap60 = g_Vars.lvframe60;
+}
+#endif
+
 void bmoveProcessInput(bool allowc1x, bool allowc1y, bool allowc1buttons, bool ignorec2)
 {
 	struct movedata movedata;
@@ -1879,15 +1925,38 @@ void bmoveProcessInput(bool allowc1x, bool allowc1y, bool allowc1buttons, bool i
 						}
 					}
 
+					// A dodge lets go of the body in the stance the button says,
+					// which is not necessarily the one it started in: still held on
+					// the dodge's last frame and the player stays down, let go and
+					// they come back up. Where the tap lands matters less than where
+					// the release does, which is the whole reason this is asked once,
+					// at the end. In hold-to-crouch it changes nothing, since the
+					// button is what drives the stance there anyway; what it is for
+					// is the toggle modes, where a double tap leaves the stance
+					// wherever the second tap happened to switch it to.
+					if (g_Vars.currentplayer->dodgesettlepending && !bwalkIsRolling()) {
+						g_Vars.currentplayer->dodgesettlepending = false;
+
+						if (joyGetButtons(contpad1, c1allowedbuttons & DODGE_CROUCH_BUTTONS)) {
+							g_Vars.currentplayer->crouchpos = CROUCHPOS_SQUAT;
+						} else if (g_Vars.currentplayer->crouchpos != CROUCHPOS_STAND
+								&& bwalkCanUncrouch()) {
+							g_Vars.currentplayer->crouchpos = CROUCHPOS_STAND;
+						}
+					}
+
 					// Third person, on the button's edge rather than while it is
 					// held. Outside the CONTROLMODE_PC block above because it is a
 					// view setting and not a movement one. playerIsThirdPerson()
 					// is what decides; this only carries the request, and solo
 					// play acts on it by building the body it needs to look at.
 					//
-					// The combat roll is taken on the same terms and from the
-					// same loop, being the other thing on this pad that happens
-					// on a press rather than while a button is down.
+					// The dodge's double tap is taken on the same terms and from the
+					// same loop, being the other thing on this pad that happens on a
+					// press rather than while a button is down - and it is read for
+					// every sample rather than breaking out on one, because the two
+					// taps of a gesture are not the sort of thing that should swallow
+					// a third person press in the same frame.
 					if (allowc1buttons) {
 						for (i = 0; i < numsamples; i++) {
 							u32 pressed = joyGetButtonsPressedOnSample(i, contpad1, c1allowedbuttons);
@@ -1897,9 +1966,7 @@ void bmoveProcessInput(bool allowc1x, bool allowc1y, bool allowc1buttons, bool i
 								g_Vars.currentplayer->thirdperson = !g_Vars.currentplayer->thirdperson && modIsThirdPersonAllowed();
 							}
 
-							if (pressed & BUTTON_ROLL) {
-								bwalkTryRoll();
-							}
+							bmoveDodgeTap(pressed & DODGE_CROUCH_BUTTONS, &movedata);
 
 							// Spectator is taken here for the same reason as the
 							// other two: it is a press and not a hold.
@@ -1907,7 +1974,7 @@ void bmoveProcessInput(bool allowc1x, bool allowc1y, bool allowc1buttons, bool i
 								modSpectateToggle();
 							}
 
-							if (pressed & (BUTTON_THIRDPERSON | BUTTON_ROLL | BUTTON_SPECTATE)) {
+							if (pressed & (BUTTON_THIRDPERSON | BUTTON_SPECTATE)) {
 								break;
 							}
 						}

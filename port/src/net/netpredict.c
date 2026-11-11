@@ -213,6 +213,11 @@ static const struct netpredfield s_Fields[] = {
 	PF(walkinitmove), PF(walkinitpos), PF(walkinitmtx), PF(walkinitt), PF(walkinitt2),
 	PF(walkinitstart), PF(bondforcespeed), PF(speedthetacontrol), PF(altdowntime), PF(amdowntime),
 	PF(rollspeed), PF(rolltime60),
+	// The dodge's gesture, kept with the roll it produces: a replay runs
+	// bmoveDodgeTap() again off the same input, and a tap pair that a rollback
+	// replayed twice would otherwise come out of it holding a half-tap. The
+	// stance its ending settles into is crouchpos, which is above.
+	PF(crouchtapbutton), PF(crouchtap60), PF(dodgesettlepending),
 	// the aim: the mouse's crosshair turns the view past the edge while
 	// aiming, and the zoom scales every turn (bmoveProcessInput)
 	PF(swivelpos), PF(insightaimmode), PF(zoomintime), PF(zoomintimemax), PF(zoominfovy),

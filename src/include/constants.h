@@ -3242,6 +3242,62 @@ s32 langpackIsCjk(void);
 #define ROLL_BUSY TICKS(45)
 
 /**
+ * The dodge's gesture: a crouch button tapped twice with a direction held.
+ *
+ * The window is between the two taps, and only the same button twice counts - a
+ * player who crouches, decides, and crouches again has crouched twice, which is
+ * what they asked for. Half a second is about how long a deliberate second
+ * press takes a thumb, and less than a hesitation.
+ */
+#define ROLL_TAP_WINDOW TICKS(30)
+
+/**
+ * How far over the stick has to be for the tap to have a direction on it.
+ *
+ * bmoveProcessInput()'s own stick deadzone takes the first five units off, and
+ * a keyboard key arrives as forty-two, so this is just past the deadzone: a key
+ * is always a direction, and a stick has to be coming off centre to be one.
+ * The dodge goes where the stick points, so anything that reaches here is a
+ * direction the player meant, diagonal included.
+ */
+#define DODGE_STICK_MIN 6.f
+
+/**
+ * How far round from the way the camera looks counts as going backwards.
+ *
+ * The arc is one threshold and not four, because only one of them is a
+ * different move: the way back gets the hop, because a roll turns the body over
+ * a fore-aft axis and putting that tilt on a backward shove is a topple. The
+ * other three ways all get a roll, which is why there is no cosine for the front
+ * - forward is anything that is neither back nor clearly to one side.
+ *
+ * The seam is at about 130 degrees, and not at the 135 that a quarter turn would
+ * give it, because a keyboard player reaching back and left arrives at exactly
+ * 135: two keys, forty-two apiece, every time. An input that common must not sit
+ * on the line between two moves, where the rounding of one cosine picks which
+ * one they get - which is not hypothetical, it is what this threshold was
+ * originally and what the first --test-dodge run caught. So the back gets the
+ * diagonals: a shove that means "back and to the left" hops.
+ */
+#define DODGE_BACK_COS -0.65f
+
+// Any of the three crouch buttons carries the gesture; the two taps must be the
+// same one, so a tap of the half crouch is never half of a dodge.
+#define DODGE_CROUCH_BUTTONS (BUTTON_FULL_CROUCH | BUTTON_HALF_CROUCH | BUTTON_CROUCH_CYCLE)
+
+/**
+ * The backward hop's own two numbers, taken from chrAvoid() rather than tuned:
+ * the frame it stops that dodge on, and the speed it runs it at. Slower than
+ * ROLL_ANIMSPEED, and it still takes about as long as a roll, because the move
+ * is thirty-odd frames of crouch and spring and coming back upright.
+ */
+#define DODGE_HOP_ENDFRAME 35
+#define DODGE_HOP_ANIMSPEED 0.6f
+
+// The blend the roll animation is started with, and the hop's as well.
+#define DODGE_ANIMMERGE 16
+
+/**
  * How fast a thrown grenade's animation plays on a third person body.
  *
  * The guards use chrGetRangedSpeed(chr, 0.5, 1.2), scaled by how good a shot
@@ -5294,6 +5350,10 @@ enum weaponnum {
 #define BUTTON_HALF_CROUCH    CONT_4000
 #define BUTTON_FULL_CROUCH    CONT_2000
 #define BUTTON_THIRDPERSON    CONT_1000
+// The dodge came onto a crouch button's double tap (bmoveDodgeTap), so nothing
+// reads this any more. It stays defined, and its slot stays out of the bind
+// list, so a config that bound the roll to something still loads and no other
+// slot means something different than it did.
 #define BUTTON_ROLL           CONT_0800
 #define BUTTON_SPECTATE       CONT_0400
 #define BUTTON_FIRELEFT       CONT_0040 // Akimbo Triggers: the left hand's own trigger

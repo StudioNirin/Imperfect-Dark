@@ -708,61 +708,97 @@ void bwalkTryJump(void)
 
 #ifndef PLATFORM_N64
 /**
- * Throw the player sideways, and the body with them.
+ * Throw the player somewhere, and the body with them.
  *
  * The push goes in where bondforcespeed goes in and decays on the chr's curve,
- * so a roll covers the same ground whoever throws it - see ROLL_IMPULSE. It is
+ * so a dodge covers the same ground whoever throws it - see ROLL_IMPULSE. It is
  * held in world space rather than as a direction and a speed, so a player who
- * spins the mouse mid roll still lands where the roll was aimed.
+ * spins the mouse mid dodge still lands where the dodge was aimed.
  *
- * Which way is the way they are already going: the strafe the roll came out of
- * is the one they meant, and standing still rolls right.
+ * Which way is the way they shoved the stick, and not the way they were already
+ * going. The roll this grew out of took the strafe it was called from, which is
+ * why it could only ever go sideways and why standing still rolled right; these
+ * two arguments are the movement input itself, before the mover has smoothed it
+ * into speedforwards and speedsideways, so the dodge goes where the hand is
+ * rather than where the last frame happened to be going.
  *
  * The direction comes off bond2.unk00, the flat look direction, and not off
  * chrGetSideVector() the way the simulants' does. A simulant's look angle is
  * where it is going, but a player's body carries angleoffset - the lean the
- * walk animation is given so a strafe points where it is headed - and rolling
- * along that would send the roll somewhere the camera is not pointing. The
- * camera is what the player aimed the roll with.
+ * walk animation is given so a strafe points where it is headed - and dodging
+ * along that would send the dodge somewhere the camera is not pointing. The
+ * camera is what the player aimed with.
+ *
+ * The animation follows the direction and not the other way round, and one of
+ * the four ways is given a different move altogether - see DODGE_BACK_COS.
+ * Nobody is turned to suit it: the body faces where the camera does throughout,
+ * which is what lets the travel be any angle at all.
  *
  * The animation is only half of it and can be missing entirely - solo in first
  * person has no body to roll - so it is asked for and not waited on. The push
- * is the move.
+ * is the move, and whether there was one is what the caller is told, because a
+ * crouch button's second tap has to know whether it was a dodge or a crouch.
  */
-void bwalkTryRoll(void)
+bool bwalkTryDodge(f32 forwards, f32 sideways)
 {
-	struct chrdata *chr = g_Vars.currentplayer->prop->chr;
-	struct coord side;
+	struct player *player = g_Vars.currentplayer;
+	struct chrdata *chr = player->prop->chr;
+	struct coord *look = &player->bond2.unk00;
+	struct coord dir;
+	f32 len;
+	f32 forwardsunit;
+	f32 sidewaysunit;
+	f32 rightness;
 	bool toleft;
 
 	if (!modCanPlayerRoll()
-			|| g_Vars.currentplayer->isdead
-			|| g_Vars.currentplayer->bondmovemode != MOVEMODE_WALK
-			|| g_Vars.currentplayer->isfalling
-			|| g_Vars.currentplayer->onladder
+			|| player->isdead
+			|| player->bondmovemode != MOVEMODE_WALK
+			|| player->isfalling
+			|| player->onladder
 			|| sitChairHoldsMove()
-			|| g_Vars.lvframe60 - g_Vars.currentplayer->rolltime60 < ROLL_COOLDOWN) {
-		return;
+			|| g_Vars.lvframe60 - player->rolltime60 < ROLL_COOLDOWN) {
+		return false;
 	}
 
-	toleft = g_Vars.currentplayer->speedsideways < 0;
-
-	// chrGetSideVector()'s left, written out of the player's own basis:
-	// strafing right is bond2.unk00 turned that way, so left is its negative.
-	side.x = -g_Vars.currentplayer->bond2.unk00.z;
-	side.z = g_Vars.currentplayer->bond2.unk00.x;
-
-	if (toleft) {
-		side.x = -side.x;
-		side.z = -side.z;
+	// No direction on it is not a dodge. Two taps of a crouch button with the
+	// stick in the middle are a player crouching twice.
+	len = sqrtf(forwards * forwards + sideways * sideways);
+	if (len < DODGE_STICK_MIN) {
+		return false;
 	}
 
-	g_Vars.currentplayer->rollspeed.x = side.x * ROLL_IMPULSE;
-	g_Vars.currentplayer->rollspeed.y = 0;
-	g_Vars.currentplayer->rollspeed.z = side.z * ROLL_IMPULSE;
-	g_Vars.currentplayer->rolltime60 = g_Vars.lvframe60;
+	// The stick's frame into the world's: forward is the flat look direction and
+	// sideways is that turned to the right. The two are unit vectors at right
+	// angles, so a direction normalised in one is normalised in the other, which
+	// is what stops a diagonal dodge going further than a straight one.
+	forwardsunit = forwards / len;
+	sidewaysunit = sideways / len;
+
+	dir.x = look->x * forwardsunit - look->z * sidewaysunit;
+	dir.z = look->z * forwardsunit + look->x * sidewaysunit;
+
+	player->rollspeed.x = dir.x * ROLL_IMPULSE;
+	player->rollspeed.y = 0;
+	player->rollspeed.z = dir.z * ROLL_IMPULSE;
+	player->rolltime60 = g_Vars.lvframe60;
+
+	// How far round from the camera the stick was, out of the two unit vectors.
+	if (dir.x * look->x + dir.z * look->z <= DODGE_BACK_COS) {
+		chrPlayHopAnimation(chr);
+
+		return true;
+	}
+
+	// The same vector's sideways part, against the look direction's right hand -
+	// which is the vector the roll used to write its whole push out of. Left is
+	// the negative of that.
+	rightness = dir.z * look->x - dir.x * look->z;
+	toleft = rightness < 0;
 
 	chrPlayRollAnimation(chr, toleft);
+
+	return true;
 }
 #endif
 

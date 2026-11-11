@@ -43,5 +43,12 @@ void bmoveUpdateHead(f32 arg0, f32 arg1, f32 arg2, Mtxf *arg3, f32 arg4);
 void bmove0f0cc654(f32 arg0, f32 arg1, f32 arg2);
 s32 bmoveGetCrouchPos(void);
 s32 bmoveGetCrouchPosByPlayer(s32 playernum);
+#ifndef PLATFORM_N64
+// The dodge's gesture, on one crouch button's press. The game calls it from
+// bmoveProcessInput()'s own sample loop; it is here because --test-dodge drives
+// it from outside, which is the only way to put a double tap and a direction on
+// the same frame without a hand on a pad (lvTestDodgeTick).
+void bmoveDodgeTap(u32 crouchbutton, struct movedata *movedata);
+#endif
 
 #endif

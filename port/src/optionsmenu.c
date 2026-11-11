@@ -2453,8 +2453,10 @@ static const struct menubind menuBinds[] = {
 	{ CK_2000,   LANG_N("Full Crouch [+]\n"),   LANG_N("N64 Ext 2000\n") },
 	{ CK_0040,   LANG_N("Fire Left [+]\n"),     LANG_N("N64 Ext 0040\n") },
 	{ CK_0080,   LANG_N("Fire Mode Left [+]\n"), LANG_N("N64 Ext 0080\n") },
-	// Third Person and Combat Roll are not here. They belong to this fork, so
-	// they are bound from Dab's Mod Options with the settings they drive.
+	// Third Person is not here. It belongs to this fork, so it is bound from Dab's
+	// Mod Options with the setting it drives. The combat roll's slot is not here
+	// either, and has no row in that page now either: the dodge it grew into is a
+	// gesture on the three crouch buttons above.
 	{ CK_ACCEPT, LANG_N("UI Accept [+]\n"),     LANG_N("EXT UI Accept\n") },
 	{ CK_CANCEL, LANG_N("UI Cancel [+]\n"),     LANG_N("EXT UI Cancel\n") },
 };
@@ -4570,7 +4572,9 @@ static MenuItemHandlerResult menuhandlerModSpectateSpeed(s32 operation, struct m
 static const struct menubind modMenuBinds[] = {
 	{ CK_0400, LANG_N("Spectator [+]\n"), LANG_N("N64 Ext 0400\n") },
 	{ CK_1000, LANG_N("Third Person [+]\n"), LANG_N("N64 Ext 1000\n") },
-	{ CK_0800, LANG_N("Combat Roll [+]\n"),  LANG_N("N64 Ext 0800\n") },
+	// The combat roll had a row of its own until the dodge came onto a double tap
+	// of the crouch buttons above, which are already bound here and need no row of
+	// their own. Its slot in the enum stays, so an old config still loads.
 	// Akimbo Triggers: what it rebinds, so its layout can be changed here
 	{ CK_0040,   LANG_N("Fire Left [+]\n"),       LANG_N("N64 Ext 0040\n") },
 	{ CK_ZTRIG,  LANG_N("Fire Right [ZT]\n"),     LANG_N("N64 Z Trigger\n") },

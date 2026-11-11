@@ -40,6 +40,11 @@
 #
 # mod-base 69
 
+notes 73 2026-11-11
+Combat Roll: there is no roll button any more - tap a crouch button twice with a direction held, and the dodge goes wherever the stick points, diagonals included
+Combat Roll: a dodge ends crouched if the crouch button is still held on its last frame, and standing if it was let go
+Combat Roll: dodging backwards is a hop that keeps facing forwards, and every dodge covers the same ground whichever way it goes
+
 notes 72 2026-11-09
 Online: a room's Simulants setup works again once the room is live (Add Simulant and a simulant's own page did nothing at all), and a simulant's Character and Stats pages open from a lobby for the first time
 
