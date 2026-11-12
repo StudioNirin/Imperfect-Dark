@@ -4371,6 +4371,41 @@ involved: it is the menu's dialog stack.
   shots of three. Before the caps it stopped at "Add Simulant was refused at
   depth 6".
 
+## A room rule moved onto the Combat Simulator's Weapons page (2026-11-12, no wire change)
+
+The room's setup root is `NETLOBBY_SETUP_ITEMS` (`port/src/netlobbymenu.c`), and
+only some of its pages are this fork's own dialogs. **Weapons is not one of
+them**: `handlerSetupWeapons()` pushes `g_MpWeaponsMenuDialog`, whose items are
+`g_MpWeaponsMenuItems` in `src/game/mplayer/setup.c` - the same table the Combat
+Simulator opens. Room Rules, by contrast, is the fork's
+`g_NetRoomRulesMenuItems` in `port/src/optionsmenu.c`, a `ROOMRULE()` row per
+rule, and it exists only online.
+
+So a rule can be moved from Room Rules onto a stock page, and that is what
+happened to **Start Armed** (`menuhandlerMpStartArmed`, in the
+`#ifndef PLATFORM_N64` block beside `menuhandlerMpGeCheatGuns`): it is a row of
+the Weapons page now, below `Set:` and above GoldenEye Cheat Guns, and the
+Combat Simulator gained it by the same edit. `Start Armed For` stayed.
+
+What makes this free rather than a netcode change: a room's rules are keyed,
+not paginated. `port/src/net/netrules.c` lists `Mod.StartArmed` as
+`NETKEY_SYNC` and nothing there names a menu page, so the value reaches clients
+the same way whichever row a human moved with. And no page-level permission
+moves either - `handlerSetupPage()` hides pages in co-op setup and does nothing
+else, and `handlerSetupRules()` has no host check, so the Weapons page was never
+a client's forbidden page. A rule moved onto it therefore changes nothing about
+who may edit it, only where it is found.
+
+The trap to keep in mind: the two tables are edited in different languages of
+the tree. `setup.c` is the decomp side and its rows are `struct menuitem`
+literals with `MENUITEMFLAG_LITERAL_TEXT` and a `\n` on the label; `optionsmenu.c`
+is the port side and writes the same thing through `ROOMRULE()`. A handler
+defined in one and referenced from the other needs an accessor pair rather than
+an exported handler - the neighbour to copy is
+`menuhandlerMpGeCheatGuns()` calling `gexPlusGetCheatGuns()`, and here
+`modGetSpawnWeapon()` with a direct `g_ModOptions.spawnweapon` write, which is
+what `optionsmenu.c`'s own copy of the handler does.
+
 ## `netpredicttest` is red on the dev box, and what that does and does not say (2026-11-11, no wire change)
 
 Left deliberately unresolved. The gate was run four times on the working tree

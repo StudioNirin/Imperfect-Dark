@@ -37,6 +37,7 @@
 #include "system.h"
 #include "input.h"
 #include "mpsetups.h"
+#include "game/modoptions.h"
 
 struct menuitem g_MpCharacterMenuItems[];
 struct menudialogdef g_MpAddSimulantMenuDialog;
@@ -1816,6 +1817,37 @@ MenuItemHandlerResult menuhandlerMpGeCheatGuns(s32 operation, struct menuitem *i
 
 	return 0;
 }
+
+
+/**
+ * The gun a player or simulant is holding when the match starts.
+ *
+ * The room rules page held this row, where it sat among the rules nobody
+ * sorts by gun. It belongs beside the guns: the weapons page is the same
+ * dialog online and in the Combat Simulator, so both pages get it from here.
+ * The value is Mod.StartArmed, which netrules.c syncs by key, so moving the
+ * row moves nothing on the wire.
+ */
+MenuItemHandlerResult menuhandlerMpStartArmed(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	static const char *opts[] = { "Off", "First Weapon", "Random" };
+
+	switch (operation) {
+	case MENUOP_GETOPTIONCOUNT:
+		data->dropdown.value = ARRAYCOUNT(opts);
+		break;
+	case MENUOP_GETOPTIONTEXT:
+		return (uintptr_t) opts[data->dropdown.value];
+	case MENUOP_SET:
+		g_ModOptions.spawnweapon = data->dropdown.value;
+		break;
+	case MENUOP_GETSELECTEDINDEX:
+		data->dropdown.value = modGetSpawnWeapon();
+		break;
+	}
+
+	return 0;
+}
 #endif
 
 struct menuitem g_MpWeaponsMenuItems[] = {
@@ -1851,6 +1883,14 @@ struct menuitem g_MpWeaponsMenuItems[] = {
 		(uintptr_t)"Auto Random\n",
 		0,
 		menuhandlerMpAutoRandomWeapon,
+	},
+	{
+		MENUITEMTYPE_DROPDOWN,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Start Armed\n",
+		0,
+		menuhandlerMpStartArmed,
 	},
 	{
 		MENUITEMTYPE_CHECKBOX,

@@ -8295,7 +8295,6 @@ static struct menuitem g_NetRoomRulesMenuItems[] = {
 	ROOMRULE(MENUITEMTYPE_CHECKBOX, "Third Person", menuhandlerRoomThirdPerson),
 	ROOMRULE(MENUITEMTYPE_DROPDOWN, "Simulant AI", menuhandlerRoomSimBrain),
 	ROOMRULE_SEPARATOR,
-	ROOMRULE(MENUITEMTYPE_DROPDOWN, "Start Armed", menuhandlerModStartArmed),
 	ROOMRULE(MENUITEMTYPE_DROPDOWN, "Start Armed For", menuhandlerModStartArmedFor),
 	ROOMRULE(MENUITEMTYPE_DROPDOWN, "Akimbo", menuhandlerModAkimbo),
 	ROOMRULE_SEPARATOR,

@@ -40,6 +40,8 @@
 #
 # mod-base 69
 
+notes 79 2026-11-12
+Start Armed moves out of Room Rules and onto the Weapons page, under Set and above GoldenEye Cheat Guns. It reads the same in an online room and in the Combat Simulator, since both open the same Weapons page. Start Armed For stays in Room Rules.
 notes 78 2026-11-12
 Imperfect Settings: a new page above Dab's Mod Options, for the settings this fork replaces rather than adds. Sprint is on it and on by default; Combat Roll has moved onto it and defaults to Everyone.
 Sprint: half again the running speed, and the gun comes down for the run - no shooting, and the trigger you pull to stop is not a shot. When the run ends the gun comes back up, and it cannot fire until it is up and a second has passed.
