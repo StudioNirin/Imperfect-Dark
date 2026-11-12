@@ -207,3 +207,32 @@ Two things to decide, and one to build:
   293% of 32 cores, 82% of 61 GiB. A wrapper that refuses to run then is the
   way to get a number that means something at 3 a.m. or from CI, with nobody
   and nothing else in the way.
+
+## A server for crash reports (added 2026-11-12)
+
+`Mod.CrashServer` is empty by default, so a build of this fork sends no report
+anywhere and the pages tell the player to mail the file to contact@studionirin.com
+(`CLAUDE-notes/crash-reports.md`, "Reports have nowhere to go, on purpose"). That
+is the honest interim, not the end state: a player who cannot find a folder beside
+the program is a crash we never hear about.
+
+What already exists, so this does not start from measuring:
+
+- **The endpoint**: `tools/pdghostd/pdghostd.py`'s `POST /crash` - one file per
+  report under `~/pdghosts/crashes`, no account, twelve an hour per address, 32 KiB
+  of report and 200 characters of note, a cap on the directory. `test_pdghostd.py`
+  has the crash cases and should be run before deploying.
+- **Nothing on the client changes**: `Mod.CrashServer=https://host` is the whole of
+  turning the dialog's Send button back on; `crashReportHasServer()` reads exactly
+  that.
+- **The container**: `deploy/lobby/` is built and container-tested but undeployed
+  (it wants a public host with TCP 443 and UDP 27101 + 27110-27141, and a domain).
+  A crash endpoint alone needs far less than the lobby does - TCP 443 only - so it
+  does not have to wait for the whole lobby decision.
+
+Two decisions before any of it is worth building: whether reports come to us as
+files on a host we run (then forward them to the mailbox, which is a few lines in
+`pdghostd.py` and keeps the client as it is), or whether the mail route stays and
+only the wording improves. And whose host - the ghost server at
+`texturepacks.art/pdghosts` is Dab's, which is the reason the setting was split
+from `Mod.GhostServer` in the first place.
