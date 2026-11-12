@@ -3,6 +3,7 @@
 #include "bss.h"
 #include "data.h"
 #include "game/mplayer/mplayer.h"
+#include "game/menu.h"
 #include "game/lang.h"
 #include <stdio.h>
 #include <string.h>
@@ -35,6 +36,10 @@
 
 // defined in the Combat Simulator (mplayer.c), like netrules.c and gexplus.c reach it
 extern s32 g_MpWeaponSetNum;
+
+// The weapons page's rows, driven by the self-test below
+extern MenuItemHandlerResult menuhandlerMpSavedSets(s32 operation, struct menuitem *item, union handlerdata *data);
+extern MenuItemHandlerResult menuhandlerMpSaveCustomSet(s32 operation, struct menuitem *item, union handlerdata *data);
 
 static struct mpweaponsetentry s_Sets[MPWEAPONSET_MAXSAVED];
 static s32 s_Num;
@@ -475,6 +480,52 @@ void mpWeaponSetsSelfTest(void)
 		mpWeaponSetsTestCheck("deleting past the last is refused",
 				!mpWeaponSetsDelete(5));
 
+		// The weapons page's own rows, driven here the way netlobbysimtest.sh
+		// walks a room's pages: what the player's keyboard row and the saved
+		// set's list entry do, rather than what this module does when they do.
+		{
+			union handlerdata data;
+			struct menuitem item;
+			u8 picked[NUM_MPWEAPONSLOTS];
+
+			memset(&data, 0, sizeof(data));
+			memset(&item, 0, sizeof(item));
+
+			for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+				picked[i] = (u8) ((i + 2) % 6);
+				g_MpSetup.weapons[i] = picked[i];
+			}
+
+			data.keyboard.string = "UI Set";
+			menuhandlerMpSaveCustomSet(MENUOP_SETTEXT, &item, &data);
+
+			mpWeaponSetsTestCheck("the page's row saves the six slots",
+					s_Num == 2 && mpWeaponSetsGet(1) != NULL
+					&& strcmp(mpWeaponSetsGet(1)->name, "UI Set") == 0);
+
+			for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+				g_MpSetup.weapons[i] = 0;
+			}
+
+			memset(&data, 0, sizeof(data));
+			data.list.value = 1;
+			menuhandlerMpSavedSets(MENUOP_SET, &item, &data);
+
+			bool back = true;
+
+			for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+				back = back && g_MpSetup.weapons[i] == picked[i];
+			}
+
+			mpWeaponSetsTestCheck("picking the set puts the six slots back", back);
+
+			memset(&data, 0, sizeof(data));
+			menuhandlerMpSavedSets(MENUOP_GETOPTIONCOUNT, &item, &data);
+
+			mpWeaponSetsTestCheck("the page's list counts the saved sets",
+					data.list.value == s_Num);
+		}
+
 		remove(fsFullPath(s_Path));
 	}
 
@@ -483,4 +534,30 @@ void mpWeaponSetsSelfTest(void)
 	} else {
 		sysLogPrintf(LOG_NOTE, "mpweaponsets test: %d of %d CHECKS FAILED", s_TestFailed, s_TestChecks);
 	}
+}
+
+/**
+ * The saved set's place in the list the dropdown shows.
+ *
+ * The dropdown speaks in offered sets - the rows the player can see, with the
+ * feature-locked ones and the rows held for nothing cut out
+ * (func0f188f9c) - and this module's own numbering counts the rows, empty or
+ * not. So the two have to be met in the middle here rather than anywhere the
+ * player's choice is used, and -1 means the set is not in the list at all.
+ */
+s32 mpWeaponSetsOfferedIndex(s32 index)
+{
+	s32 first = mpWeaponSetsFirst();
+
+	if (first < 0 || index < 0 || index >= s_Num) {
+		return -1;
+	}
+
+	for (s32 i = 0; i < func0f189058(false); i++) {
+		if (func0f188f9c(i) == first + index) {
+			return i;
+		}
+	}
+
+	return -1;
 }

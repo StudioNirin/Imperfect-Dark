@@ -16,6 +16,15 @@ appended after everything version 2 writes), so unmodified builds can still read
 them; changing version re-encodes every block. `mpsetupLiveVersion()` in
 mpsetups.c is where a new reason for a newer version goes.
 
+Saved **weapon sets** are a file of the same neighbourhood, `mpweaponsets.bin`: a
+version byte, a count, and per set a name the width of a setup's plus its six gun
+numbers (`port/src/mpweaponsets.c`). Version 1 only, so an unknown version reads
+nothing rather than half of it back, and the file is only ever written by
+"Save Custom Set" and its delete - never by a match or a settings save. It is one
+file for every mod, unlike `mpsetups.bin`, because a set names guns by their
+weapon numbers and a setup names arenas and weapons by a mod's numbers
+(`mpsetupSwitchFile()`).
+
 `savebufferOr()` does no bounds checking. `stagenum` is stored in 7 bits.
 
 **Everything lives beside the executable now** — saves, `pd.ini`, screenshots and

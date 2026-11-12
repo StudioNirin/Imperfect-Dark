@@ -37,6 +37,7 @@
 #include "system.h"
 #include "input.h"
 #include "mpsetups.h"
+#include "mpweaponsets.h"
 #include "game/modoptions.h"
 
 struct menuitem g_MpCharacterMenuItems[];
@@ -1848,6 +1849,114 @@ MenuItemHandlerResult menuhandlerMpStartArmed(s32 operation, struct menuitem *it
 
 	return 0;
 }
+
+
+/**
+ * The weapon sets this machine saved by name, as a page of its own.
+ *
+ * Picking one puts its guns in the six slots: the set's index is chosen and
+ * mpApplyWeaponSet() does the rest, which is the same thing a stock set does
+ * and why nothing here writes g_MpSetup.weapons itself.
+ */
+MenuItemHandlerResult menuhandlerMpSavedSets(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GETOPTIONCOUNT:
+		data->list.value = mpWeaponSetsNum();
+		break;
+	case MENUOP_GETOPTIONTEXT: {
+		const struct mpweaponsetentry *entry = mpWeaponSetsGet(data->list.value);
+
+		return (uintptr_t) (entry != NULL ? entry->name : "");
+	}
+	case MENUOP_SET: {
+		s32 offered = mpWeaponSetsOfferedIndex(data->list.value);
+
+		if (offered >= 0) {
+			mpSetWeaponSet(offered);
+		}
+
+		break;
+	}
+	}
+
+	return 0;
+}
+
+// The page below, declared here because its row is written above it
+extern struct menudialogdef g_MpSavedSetsMenuDialog;
+
+/**
+ * "Save Custom Set": the six slots as they stand, under a name typed here.
+ *
+ * The store keeps the guns those rows are showing rather than the rows
+ * themselves (mpweaponsets.c), so a set means the same thing with another mod
+ * mounted. An empty name saves nothing, which is what the row does nothing
+ * looking like.
+ */
+MenuItemHandlerResult menuhandlerMpSaveCustomSet(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GETTEXT:
+		data->keyboard.string[0] = '\0';
+		break;
+	case MENUOP_SETTEXT:
+		if (mpWeaponSetsSave(data->keyboard.string, g_MpSetup.weapons) < 0) {
+			sysLogPrintf(LOG_NOTE, "menu: a custom weapon set saved nothing");
+		}
+
+		break;
+	}
+
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerMpSavedSetsPage(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_SET) {
+		menuPushDialog(&g_MpSavedSetsMenuDialog);
+	}
+
+	return 0;
+}
+
+struct menuitem g_MpSavedSetsMenuItems[] = {
+	{
+		MENUITEMTYPE_LIST,
+		0,
+		0,
+		0x00000078,
+		0x00000042,
+		menuhandlerMpSavedSets,
+	},
+	{
+		MENUITEMTYPE_SEPARATOR,
+		0,
+		0,
+		0,
+		0,
+		NULL,
+	},
+	{
+		MENUITEMTYPE_LABEL,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_LESSLEFTPADDING | MENUITEMFLAG_SMALLFONT,
+		(uintptr_t)"Pick one to put its guns in the six slots\n",
+		0,
+		NULL,
+	},
+	{ MENUITEMTYPE_END },
+};
+
+struct menudialogdef g_MpSavedSetsMenuDialog = {
+	MENUDIALOGTYPE_DEFAULT,
+	(uintptr_t)"Saved Weapon Sets",
+	g_MpSavedSetsMenuItems,
+	NULL,
+	MENUDIALOGFLAG_LITERAL_TEXT | MENUDIALOGFLAG_CLOSEONSELECT,
+	NULL,
+};
+
 #endif
 
 struct menuitem g_MpWeaponsMenuItems[] = {
@@ -1899,6 +2008,30 @@ struct menuitem g_MpWeaponsMenuItems[] = {
 		(uintptr_t)"GoldenEye Cheat Guns\n",
 		0,
 		menuhandlerMpGeCheatGuns,
+	},
+	{
+		MENUITEMTYPE_LABEL,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_LESSLEFTPADDING | MENUITEMFLAG_SMALLFONT,
+		(uintptr_t)"Save Custom Set (type a name)\n",
+		0,
+		NULL,
+	},
+	{
+		MENUITEMTYPE_KEYBOARD,
+		MPSETUP_MAXNAME,
+		0,
+		0,
+		0,
+		menuhandlerMpSaveCustomSet,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Saved Sets\n",
+		0,
+		menuhandlerMpSavedSetsPage,
 	},
 #endif
 	{

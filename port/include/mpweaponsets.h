@@ -37,6 +37,8 @@ bool mpWeaponSetsDelete(s32 index);
 s32 mpWeaponSetsFirst(void);
 // Whether the game's own list's index is one of the saved sets
 bool mpWeaponSetsOwns(s32 listindex);
+// The set's place in the list the dropdown shows, or -1
+s32 mpWeaponSetsOfferedIndex(s32 index);
 // --test-mpweaponsets: a scratch file of our own, and what the store has to
 // get right (tools/ci/mpweaponsetstest.sh)
 void mpWeaponSetsTestFile(void);

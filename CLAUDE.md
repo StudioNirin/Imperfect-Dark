@@ -41,6 +41,7 @@ or a section heading, don't read one whole.
 - [dodge.md](CLAUDE-notes/dodge.md) — The dodge: a crouch button's double tap in place of the roll button; the raw input and the look basis and not the eased speeds; why the back arc's cosine is not on 135°; why the back is a hop and the rest are rolls; why a first person player never sees their own dodge; and why `Mod.XblaMeshes` shifts a dodge's animation variant through the male guard head list and the RNG, which is the only thing it changes about a dodge
 - [settings.md](CLAUDE-notes/settings.md) — Defaults and the Settings Preset; the five defaults that moved on 2026-11-11, `PLAYER_EXT_CFG_DEFAULT` as one macro for four players, a language default written as a code, and why a default reaches only a pd.ini with no line for it
 - [weapons.md](CLAUDE-notes/weapons.md) — Weapon numbers, `flags2`, converting a `weaponnum` comparison
+- [weapon-sets.md](CLAUDE-notes/weapon-sets.md) — Custom weapon sets saved by name: a set keeps its guns rather than the page's rows; the Combat Simulator's list and the block that never moves; where the room's Weapons page actually lives
 - [randomizer.md](CLAUDE-notes/randomizer.md) — The Randomizer: a mission dealt again from its own pieces
 - [randomizer-run.md](CLAUDE-notes/randomizer-run.md) — The Randomizer's run: a room at a time across every map
 - [project-list.md](CLAUDE-notes/project-list.md) — Projects we can do, not started (a server for crash reports is one of them)
