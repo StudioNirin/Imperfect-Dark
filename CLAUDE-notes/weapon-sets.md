@@ -3,9 +3,10 @@
 ## Digest
 
 Custom weapon sets: why a saved set keeps its guns rather than the page's rows;
-the Combat Simulator's list and the block that never moves; where the online
-room's Weapons page actually lives; what the wire carries and what it does not
-carry yet.
+the Combat Simulator's list and the block that never moves; why the player's
+sets lead that list and what "the first entry" stopped meaning; why the six
+weapon slots are locked and what unlocks them; where the online room's Weapons
+page actually lives; what the wire carries and what it does not carry yet.
 
 ## A saved set keeps its guns, not the page's rows
 
@@ -123,18 +124,6 @@ the table index of the set being looked at (`g_MpWeaponSetNum`, which the
   index down leaves the rows below showing sets they no longer hold (the gate
   caught exactly that).
 
-## Not done
-
-- Putting the player's sets at the **top** of the Set list. The list's order is
-  the table's order and nothing else: `func0f188f9c()` walks `g_MpWeaponSets`
-  forward counting the offered rows to turn a shown row into a table index, and
-  `mpGetWeaponSet()` counts backwards over the same predicate to go the other
-  way. So "top" means either physically inserting at indices 0-15 - which moves
-  every stock index, and a saved setup keeps the set by number, and
-  `mpSetWeaponSet(0)` is a reset to Pistols, and `g_GeSetsFirst` is recorded -
-  or teaching those two walkers to rank this block first while leaving the table
-  where it is. The second is the one to do; it must keep the predicate's
-  `!= WEAPON_DISABLED` quirk that `func0f188f9c` carries an `@bug?` comment on.
 ## Why the six slots are locked, and what unlocks them
 
 The six weapon rows are not disabled by their handler - `menuhandlerMpWeaponSlot`
@@ -166,4 +155,53 @@ still Custom's business: pick the set, and save as Custom under the new name.
 - The name on the wire, and `Custom (my pistols)` in the client's rules page.
 - `mpsetups.bin` has an export/import pair (`mpsetups-ext.bin`); the weapon
   sets' file has no such thing, and sharing sets between machines means copying
+  `mpweaponsets.bin` by hand.
+
+## The player`s sets lead the list, and what that quietly meant
+
+The list has no order of its own: it is the order of `g_MpWeaponSets`, and both
+directions of its numbering walk that order - `func0f188f9c()` counting on
+through the shown rows to turn a row number into a table index, and
+`mpCountWeaponSetThing()` (which is what `mpGetWeaponSet()` is) counting back to
+go the other way. So showing the player`s sets first means passing over their
+block first **in both**, and the rows themselves stay where they are: a saved
+setup keeps its set by number, `mpSetWeaponSet()` of a stock row still means
+that stock row, and the sets a mod borrows and GoldenEye`s keep the positions
+they recorded for themselves. The predicate both walkers duplicated is
+`mpWeaponSetIsShown()` now, kept as the game wrote it - `!= WEAPON_DISABLED` and
+its `@bug?` comment and all.
+
+Two traps, both found by the gate rather than by reading the code:
+
+- **Counting under yourself is not counting the block.** The block sits
+  *numerically above* the game`s own rows in the array, so a "how many shown rows
+  come before table row 0" loop sees nothing at all - block included - and every
+  stock row came back with the rank of one of the player`s sets. The block has to
+  be counted over the whole list, and only the same-kind rows counted under the
+  row being asked about.
+- **"The first entry" is no longer a default.** `mpInit()` ends with
+  `mpSetWeaponSet(0)`, and `menuhandlerMpQuickTeamOption` clamps a stale
+  selection the same way: with the block first, every fresh setup would have
+  started on whatever the player saved first, and a quick-team change could drop
+  a room quietly onto one of their sets. Both now ask
+  `mpWeaponSetStockOfferedFirst()` - the first shown row that is not one of
+  theirs. Any future "pick the first set" is the same question.
+
+With the store empty - every CI gate, which runs a scratch `--savedir` - the
+block holds no shown rows, both walkers reduce to the walks they were, and the
+ordering is a no-op. So the ordering`s own coverage is `--test-mpweaponsets`:
+the player`s sets are the list`s first rows, the numbering round-trips on every
+shown row (`func0f188f9c(mpCountWeaponSetThing(x)) == x`), the game`s sets still
+follow them, and a default lands under the block.
+
+`--mp-weaponset` (`pdmain.c`) is still an offered-list index, so on a machine
+with saved sets it counts theirs first: a debugging knob, and no gate uses it.
+
+## Not done
+
+- A saved set`s **name** does not travel to a client yet, and the index it
+  travels by can collide with the client's own list (above, "What the wire
+  carries").
+- `mpsetups.bin` has an export/import pair (`mpsetups-ext.bin`); the weapon
+  sets` file has none, so sharing sets between machines means copying
   `mpweaponsets.bin` by hand.

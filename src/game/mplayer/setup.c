@@ -6783,7 +6783,9 @@ MenuItemHandlerResult menuhandlerMpQuickTeamOption(s32 operation, struct menuite
 		g_Vars.mpquickteam = item->param;
 
 		if (mpGetWeaponSet() >= func0f189058(0)) {
-			mpSetWeaponSet(0);
+			// the game's first set, not the list's first: that is one of the
+			// player's own whenever they have saved any
+			mpSetWeaponSet(mpWeaponSetStockOfferedFirst());
 		}
 
 		if (g_Vars.mpquickteam == MPQUICKTEAM_PLAYERSONLY ||

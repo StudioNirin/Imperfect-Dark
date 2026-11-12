@@ -581,6 +581,34 @@ void mpWeaponSetsSelfTest(void)
 					&& strcmp(mpWeaponSetsGet(1)->name, "UI Set") == 0
 					&& !mpWeaponSetsIsDirty(first + 1));
 
+			s32 shown = func0f189058(false);
+			bool shownFirst = true;
+			bool roundtrip = true;
+			s32 after = 0;
+
+			// not `first`: that is the block's index in the table, declared
+			// outside this block, and C lets a shadowing bool quietly win
+			for (s32 i = 0; i < s_Num; i++) {
+				shownFirst = shownFirst && func0f188f9c(i) == first + i;
+			}
+
+			for (s32 i = 0; i < shown; i++) {
+				s32 index = func0f188f9c(i);
+
+				roundtrip = roundtrip && func0f188f9c(mpCountWeaponSetThing(index)) == index;
+
+				if (!mpWeaponSetsOwns(index)) {
+					after++;
+				}
+			}
+			mpWeaponSetsTestCheck("the player's sets are the list's first rows", shownFirst);
+			mpWeaponSetsTestCheck("the list's numbering round-trips on every row", roundtrip);
+			mpWeaponSetsTestCheck("the game's own sets still follow them in the list",
+					after >= s_Num);
+			mpWeaponSetsTestCheck("a default still means the game's first set",
+					func0f188f9c(mpWeaponSetStockOfferedFirst()) < first
+					&& !mpWeaponSetsOwns(func0f188f9c(mpWeaponSetStockOfferedFirst())));
+
 			mpWeaponSetsTestCheck("the list owns the set and no empty row",
 					mpWeaponSetsOwns(first + 1) && !mpWeaponSetsOwns(first + MPWEAPONSET_MAXSAVED - 1));
 		}

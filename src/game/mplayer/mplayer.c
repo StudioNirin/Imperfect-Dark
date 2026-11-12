@@ -895,7 +895,9 @@ void mpInit(bool resetplayers)
 		char *value = argFindByPrefix(1, "-mpwpnset");
 		mpSetWeaponSet(*value - '0');
 	} else {
-		mpSetWeaponSet(0);
+		// not entry 0: the player's own sets are the list's first now, and a
+		// fresh setup is meant to start on the game's first set (Pistols)
+		mpSetWeaponSet(mpWeaponSetStockOfferedFirst());
 	}
 
 	g_Vars.mplayerisrunning = false;
@@ -1622,23 +1624,89 @@ struct mpweapon *mpGetMpWeaponByLocation(s32 locationindex)
 #define MP_NUM_WEAPONSETS g_MpNumWeaponSets
 #endif
 
+/**
+ * Whether a row of the list is one the player can be offered.
+ *
+ * Kept as the game wrote it, `!= WEAPON_DISABLED` and its @bug? comment and
+ * all: both directions of the list's numbering ask it, and so does the count,
+ * so it lives in one place now rather than three copies of the same test.
+ */
+static bool mpWeaponSetIsShown(s32 index)
+{
+	if (index < 0 || index >= MP_NUM_WEAPONSETS) {
+		return false;
+	}
+
+	return (challengeIsFeatureUnlocked(g_MpWeaponSets[index].requirefeatures[0])
+			&& challengeIsFeatureUnlocked(g_MpWeaponSets[index].requirefeatures[1])
+			&& challengeIsFeatureUnlocked(g_MpWeaponSets[index].requirefeatures[2])
+			&& challengeIsFeatureUnlocked(g_MpWeaponSets[index].requirefeatures[3]))
+		|| weaponHost(g_MpWeaponSets[index].unk0c) != WEAPON_DISABLED;
+}
+
+// Whether a row is one this player saved by name (mpweaponsets.c), which is to
+// say: shown ahead of the game's own sets, and editable in the six slots.
+static bool mpWeaponSetIsPlayerOwn(s32 index)
+{
+#ifdef PLATFORM_N64
+	return false;
+#else
+	return mpWeaponSetsOwns(index);
+#endif
+}
+
+/**
+ * The list's order: the player's own sets first, then the game's.
+ *
+ * The list has no order of its own - it is the order of g_MpWeaponSets, and
+ * both directions of its numbering (mpCountWeaponSetThing() counting back,
+ * func0f188f9c() counting on) walk it in that order. So this passes over the
+ * player's block first in both, and the rows themselves stay where they are:
+ * a saved setup keeps its set by number, mpSetWeaponSet() of a stock row means
+ * that stock row whatever the list shows first, and the sets a mod borrows and
+ * GoldenEye's record where they put themselves.
+ */
+static bool mpWeaponSetIsFirstPass(s32 pass, s32 index)
+{
+	return (pass == 0) == mpWeaponSetIsPlayerOwn(index);
+}
+
 s32 mpCountWeaponSetThing(s32 weaponsetindex)
 {
 	s32 i;
 	s32 count = 0;
+	s32 owned = 0;
+	bool targetowned;
 
 	if (weaponsetindex >= MP_NUM_WEAPONSETS) {
 		count = weaponsetindex - MP_NUM_WEAPONSETS;
 		weaponsetindex = MP_NUM_WEAPONSETS;
 	}
 
-	for (i = 0; i < weaponsetindex; i++) {
-		if ((challengeIsFeatureUnlocked(g_MpWeaponSets[i].requirefeatures[0])
-				&& challengeIsFeatureUnlocked(g_MpWeaponSets[i].requirefeatures[1])
-				&& challengeIsFeatureUnlocked(g_MpWeaponSets[i].requirefeatures[2])
-				&& challengeIsFeatureUnlocked(g_MpWeaponSets[i].requirefeatures[3])) || weaponHost(g_MpWeaponSets[i].unk0c) != WEAPON_DISABLED) {
+	targetowned = mpWeaponSetIsPlayerOwn(weaponsetindex);
+
+	// The player's sets lead the list, so a set behind them counts past every
+	// shown row of that block - and the block sits above the game's own rows in
+	// the array, so those rows have to be counted over the whole list rather
+	// than below the set being asked about, which is what first got this wrong:
+	// counting under table row 0 sees nothing at all, block included.
+	for (i = 0; i < MP_NUM_WEAPONSETS; i++) {
+		bool ownedrow;
+
+		if (!mpWeaponSetIsShown(i)) {
+			continue;
+		}
+
+		ownedrow = mpWeaponSetIsPlayerOwn(i);
+		owned += ownedrow;
+
+		if (ownedrow == targetowned && i < weaponsetindex) {
 			count++;
 		}
+	}
+
+	if (!targetowned) {
+		count += owned;
 	}
 
 	return count;
@@ -1647,23 +1715,26 @@ s32 mpCountWeaponSetThing(s32 weaponsetindex)
 s32 func0f188f9c(s32 arg0)
 {
 	s32 i;
+	s32 pass;
 
-	for (i = 0; i < MP_NUM_WEAPONSETS; i++) {
-		// @bug? Shouldn't the disabled check be == WEAPON_DISABLED?
-		if ((challengeIsFeatureUnlocked(g_MpWeaponSets[i].requirefeatures[0])
-					&& challengeIsFeatureUnlocked(g_MpWeaponSets[i].requirefeatures[1])
-					&& challengeIsFeatureUnlocked(g_MpWeaponSets[i].requirefeatures[2])
-					&& challengeIsFeatureUnlocked(g_MpWeaponSets[i].requirefeatures[3]))
-				|| weaponHost(g_MpWeaponSets[i].unk0c) != WEAPON_DISABLED) {
+	// mpWeaponSetIsFirstPass: the player's own sets are the list's first
+	for (pass = 0; pass < 2; pass++) {
+		for (i = 0; i < MP_NUM_WEAPONSETS; i++) {
+			if (!mpWeaponSetIsFirstPass(pass, i) || !mpWeaponSetIsShown(i)) {
+				continue;
+			}
+
 			if (arg0 == 0) {
-				break;
+				return i;
 			}
 
 			arg0--;
 		}
 	}
 
-	return i + arg0;
+	// past the shown sets, as walking out of the array did: the entries that
+	// follow the list (Random Five, Random, Custom) at their own numbers
+	return MP_NUM_WEAPONSETS + arg0;
 }
 
 s32 func0f189058(bool full)
@@ -5301,4 +5372,26 @@ void func0f18e558(void)
 struct modeldef *func0f18e57c(s32 index, s32 *headnum)
 {
 	return var800acc28[index];
+}
+
+/**
+ * The list's first set that is the game's own.
+ *
+ * The player's saved sets are the list's first rows now, so "the first entry"
+ * is no longer the answer a default or a clamp wants: mpInit() would otherwise
+ * start every new setup on whatever the player saved first, and the quick team
+ * row would clamp a bad selection onto a saved set. Both want the game's first
+ * set, which is the first shown row that is not one of theirs.
+ */
+s32 mpWeaponSetStockOfferedFirst(void)
+{
+	s32 i;
+
+	for (i = 0; i < MP_NUM_WEAPONSETS; i++) {
+		if (mpWeaponSetIsShown(i) && !mpWeaponSetIsPlayerOwn(i)) {
+			return mpCountWeaponSetThing(i);
+		}
+	}
+
+	return 0;
 }

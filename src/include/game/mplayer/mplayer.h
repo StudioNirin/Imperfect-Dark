@@ -47,6 +47,7 @@ void mpSetWeaponSet(s32 weaponsetnum);
 void func0f1895e8(void);
 s32 mpGetWeaponSet(void);
 bool mpWeaponSlotsAreLocked(void);
+s32 mpWeaponSetStockOfferedFirst(void);
 bool mpIsPaused(void);
 void mpSetPaused(u8 mode);
 Gfx *mpRenderModalText(Gfx *gdl);
