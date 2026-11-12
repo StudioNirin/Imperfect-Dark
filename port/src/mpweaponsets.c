@@ -1,0 +1,486 @@
+#include "types.h"
+#include "constants.h"
+#include "bss.h"
+#include "data.h"
+#include "game/mplayer/mplayer.h"
+#include "game/lang.h"
+#include <stdio.h>
+#include <string.h>
+#include "fs.h"
+#include "system.h"
+#include "mpweaponsets.h"
+
+/*
+ * The weapon sets a player made themselves on the Combat Simulator's weapons
+ * page, and the same page in an online room.
+ *
+ * A set the game hands out is a row of g_MpWeaponSets (the Combat Simulator's
+ * list, which the stock twelve share with the sets a borrowed mod adds
+ * (modborrow.c) and GoldenEye's (gexplus.c)). Nothing there is written to disk,
+ * and its rows name the guns as WEAPON_* numbers - so a saved set is kept as
+ * exactly that, a name and six weapon numbers, and put back into the list at
+ * run time.
+ *
+ * That is the reason the page's own six values are not what gets saved. They
+ * are option indices: which row of the page's list a slot is showing, where
+ * row 0 is nothing and the rows past the stock guns belong to whatever mod is
+ * loaded (mpApplyWeaponSet() turns a set's weapon numbers into option indices
+ * by looking each one up in g_MpWeapons). Save the index and the set means a
+ * different gun on a machine with another mod loaded; save the weapon number
+ * and it means the same gun there and here, and comes back through the same
+ * lookup a stock set does.
+ */
+
+#define MPWEAPONSET_FILENAME "mpweaponsets"
+
+// defined in the Combat Simulator (mplayer.c), like netrules.c and gexplus.c reach it
+extern s32 g_MpWeaponSetNum;
+
+static struct mpweaponsetentry s_Sets[MPWEAPONSET_MAXSAVED];
+static s32 s_Num;
+// Where this file's block of rows sits in g_MpWeaponSets, -1 while it does not
+static s32 s_First = -1;
+
+static void mpWeaponSetsPutRow(s32 index);
+static void mpWeaponSetsDisableAlt(struct mpweaponset *set);
+
+// A file of our own, for --test-mpweaponsets to write without touching the
+// player's saved sets
+static char s_Path[FS_MAXPATH + 1];
+
+static const char *mpWeaponSetsPath(void)
+{
+	return s_Path[0] ? s_Path : "$S/" MPWEAPONSET_FILENAME ".bin";
+}
+
+void mpWeaponSetsTestFile(void)
+{
+	snprintf(s_Path, sizeof(s_Path), "$S/%s-test.bin", MPWEAPONSET_FILENAME);
+	remove(fsFullPath(s_Path));
+}
+
+s32 mpWeaponSetsNum(void)
+{
+	return s_Num;
+}
+
+const struct mpweaponsetentry *mpWeaponSetsGet(s32 index)
+{
+	if (index < 0 || index >= s_Num) {
+		return NULL;
+	}
+
+	return &s_Sets[index];
+}
+
+s32 mpWeaponSetsFirst(void)
+{
+	return s_First;
+}
+
+bool mpWeaponSetsOwns(s32 listindex)
+{
+	s32 at = listindex - s_First;
+
+	// the rows held for sets, not the empty ones in the block
+	return s_First >= 0 && at >= 0 && at < s_Num;
+}
+
+static s32 mpWeaponSetsWriteFile(void)
+{
+	const char *filename = fsFullPath(mpWeaponSetsPath());
+	u8 version = MPWEAPONSET_VERSION;
+	u8 num = (u8) s_Num;
+	FILE *f;
+	s32 written = 0;
+
+	if (fsFileSize(filename) < 0) {
+		f = fsFileOpenWrite(filename);
+		fsFileFree(f);
+	}
+
+	f = fsFileOpenWrite(filename);
+
+	if (f == NULL) {
+		sysLogPrintf(LOG_ERROR, "mpweaponsets: cannot open %s", mpWeaponSetsPath());
+		return -1;
+	}
+
+	written += fwrite(&version, 1, 1, f);
+	written += fwrite(&num, 1, 1, f);
+
+	for (s32 i = 0; i < num; i++) {
+		written += fwrite(s_Sets[i].name, sizeof(s_Sets[i].name), 1, f);
+		written += fwrite(s_Sets[i].slots, sizeof(s_Sets[i].slots), 1, f);
+	}
+
+	if (written != 2 + 2 * num) {
+		sysLogPrintf(LOG_ERROR, "mpweaponsets: wrote %d of the %d blocks of %d saved sets",
+				written, 2 + 2 * num, num);
+	}
+
+	fsFileFree(f);
+
+	return 0;
+}
+
+void mpWeaponSetsLoad(void)
+{
+	const char *filename = fsFullPath(mpWeaponSetsPath());
+	u8 version;
+	u8 num;
+	FILE *f;
+
+	s_Num = 0;
+
+	if (fsFileSize(filename) < 0) {
+		return;
+	}
+
+	f = fsFileOpenRead(filename);
+
+	if (f == NULL) {
+		sysLogPrintf(LOG_ERROR, "mpweaponsets: cannot read %s", mpWeaponSetsPath());
+		return;
+	}
+
+	if (fread(&version, 1, 1, f) != 1 || fread(&num, 1, 1, f) != 1) {
+		sysLogPrintf(LOG_NOTE, "mpweaponsets: %s has no header", mpWeaponSetsPath());
+		fsFileFree(f);
+		return;
+	}
+
+	// Nothing older exists yet, so an unknown version is a file from a newer
+	// build: read nothing rather than write half of it back next time
+	if (version != MPWEAPONSET_VERSION) {
+		sysLogPrintf(LOG_NOTE, "mpweaponsets: %s is version %d, this build writes %d: none read",
+				mpWeaponSetsPath(), version, MPWEAPONSET_VERSION);
+		fsFileFree(f);
+		return;
+	}
+
+	if (num > MPWEAPONSET_MAXSAVED) {
+		num = MPWEAPONSET_MAXSAVED;
+	}
+
+	for (s32 i = 0; i < num; i++) {
+		if (fread(s_Sets[i].name, sizeof(s_Sets[i].name), 1, f) != 1
+				|| fread(s_Sets[i].slots, sizeof(s_Sets[i].slots), 1, f) != 1) {
+			break;
+		}
+
+		s_Sets[i].name[MPSETUP_MAXNAME] = '\0';
+		s_Num++;
+	}
+
+	fsFileFree(f);
+
+	if (s_Num > 0) {
+		sysLogPrintf(LOG_NOTE, "mpweaponsets: %d saved weapon sets", s_Num);
+	}
+}
+
+s32 mpWeaponSetsSave(const char *name, const u8 *optionslots)
+{
+	struct mpweaponsetentry *entry;
+	s32 at;
+
+	if (name == NULL || name[0] == '\0') {
+		return -1;
+	}
+
+	if (s_Num >= MPWEAPONSET_MAXSAVED) {
+		sysLogPrintf(LOG_NOTE, "mpweaponsets: %d saved sets is the most this holds", s_Num);
+		return -1;
+	}
+
+	at = s_Num;
+	entry = &s_Sets[at];
+
+	snprintf(entry->name, sizeof(entry->name), "%s", name);
+
+	// the page's rows are option indices; the set keeps their guns
+	for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+		s32 option = optionslots[i];
+
+		entry->slots[i] = (option >= 0 && option < NUM_MPWEAPONS)
+			? g_MpWeapons[option].weaponnum : WEAPON_NONE;
+	}
+
+	s_Num++;
+
+	if (mpWeaponSetsWriteFile() < 0) {
+		s_Num--;
+		return -1;
+	}
+
+	mpWeaponSetsPutRow(at);
+
+	return at;
+}
+
+bool mpWeaponSetsDelete(s32 index)
+{
+	if (index < 0 || index >= s_Num) {
+		return false;
+	}
+
+	for (s32 i = index; i < s_Num - 1; i++) {
+		s_Sets[i] = s_Sets[i + 1];
+	}
+
+	s_Num--;
+
+	if (mpWeaponSetsWriteFile() < 0) {
+		return false;
+	}
+
+	// the set that moved up takes the row the deleted one held, and the row it
+	// vacated goes out of the list
+	for (s32 i = s_Num; i < MPWEAPONSET_MAXSAVED; i++) {
+		mpWeaponSetsPutRow(i);
+	}
+
+	return true;
+}
+
+/**
+ * A set's alternative group, emptied.
+ *
+ * The group holds what a set hands out when its own guns are not earned yet,
+ * and mpCountWeaponSetThing() offers a set whose first entry is anything other
+ * than WEAPON_DISABLED - including 0, which is a gun.
+ */
+static void mpWeaponSetsDisableAlt(struct mpweaponset *set)
+{
+	set->unk0c = WEAPON_DISABLED;
+	set->unk0d = WEAPON_DISABLED;
+	set->unk0e = WEAPON_DISABLED;
+	set->unk0f = WEAPON_DISABLED;
+	set->unk10 = WEAPON_DISABLED;
+	set->unk11 = WEAPON_DISABLED;
+}
+
+/**
+ * One saved set's row in the Combat Simulator's list, or an empty one.
+ *
+ * The row is written whether or not the set exists, because the block's size
+ * never changes (mpWeaponSetsPlace). A row with no set behind it is hidden the
+ * way a gun a player has not earned is: an unearnable requirement keeps it out
+ * of the list, and an alternative group of nothing keeps mpCountWeaponSetThing()
+ * from seeing it either.
+ */
+static void mpWeaponSetsPutRow(s32 index)
+{
+	struct mpweaponset *set;
+	const struct mpweaponsetentry *entry = mpWeaponSetsGet(index);
+
+	if (s_First < 0 || index < 0 || index >= MPWEAPONSET_MAXSAVED) {
+		return;
+	}
+
+	set = &g_MpWeaponSets[s_First + index];
+	memset(set, 0, sizeof(*set));
+
+	if (entry == NULL) {
+		// Out of the list, and both halves of the test the game applies have to
+		// say no: an unearnable requirement, and an alternative group of
+		// WEAPON_DISABLED, which is not what zeroing it gives - 0 is a gun
+		// (WEAPON_NONE), so mpCountWeaponSetThing() would count the row
+		set->requirefeatures[0] = MPFEATURE_NEVER;
+		set->name = langAddPortText(" ");
+		mpWeaponSetsDisableAlt(set);
+
+		return;
+	}
+
+	for (s32 j = 0; j < NUM_MPWEAPONSLOTS; j++) {
+		set->slots[j] = entry->slots[j];
+	}
+
+	// Nothing locks a player's set: a requirement of 0 counts as earned
+	// (challengeIsFeatureUnlocked), which is what offers the set in the list,
+	// and mplayer.c then reads slots[] rather than the alternative group a set
+	// keeps for its not-yet-earned guns.
+	mpWeaponSetsDisableAlt(set);
+
+	// langAddPortText() dedups, so writing the same name back is free. It hands
+	// back 0 only once its 512 strings are gone, which 16 names will not reach
+	set->name = langAddPortText(entry->name);
+}
+
+/**
+ * The saved sets in the Combat Simulator's list, at its end, once.
+ *
+ * A block of MPWEAPONSET_MAXSAVED rows, whether or not that many sets are
+ * saved, and the block never moves or changes size after this. Both halves
+ * matter: the sets a mod borrows (modborrow.c) and GoldenEye's (gexplus.c)
+ * record where they put themselves and put nothing after themselves, so a
+ * block that grew or shrank - or that had to be lifted out and set down again
+ * - would leave those records pointing at rows that are no longer theirs,
+ * which is the same shape of bug as the Mod Options bind rows reading a table
+ * by position (crash-reports.md). Rows that hold nothing are hidden rather
+ * than removed, so nothing after this block ever moves either.
+ */
+static void mpWeaponSetsPlace(void)
+{
+	if (g_MpNumWeaponSets + MPWEAPONSET_MAXSAVED > MP_MAX_WEAPONSETS) {
+		sysLogPrintf(LOG_NOTE, "mpweaponsets: the list is at %d, no room for %d saved sets",
+				g_MpNumWeaponSets, MPWEAPONSET_MAXSAVED);
+		return;
+	}
+
+	s_First = g_MpNumWeaponSets;
+	g_MpNumWeaponSets += MPWEAPONSET_MAXSAVED;
+
+	for (s32 i = 0; i < MPWEAPONSET_MAXSAVED; i++) {
+		mpWeaponSetsPutRow(i);
+	}
+
+	sysLogPrintf(LOG_NOTE, "mpweaponsets: %d saved sets, held at %d of the list's %d",
+			s_Num, s_First, g_MpNumWeaponSets);
+}
+
+/**
+ * The saved sets read in and put in the list, once, at startup.
+ *
+ * After a mod's own sets are in (main.c), so the block sits at the end of the
+ * list as a whole. It stays there for the session: a mod entered from the
+ * Perfect Menu borrows more sets, and GoldenEye's cheat sets come and go with
+ * a checkbox, and both append past the block without moving it.
+ */
+void mpWeaponSetsInit(void)
+{
+	mpWeaponSetsLoad();
+	mpWeaponSetsPlace();
+}
+
+// The self-test's own counts, so the checks read as checks
+static s32 s_TestChecks;
+static s32 s_TestFailed;
+
+static void mpWeaponSetsTestCheck(const char *what, bool ok)
+{
+	s_TestChecks++;
+
+	if (!ok) {
+		s_TestFailed++;
+	}
+
+	sysLogPrintf(LOG_NOTE, "mpweaponsets test: %s %s", ok ? "ok  " : "FAIL", what);
+}
+
+/**
+ * What the store has to get right, run once at startup under
+ * --test-mpweaponsets against a scratch file (mpWeaponSetsTestFile).
+ *
+ * The one worth the most is the third: a saved set keeps the guns, not the
+ * page's row numbers, because the rows a mod adds come between the stock ones
+ * and Disabled. Everything else here is what the list has to not do to the
+ * sets a mod and GoldenEye put in it.
+ */
+void mpWeaponSetsSelfTest(void)
+{
+	u8 slots[NUM_MPWEAPONSLOTS];
+	s32 first = mpWeaponSetsFirst();
+	s32 oddjob = -1;
+
+	if (first < 0) {
+		sysLogPrintf(LOG_ERROR, "mpweaponsets test: FAIL the block is not in the list");
+		return;
+	}
+
+	mpWeaponSetsTestCheck("the block sits at the list's end",
+			g_MpNumWeaponSets == first + MPWEAPONSET_MAXSAVED);
+
+	for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+		if (g_MpWeapons[i].weaponnum != i && g_MpWeapons[i].weaponnum != WEAPON_NONE) {
+			oddjob = i;
+			break;
+		}
+	}
+
+	for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+		slots[i] = (i == 0 && oddjob >= 0) ? (u8) oddjob : (u8) (i + 1);
+	}
+
+	mpWeaponSetsTestCheck("a set with no name is refused",
+			mpWeaponSetsSave("", slots) < 0);
+
+	s32 at = mpWeaponSetsSave("My Pistols", slots);
+	mpWeaponSetsTestCheck("a set is saved", at == 0);
+
+	if (at == 0) {
+		bool guns = true;
+
+		for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+			guns = guns && g_MpWeaponSets[first].slots[i] == g_MpWeapons[slots[i]].weaponnum;
+		}
+
+		mpWeaponSetsTestCheck("the set keeps its guns, not the page's rows", guns);
+		char *shown = langGet(g_MpWeaponSets[first].name);
+
+		mpWeaponSetsTestCheck("the row carries the name typed",
+				shown != NULL && strcmp(shown, "My Pistols") == 0);
+
+		// Every offered row shows once and the rows held for sets that were
+		// never saved show nowhere: this is what keeps the sets a mod borrows
+		// and GoldenEye's where they were put
+		s32 offered = func0f189058(false);
+		s32 seen = 0;
+		s32 emptyseen = 0;
+		bool seenname = false;
+
+		for (s32 i = 0; i < offered; i++) {
+			s32 index = func0f188f9c(i);
+
+			if (index < first || index >= first + MPWEAPONSET_MAXSAVED) {
+				continue;
+			}
+
+			char *name;
+
+			if (index < first + s_Num) {
+				seen++;
+				name = mpGetWeaponSetName(i);
+				seenname = seenname || (name != NULL && strcmp(name, "My Pistols") == 0);
+			} else {
+				emptyseen++;
+			}
+		}
+
+		mpWeaponSetsTestCheck("the saved set is offered once", seen == 1);
+		mpWeaponSetsTestCheck("the rows held for nothing are not offered", emptyseen == 0);
+		mpWeaponSetsTestCheck("the list names the saved set by the name typed", seenname);
+
+		mpWeaponSetsLoad();
+		mpWeaponSetsTestCheck("the file reads back the same set",
+				s_Num == 1 && strcmp(s_Sets[0].name, "My Pistols") == 0
+				&& memcmp(s_Sets[0].slots, g_MpWeaponSets[first].slots, NUM_MPWEAPONSLOTS) == 0);
+
+		mpWeaponSetsLoad();
+		mpWeaponSetsPutRow(0);
+
+		mpWeaponSetsTestCheck("the count never moved while the list grew a set",
+				g_MpNumWeaponSets == first + MPWEAPONSET_MAXSAVED);
+
+		mpWeaponSetsSave("Second", slots);
+		mpWeaponSetsTestCheck("a second set takes the next row",
+				s_Num == 2 && strcmp(langGet(g_MpWeaponSets[first + 1].name), "Second") == 0);
+
+		mpWeaponSetsTestCheck("deleting the first moves the second up",
+				mpWeaponSetsDelete(0) && s_Num == 1
+				&& strcmp(langGet(g_MpWeaponSets[first].name), "Second") == 0);
+
+		mpWeaponSetsTestCheck("deleting past the last is refused",
+				!mpWeaponSetsDelete(5));
+
+		remove(fsFullPath(s_Path));
+	}
+
+	if (s_TestFailed == 0) {
+		sysLogPrintf(LOG_NOTE, "mpweaponsets test: all %d checks as expected", s_TestChecks);
+	} else {
+		sysLogPrintf(LOG_NOTE, "mpweaponsets test: %d of %d CHECKS FAILED", s_TestFailed, s_TestChecks);
+	}
+}

@@ -18,6 +18,7 @@
 #include "game/modspectate.h"
 #include "game/stagetable.h"
 #include "game/mplayer/mplayer.h"
+#include "mpweaponsets.h"
 #include "bss.h"
 #include "data.h"
 
@@ -92,6 +93,7 @@ f32 g_PoseFace = -999.f; // --test-anim-face DEGREES: which way to look, so the 
 s32 g_PosePlay = false; // --test-anim-play: play each animation and shoot it frame by frame, instead of freezing one frame
 s32 g_PosePush = 0; // --test-anim-push FWD|BACK|LEFT|RIGHT: shove the body along while the animation plays
 s32 g_TestDodge = false; // --test-dodge: the crouch double tap put through every direction (lvTestDodgeTick)
+s32 g_TestMpWeaponSets = false; // --test-mpweaponsets: the saved weapon sets' store (mpWeaponSetsSelfTest)
 s32 g_TestSprint = false; // --test-sprint: a sprint, a trigger inside it, and a switch (lvTestSprintTick)
 s32 g_NumPoseAnims = 0;
 s32 g_TickExtraSleep = true;
@@ -318,6 +320,22 @@ int main(int argc, const char **argv)
 
 	// After the mod's lists are in, since a mod's lists keep GoldenEye's out
 	gebeanPoolRefresh();
+
+	// after the mod's sets are in, since the player's own go at the end of the
+	// Combat Simulator's list (mpweaponsets.c). Read here rather than with the
+	// other --test flags below, because the store reads its file at startup and
+	// the test's scratch file has to be the one it finds
+	g_TestMpWeaponSets = sysArgCheck("--test-mpweaponsets");
+
+	if (g_TestMpWeaponSets) {
+		mpWeaponSetsTestFile();
+	}
+
+	mpWeaponSetsInit();
+
+	if (g_TestMpWeaponSets) {
+		mpWeaponSetsSelfTest();
+	}
 
 	// netplay: --host/--connect open their socket once the mods are mounted
 	if (g_NetMode != NETMODE_NONE) netSessionInit();

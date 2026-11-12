@@ -4406,6 +4406,23 @@ an exported handler - the neighbour to copy is
 `modGetSpawnWeapon()` with a direct `g_ModOptions.spawnweapon` write, which is
 what `optionsmenu.c`'s own copy of the handler does.
 
+## `netlantest`'s broadcast case is red on this box (2026-11-12, not a build change)
+
+`tools/ci/netlantest.sh` runs four cases. LAN (found by loopback), Direct
+Connect and the password case pass; **the `broadcast` case, found by the IPv4
+broadcast alone with no loopback query, fails at the first check** - the joiner
+never sees the announce, so everything after it falls, and "found by the
+broadcast ()" reports an empty address.
+
+Not a build change: the failure is identical with the weapon sets' startup hook
+(`mpWeaponSetsInit()`, the only thing in the tree that had just been added)
+disabled by an environment variable, and it repeats deterministically. What it
+costs is a baseline for the next time: this case passed on this box when
+protocol 33 was written (checked 2026-10-14, above), so the box's interfaces or
+firewall changed underneath it, and a red `broadcast` line in a `netallgates.sh`
+run is that, not the patch under test. `ONLY=broadcast tools/ci/netlantest.sh`
+runs the case alone.
+
 ## `netpredicttest` is red on the dev box, and what that does and does not say (2026-11-11, no wire change)
 
 Left deliberately unresolved. The gate was run four times on the working tree
