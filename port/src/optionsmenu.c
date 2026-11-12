@@ -5202,6 +5202,14 @@ static MenuItemHandlerResult menuhandlerModKeyBind(s32 operation, struct menuite
  */
 struct menuitem g_ExtendedDabsModPlayerMenuItems[] = {
 	{
+		MENUITEMTYPE_CHECKBOX,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Sprint",
+		0,
+		menuhandlerModSprint,
+	},
+	{
 		MENUITEMTYPE_DROPDOWN,
 		0,
 		MENUITEMFLAG_LITERAL_TEXT,
@@ -5452,14 +5460,6 @@ struct menuitem g_ExtendedDabsModCameraMenuItems[] = {
 		(uintptr_t)"Gun Sway With Tilt",
 		0,
 		menuhandlerModGunSway,
-	},
-	{
-		MENUITEMTYPE_CHECKBOX,
-		0,
-		MENUITEMFLAG_LITERAL_TEXT,
-		(uintptr_t)"Sprint",
-		0,
-		menuhandlerModSprint,
 	},
 	{
 		MENUITEMTYPE_CHECKBOX,
