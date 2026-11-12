@@ -40,6 +40,10 @@
 #
 # mod-base 69
 
+notes 76 2026-11-11
+Dab's Mod Options: the page no longer crashes on Windows with Akimbo Triggers switched on
+Dab's Mod Options: COD Style Aiming's Aim Mode key row is Aim Mode's again, and the combat roll's key row has gone with its button
+
 notes 75 2026-11-11
 The Xbox 360 release's models are on for a new install, which - with the textures, rooms, font, skies and reflections that were already on - means the whole release look for anyone who has added the content
 A machine that has not added Perfect Dark's XBLA package keeps the N64's fog range and character tables, which it used to be given the release's of whether it owned them or not

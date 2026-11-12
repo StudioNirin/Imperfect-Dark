@@ -7,6 +7,8 @@ the long form.
 
 - **Crash reports** — [crash-reports.md](CLAUDE-notes/crash-reports.md): `sysFatalError()` writes one before the dialog goes up (build, mod, the `[Mod]` settings live rather than from the file, and the last 200 log lines from a **ring** in crashreport.c, because pd.log only exists under `--log`); the dialog's *Send report to Dab* button and *Crash Reports* on the Perfect Menu are the only two things that send one, and the note is typed on the page because a message box cannot take text; `POST /crash` on pdghostd stores it as a file nothing serves back; a setup error the player fixes from the message (no ROM, wrong ROM, no OpenGL 2.1) is `sysFatalSetupError()` and writes none; a report carries `[Game]` and the pools' free space too; and **reading them** - scp from `~/pdghosts/crashes`, symbolise against the release's own binaries, group by first-frame offset - is in the note
 
+- **The Mod Options bind row that read one element past its table (2026-11-11, Windows)** — the last section: a `read of ffffffffffffffff` in `menuCalculateItemSizeOwn()`'s `strcmp(text, "")` at `menu.c:777`, on a label that came out of `modMenuBinds[9]` in a table of nine (0-8); the combat roll's bind entry had been deleted out of the middle of it and the page's rows still named their binds by number, so seven read one bind along, one read nothing, and `MENUOP_CHECKHIDDEN` hid the bad row only while Akimbo Triggers was off. On Linux the word past the end is other `.rodata` - a readable, wrong label - which is why no build here ever faulted. Rows carry the **contkey** in `param3` now, and `modMenuBindRow()` answers NULL.
+
 
 What a player's crash looks like from this end, and how it gets here.
 
@@ -373,3 +375,79 @@ resolves it coherently: trust the body.
   read inside the NVIDIA driver under `DrvSwapLayerBuffers` /
   `DrvPresentBuffers`, no frame of ours; the log before it is ordinary (texture
   dumps, net traffic lines). Driver crash: needinfo (driver version, update it).
+
+## The Mod Options bind row that read past its table (2026-11-11, Windows)
+
+A dialog screenshot rather than a report file - the player was on the dev build of
+`7658bad`, so the binary was the one the `dabs-mod-dev` prerelease had just been
+rebuilt from, and its `pd.x86_64-windows.exe.debug` resolved every frame:
+
+```
+EXCEPTION: 0xc0000005   FAULT: read of ffffffffffffffff
+#00 +e22e3   menuCalculateItemSizeOwn      src/game/menu.c:777
+#01 +e2a25   menuCalculateItemSize         src/game/menu.c:677
+#02 +e2f1e   dialogCalculateContentSize    src/game/menu.c:1222
+#03 +ec784   dialogTick                    src/game/menu.c:5184
+#04 +ee02b   menuProcessInput              src/game/menu.c:6192
+#05 +efef4e   - MSVC's 0xEFEFEFEF stack fill, not a frame
+```
+
+`#05`'s offset is the fill pattern, and the frames under it (`bheadReset`,
+`bgunDrawHud`) are things that cannot have called `menuProcessInput` - the walk
+stopped being real at #04, and #00-#04 read as one chain. Opening Dab's Mod Options
+builds a dialog, the dialog measures its rows, and `menu.c:777` is
+`strcmp(text, "")` on the `text` the row's own text function returned. That pointer
+was `-1`.
+
+**The cause was four commits back in this fork.** Commit `0d6a73427` (the combat
+roll off its button) deleted `{ CK_0800, "Combat Roll [+]" }` from the static
+`modMenuBinds[]` in `port/src/optionsmenu.c` and left behind everything that named
+the table's rows **by number**: the page's rows (`param3 = 2,3,4,5,6,9,8`, plus the
+Aim Mode row's `7`) and `modBindRowIsAkimbo()`, whose
+`idx >= 3 && idx <= 6 || idx == 8 || idx == 9` was true of positions, not of binds.
+A ten-entry table became a nine-entry table, so:
+
+- the combat roll's own row (`param3 = 2`, under the Combat Roll setting) began
+  labelling itself "Fire Left" and rebound the left hand's trigger;
+- the six Akimbo Triggers rows and COD Style Aiming's **Aim Mode** row each moved
+  one bind along, which re-hidden Aim Mode with Akimbo Triggers off - the exact
+  thing `aee29622d` exists to stop, undone silently;
+- the row that had been the tenth (`param3 = 9`) named nothing at all, and its
+  label came from one element past `modMenuBinds`.
+
+`menu.c` reads `param3` for `MENUITEMTYPE_LIST`, `MODEL`, `LABEL`, `SELECTABLE`,
+`SCROLLABLE` and `CAROUSEL` - never for `DROPDOWN`, which leaves `param3` to the
+handler - so the fix costs nothing: **each row now carries its contkey**, and
+`modMenuBindRow(ck)` looks the entry up and answers NULL when the table has no such
+bind. A NULL row hides itself on `MENUOP_CHECKHIDDEN`, its label is the empty
+string `menuCalculateItemSizeOwn()` already sizes to nothing, and the first one
+seen logs `menu: a Mod Options bind row names contkey %#x, which has no row in the
+table` - the fork's dead-buttons lesson, that a row refusing to appear has to say
+so. `modBindCkIsAkimbo()` is asked about contkeys instead of ranges, and the combat
+roll's row is deleted, which is what that commit's own comment claimed had
+happened.
+
+**Why only Windows saw it.** `modMenuBinds[9].name` is whatever follows the array
+in `.rodata`, and that differs by link. On the Linux build gdb says
+`{ck = 0x0, name = 0x555555a91efb, n64name = 0x0}` - a readable string, so the row
+draws somebody else's label and nothing else goes wrong. In the Windows exe the
+word is `-1`, and the menu engine's `strcmp` faults on the page open. The usual
+shape: a wild read that Linux's layout happens to survive is not a bug Linux does
+not have.
+
+**Why it needed a particular setting to show.** `MENUOP_CHECKHIDDEN` hid those
+rows only while `AkimboTriggers` was off, so the offending row was measured - and
+crashed - only with it on. A player who never turned Akimbo Triggers on could not
+see any of it, which is how it reached a push.
+
+Verified on the fixed build in a running binary: the seven contkeys the rows carry
+resolve to Fire Left, Fire Right, Fire Mode Left, Fire Mode Right, Left Hand Menu,
+Right Hand Menu and Aim Mode, and the number the bad row carried (`9`) resolves to
+NULL instead of reading past the array.
+
+**The next one of these.** The other hand-indexed bind table in the same file is
+`modKeyBinds[]` - ten entries, rows using 2,3,4,5,6,8,9, all in range as of today,
+and not converted to contkeys. If a settings page ever shows a row naming another
+setting's key, or a row vanishes behind a switch that has nothing to do with it,
+diff the row list's numbers against the table's length before believing the menu
+engine; `git log -S modMenuBinds` finds the removal that shifted them.

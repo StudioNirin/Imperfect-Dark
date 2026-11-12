@@ -89,6 +89,23 @@ This is not a bug to fix; it is the reason `bwalkTryDodge()` returns whether the
 dodge - with the body not driven, every case comes back with the idle animation
 and the gate would be asserting nothing about the moves.
 
+## What taking the roll's bind row out broke, four commits later
+
+Deleting `{ CK_0800, "Combat Roll [+]" }` from `modMenuBinds[]` in
+`port/src/optionsmenu.c` deleted the entry but not the row that pointed at it, and
+shifted every entry below it. Seven rows named their binds by number, so seven
+began naming the wrong bind, one of them (the tenth, in a table of nine) named
+nothing, and its label read one element past the table - which Linux draws as
+somebody else's label and Windows faults on (`CLAUDE-notes/crash-reports.md`, "The
+Mod Options bind row that read past its table"). `modBindRowIsAkimbo()`'s index
+ranges moved with them and silently re-hid COD Style Aiming's Aim Mode row.
+
+Those rows carry their **contkey** in `param3` now, so this note's own change is
+safe to repeat: taking an entry out of that table can no longer move anybody
+else's row, and a row naming a bind the table does not have hides itself and logs.
+What still has to be deleted by hand is the row - the roll's is gone, and `CK_0800`
+stays in the enum and in every saved `pd.ini` so an old config loads.
+
 ## Netplay: nothing new on the wire
 
 `rollspeed` and `rolltime60` are already in the prediction move and the snapshot

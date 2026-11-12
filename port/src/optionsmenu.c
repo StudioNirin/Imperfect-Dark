@@ -4566,6 +4566,16 @@ static MenuItemHandlerResult menuhandlerModSpectateSpeed(s32 operation, struct m
  * the array the way menuhandlerBind() does, so the settings above can be
  * reordered without silently rebinding anything.
  *
+ * param3 carries the **contkey**, not a place in the table below. Both were
+ * positions once, and when the combat roll's entry came out of that table the
+ * six rows under it kept their old numbers: Aim Mode went back to being hidden
+ * with Akimbo Triggers off, and one row ended up naming no bind at all. Its
+ * label then measured one element past the end of the table, which reads as a
+ * wrong string on Linux and as a read of 0xFFFFFFFFFFFFFFFF in
+ * menuCalculateItemSizeOwn() on Windows (the crash report of 2026-11-11). A
+ * contkey cannot go out of date when a neighbour is removed, and a row naming a
+ * contkey the table has no entry for is refused rather than measured.
+ *
  * One row per entry below - a bind with no row of its own can only be rebound
  * by editing pd.ini.
  */
@@ -4593,35 +4603,101 @@ static const struct menubind modMenuBinds[] = {
  * Triggers gives them, so with it off they showed the radial menu's Q as
  * "Left Hand Menu", and a player who cleared it as an akimbo bind they
  * never set took Q off the radial menu itself (F3 20261012-232939). Aim
- * Mode (7) is COD Style Aiming's row and stays.
+ * Mode is COD Style Aiming's row and stays.
+ *
+ * Asked of the contkey, because the rows are keyed by contkey too: the same
+ * mistake that measured a row past the end of the table hid Aim Mode again,
+ * which is what the report above is about.
  */
-static bool modBindRowIsAkimbo(s32 idx)
+static bool modBindCkIsAkimbo(u32 ck)
 {
-	return (idx >= 3 && idx <= 6) || idx == 8 || idx == 9;
+	switch (ck) {
+	case CK_0040: // Fire Left
+	case CK_ZTRIG: // Fire Right
+	case CK_0080: // Fire Mode Left
+	case CK_DPAD_R: // Fire Mode Right
+	case CK_DPAD_U: // Right Hand Menu
+	case CK_DPAD_D: // Left Hand Menu
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * The table entry a row's contkey names, or NULL when it names none. Rows are
+ * static and the table is edited by hand, so this is the check that a removed
+ * entry has not left a row pointing at its neighbour's neighbour.
+ */
+static const struct menubind *modMenuBindRow(u32 ck)
+{
+	s32 i;
+
+	for (i = 0; i < (s32)ARRAYCOUNT(modMenuBinds); i++) {
+		if (modMenuBinds[i].ck == ck) {
+			return &modMenuBinds[i];
+		}
+	}
+
+	return NULL;
+}
+
+// A row whose contkey has no entry is taken off the page and its label is the
+// empty string, which menuCalculateItemSizeOwn() already sizes to nothing. Never
+// let it be measured: the label is what used to be read out of the table.
+static bool modBindRowIsBound(u32 ck)
+{
+	static s32 warned = false;
+
+	if (modMenuBindRow(ck) != NULL) {
+		return true;
+	}
+
+	if (!warned) {
+		warned = true;
+		sysLogPrintf(LOG_WARNING,
+				"menu: a Mod Options bind row names contkey %#x, which has no row in the table",
+				ck);
+	}
+
+	return false;
 }
 
 static const char *menutextModBind(struct menuitem *item)
 {
+	const struct menubind *bind = modMenuBindRow((u32) item->param3);
+
+	if (bind == NULL) {
+		return "";
+	}
+
 	return g_PlayerExtCfg[g_ExtMenuPlayer].extcontrols ?
-		langTr(modMenuBinds[item->param3].name) :
-		langTr(modMenuBinds[item->param3].n64name);
+		langTr(bind->name) : langTr(bind->n64name);
 }
 
 static MenuItemHandlerResult menuhandlerModBind(s32 operation, struct menuitem *item, union handlerdata *data)
 {
-	const s32 idx = item->param3;
+	const u32 ck = (u32) item->param3;
+	const struct menubind *bind;
 	const u32 *binds;
 
 	static char keyname[128];
 
+	if (operation == MENUOP_CHECKHIDDEN) {
+		return !modBindRowIsBound(ck) || (modBindCkIsAkimbo(ck) && !g_ModOptions.akimbotriggers);
+	}
+
+	bind = modMenuBindRow(ck);
+	if (bind == NULL) {
+		return 0;
+	}
+
 	switch (operation) {
-	case MENUOP_CHECKHIDDEN:
-		return modBindRowIsAkimbo(idx) && !g_ModOptions.akimbotriggers;
 	case MENUOP_GETOPTIONCOUNT:
 		data->dropdown.value = INPUT_MAX_BINDS;
 		break;
 	case MENUOP_GETOPTIONTEXT:
-		binds = inputKeyGetBinds(g_ExtMenuPlayer, modMenuBinds[idx].ck);
+		binds = inputKeyGetBinds(g_ExtMenuPlayer, bind->ck);
 		if (binds && binds[data->dropdown.value]) {
 			strncpy(keyname, inputGetKeyName(binds[data->dropdown.value]), sizeof(keyname) - 1);
 			for (char *p = keyname; *p; ++p) {
@@ -4631,9 +4707,9 @@ static MenuItemHandlerResult menuhandlerModBind(s32 operation, struct menuitem *
 		}
 		return (intptr_t)"NONE";
 	case MENUOP_SET:
-		g_ExtendedBindKeyMenuItems[0].param2 = (uintptr_t)modMenuBinds[idx].name;
+		g_ExtendedBindKeyMenuItems[0].param2 = (uintptr_t)bind->name;
 		g_BindIndex = data->dropdown.value;
-		g_BindContKey = modMenuBinds[idx].ck;
+		g_BindContKey = bind->ck;
 		g_BindKeySetter = NULL;
 		inputClearLastKey();
 		menuPushDialog(&g_ExtendedBindKeyMenuDialog);
@@ -5163,14 +5239,6 @@ struct menuitem g_ExtendedDabsModPlayerMenuItems[] = {
 		menuhandlerModSimBrain,
 	},
 	{
-		MENUITEMTYPE_DROPDOWN,
-		0,
-		0,
-		(uintptr_t)menutextModBind,
-		2,
-		menuhandlerModBind,
-	},
-	{
 		MENUITEMTYPE_CHECKBOX,
 		0,
 		MENUITEMFLAG_LITERAL_TEXT,
@@ -5271,7 +5339,7 @@ struct menuitem g_ExtendedDabsModPlayerMenuItems[] = {
 		0,
 		0,
 		(uintptr_t)menutextModBind,
-		3,
+		CK_0040,
 		menuhandlerModBind,
 	},
 	{
@@ -5279,7 +5347,7 @@ struct menuitem g_ExtendedDabsModPlayerMenuItems[] = {
 		0,
 		0,
 		(uintptr_t)menutextModBind,
-		4,
+		CK_ZTRIG,
 		menuhandlerModBind,
 	},
 	{
@@ -5287,7 +5355,7 @@ struct menuitem g_ExtendedDabsModPlayerMenuItems[] = {
 		0,
 		0,
 		(uintptr_t)menutextModBind,
-		5,
+		CK_0080,
 		menuhandlerModBind,
 	},
 	{
@@ -5295,7 +5363,7 @@ struct menuitem g_ExtendedDabsModPlayerMenuItems[] = {
 		0,
 		0,
 		(uintptr_t)menutextModBind,
-		6,
+		CK_DPAD_R,
 		menuhandlerModBind,
 	},
 	{
@@ -5303,7 +5371,7 @@ struct menuitem g_ExtendedDabsModPlayerMenuItems[] = {
 		0,
 		0,
 		(uintptr_t)menutextModBind,
-		9,
+		CK_DPAD_D,
 		menuhandlerModBind,
 	},
 	{
@@ -5311,7 +5379,7 @@ struct menuitem g_ExtendedDabsModPlayerMenuItems[] = {
 		0,
 		0,
 		(uintptr_t)menutextModBind,
-		8,
+		CK_DPAD_U,
 		menuhandlerModBind,
 	},
 	{
@@ -5383,11 +5451,15 @@ struct menuitem g_ExtendedDabsModCameraMenuItems[] = {
 		menuhandlerModCodAimLock,
 	},
 	{
+		// Aim Mode, by contkey like the Akimbo Triggers rows below it. This was
+		// row 7 of the table, and the table has nine rows now: the index outlived
+		// the combat roll's entry by one, which is how Aim Lock ended up with a row
+		// saying "Right Hand Menu" under it.
 		MENUITEMTYPE_DROPDOWN,
 		0,
 		0,
 		(uintptr_t)menutextModBind,
-		7,
+		CK_RTRIG,
 		menuhandlerModBind,
 	},
 	{
