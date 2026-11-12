@@ -41,8 +41,9 @@
 # mod-base 69
 
 notes 78 2026-11-12
-Sprint: a checkbox on Mod Options' player page, off by default. Half again the running speed while it is on, no shooting while it is on, and half a second after it ends - on a crouch or a trigger pull as well as your own - before the gun is up. The button is the left stick click on a controller and LShift on a keyboard.
-Crouch, and with it the dodge, moves to pad B so the stick click can be sprint; weapon back loses its default pad B and keeps D-pad left; keyboard half-crouch moves from LShift to C. Fresh installs only - an existing pd.ini keeps its own binds and needs a CK_0100 line for the sprint button until its bind row exists.
+Imperfect Settings: a new page above Dab's Mod Options, for the settings this fork replaces rather than adds. Sprint is on it and on by default; Combat Roll has moved onto it and defaults to Everyone.
+Sprint: half again the running speed, and the gun comes down for the run - no shooting, and the trigger you pull to stop is not a shot. When the run ends the gun comes back up, and it cannot fire until it is up and a second has passed.
+Crouch, and with it the dodge, moves to pad B so the left stick click can be sprint; keyboard sprint is LShift, and half crouch moves to C. Fresh installs only - an existing pd.ini keeps its own binds and needs a CK_0100 line for the sprint button until its bind row exists.
 notes 77 2026-11-11
 Crash reports: the game no longer offers to send them to a server that is not ours, and says where the file is and what address reaches us instead
 

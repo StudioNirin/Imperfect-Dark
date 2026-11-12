@@ -5202,14 +5202,6 @@ static MenuItemHandlerResult menuhandlerModKeyBind(s32 operation, struct menuite
  */
 struct menuitem g_ExtendedDabsModPlayerMenuItems[] = {
 	{
-		MENUITEMTYPE_CHECKBOX,
-		0,
-		MENUITEMFLAG_LITERAL_TEXT,
-		(uintptr_t)"Sprint",
-		0,
-		menuhandlerModSprint,
-	},
-	{
 		MENUITEMTYPE_DROPDOWN,
 		0,
 		MENUITEMFLAG_LITERAL_TEXT,
@@ -5248,14 +5240,6 @@ struct menuitem g_ExtendedDabsModPlayerMenuItems[] = {
 		(uintptr_t)"Jump For",
 		0,
 		menuhandlerModJumpFor,
-	},
-	{
-		MENUITEMTYPE_DROPDOWN,
-		0,
-		MENUITEMFLAG_LITERAL_TEXT,
-		(uintptr_t)"Combat Roll",
-		0,
-		menuhandlerModRoll,
 	},
 	{
 		MENUITEMTYPE_DROPDOWN,
@@ -6213,6 +6197,47 @@ struct menudialogdef g_ExtendedDabsModMenuDialog = {
 	NULL,
 	MENUDIALOGFLAG_LITERAL_TEXT,
 	&g_ExtendedDabsModCameraMenuDialog,
+};
+
+/**
+ * Imperfect Settings: the settings this fork replaces rather than adds, on one
+ * page of their own so a setting of ours is not found by scrolling Dab's list.
+ *
+ * Deliberately only the two rows moved over so far. Reshuffling every table in
+ * this file in the same change as a gameplay one is how a Mod Options bind row
+ * ended up naming the wrong setting and crashed Windows on a fresh install
+ * (crash-reports.md), so the rest move one at a time, when something else
+ * touches them.
+ */
+struct menuitem g_ImperfectSettingsMenuItems[] = {
+	{
+		MENUITEMTYPE_CHECKBOX,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Sprint",
+		0,
+		menuhandlerModSprint,
+	},
+	{
+		MENUITEMTYPE_DROPDOWN,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Combat Roll",
+		0,
+		menuhandlerModRoll,
+	},
+	{ MENUITEMTYPE_END },
+};
+
+struct menudialogdef g_ImperfectSettingsMenuDialog = {
+	MENUDIALOGTYPE_DEFAULT,
+	(uintptr_t)"Imperfect Settings",
+	g_ImperfectSettingsMenuItems,
+	NULL,
+	MENUDIALOGFLAG_LITERAL_TEXT,
+	// ...and the page turn carries on into Dab's, which is what "above" means
+	// here as much as where the row sits in Extended Options.
+	&g_ExtendedDabsModMenuDialog,
 };
 
 /**
@@ -8079,6 +8104,14 @@ struct menuitem g_ExtendedMenuItems[] = {
 		(uintptr_t)"Key Bindings\n",
 		0,
 		menuhandlerOpenBindsMenu,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_SELECTABLE_OPENSDIALOG | MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Imperfect Settings\n",
+		0,
+		(void *)&g_ImperfectSettingsMenuDialog,
 	},
 	{
 		MENUITEMTYPE_SELECTABLE,

@@ -90,3 +90,33 @@ Every preset ends with "the ways of playing, off in every preset" and writes
 by default therefore matches no preset, and the dropdown says Custom. That is the
 honest answer rather than a bug: the config genuinely is not any preset's set. A
 preset chosen still switches akimbo back off, which is the preset doing its job.
+
+
+## Imperfect Settings (added 2026-11-12)
+
+`Extended Options` opens a page called **Imperfect Settings**, one row above
+**Dab's Mod Options** in that same list (`port/src/optionsmenu.c`: a
+`MENUITEMTYPE_SELECTABLE` row carrying `MENUITEMFLAG_SELECTABLE_OPENSDIALOG` and
+`(void *)&g_ImperfectSettingsMenuDialog`). It is for settings this fork *replaces*
+rather than adds, so ours are not found by scrolling Dab's list.
+
+It is a page of the same kind as the rest: a `struct menudialogdef` with a
+`MENUITEMTYPE_END`-terminated item table, and its `next` dialog pointer set to
+`&g_ExtendedDabsModMenuDialog` - the chain head of Dab's pages ("the one Extended
+Options opens" says so at its definition). So the page turn carries on from ours
+into Dab's, and nothing else in the tree had to change: `g_ExtendedDabsModMenuDialog`
+is referenced by exactly one menu row.
+
+**Only two rows have moved over**: Sprint and Combat Roll. The migration is one row
+at a time, when something else touches a setting. Reshuffling every table in
+`optionsmenu.c` beside a gameplay change is how a bind row ended up naming the
+wrong setting and crashed Windows on a fresh install (crash-reports.md, "The Mod
+Options bind rows name their binds, not their places in a table").
+
+Rows are *moved*, not copied: a handler must live in one page. Item text is
+`MENUITEMFLAG_LITERAL_TEXT`, so there is no text-bank work and the rows are English
+until the language packs are redone, which is how new copy already behaves.
+
+The two defaults that came with the page are fresh-install defaults like entry 74's:
+`sprint` on, `roll` `MODROLL_EVERYONE` (`modoptions.c`'s positional defaults list -
+**at the end of it**, never inserted into the middle).

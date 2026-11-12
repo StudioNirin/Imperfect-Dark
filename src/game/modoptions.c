@@ -41,7 +41,7 @@
 struct modoptions g_ModOptions = {
 	0,                        // jumpheight: off, so a fresh install plays like the game people remember
 	MODWHO_EVERYONE,          // jumpwho
-	MODROLL_OFF,              // roll
+	MODROLL_EVERYONE,         // roll: the dodge is this fork's own control now, so a new install has it
 	false,                    // melee
 	false,                    // flinch
 	SPAWNWEAPON_OFF,          // spawnweapon
@@ -98,7 +98,7 @@ struct modoptions g_ModOptions = {
 	false,                    // nofog: every level's own fog
 	0,                        // glassseethrough: stock's windows, opaque past their fade distance
 	true,                     // decalclip: on for everyone (user, 2026-09-26); off is stock's whole marks
-	false,                    // sprint: half again the speed is a balance change, so a choice a player takes
+	true,                     // sprint: on for a new install, since the gun coming down is the whole rule
 	MODFLASHLIGHT_ON,         // flashlighting: stock's flashes everywhere
 	false,                    // sitinchairs: stock's chairs are furniture
 	false,                    // muzzleflashlight: on GoldenEye's levels, off until it is lit per pixel (user, F3 20260929-045427)
