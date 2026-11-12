@@ -37,6 +37,7 @@ or a section heading, don't read one whole.
 - [fojo-collab.md](CLAUDE-notes/fojo-collab.md) — The Friends of Joanna collab tree, `../pd-fojo-monorepo-collab/`
 - [performance.md](CLAUDE-notes/performance.md) — Measuring a crowded match, `--rng-seed`/`--fixed-step`/`--exit-frame`, where the frame goes; above 60 FPS: `--fixed-fps N` and the shapes the framerate fixes took
 - [third-person.md](CLAUDE-notes/third-person.md) — The third person camera, and why melee, rockets and beams came out of it; Sitting in the Institute's chairs
+- [sprint.md](CLAUDE-notes/sprint.md) — Sprint: the speed made of the ROM's own run-up, the bit that was free, and crouch onto pad B
 - [dodge.md](CLAUDE-notes/dodge.md) — The dodge: a crouch button's double tap in place of the roll button; the raw input and the look basis and not the eased speeds; why the back arc's cosine is not on 135°; why the back is a hop and the rest are rolls; why a first person player never sees their own dodge; and why `Mod.XblaMeshes` shifts a dodge's animation variant through the male guard head list and the RNG, which is the only thing it changes about a dodge
 - [settings.md](CLAUDE-notes/settings.md) — Defaults and the Settings Preset; the five defaults that moved on 2026-11-11, `PLAYER_EXT_CFG_DEFAULT` as one macro for four players, a language default written as a code, and why a default reaches only a pd.ini with no line for it
 - [weapons.md](CLAUDE-notes/weapons.md) — Weapon numbers, `flags2`, converting a `weaponnum` comparison

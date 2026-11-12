@@ -2583,6 +2583,17 @@ void bwalkApplyMoveData(struct movedata *data)
 		g_Vars.currentplayer->speedforwards *= 1.08f;
 		g_Vars.currentplayer->speedforwards *= g_Vars.currentplayer->speedboost;
 
+		// Sprint, on top of whatever the ROM's own boost had reached. It takes
+		// the sideways too, which the ROM's boost does not: a run that only went
+		// forward would be a run you lose the moment you turn, and the sprint's
+		// whole point is the distance. Both take the same factor, so the sprint
+		// adds the same ground in every direction - the ROM's own 1.08 forward
+		// lean is left exactly as it was.
+		if (g_Vars.currentplayer->sprinting) {
+			g_Vars.currentplayer->speedforwards *= SPRINT_SPEED_MULT;
+			g_Vars.currentplayer->speedsideways *= SPRINT_SPEED_MULT;
+		}
+
 		if ((data->canlookahead == false && data->digitalstepforward == false) ||
 				bmoveGetCrouchPos() != CROUCHPOS_STAND) {
 			g_Vars.currentplayer->speedmaxtime60 = 0;

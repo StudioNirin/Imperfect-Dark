@@ -5358,6 +5358,12 @@ enum weaponnum {
 #define BUTTON_SPECTATE       CONT_0400
 #define BUTTON_FIRELEFT       CONT_0040 // Akimbo Triggers: the left hand's own trigger
 #define BUTTON_FIREMODELEFT   CONT_0080 // Akimbo Triggers: the left hand's own fire mode toggle
+// Sprint's toggle. The slot has been in the extended set since it was cut and
+// nothing ever bound to it, which is why it is free; the roll's CONT_0800 is
+// not, because every config written since the roll exists has a line for it,
+// and a bit that means one thing to a save and another to the code is how the
+// Mod Options bind rows crashed.
+#define BUTTON_SPRINT         CONT_0100
 
 #define BUTTON_UI_ACCEPT      CONT_0010
 #define BUTTON_UI_CANCEL      CONT_0020
@@ -5368,6 +5374,12 @@ enum weaponnum {
 #define HUDCENTER_NONE 0   // don't center HUD
 #define HUDCENTER_NORMAL 1 // center HUD in 4:3 window
 #define HUDCENTER_WIDE 2   // center HUD in 16:9 window
+
+// Sprint: half again the top running speed, and the 60ths after the run ends -
+// on its own, on a crouch, or on a trigger pull - during which the hands are
+// still coming down and no gun fires.
+#define SPRINT_SPEED_MULT  1.5f
+#define SPRINT_RECOVERY60  30
 
 #define CROUCHMODE_HOLD 0   // hold the crouch buttons to keep crouching
 #define CROUCHMODE_ANALOG 1 // analog crouch like on n64

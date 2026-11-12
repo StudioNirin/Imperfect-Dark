@@ -3047,6 +3047,11 @@ struct player {
 	u32 crouchtapbutton;
 	s32 crouchtap60;
 	bool dodgesettlepending;
+	// The sprint toggle, and the frame its weapon lockout ends (0: hands free).
+	// Both are prediction fields (netpredict.c): a rollback replay that came out
+	// of the sprint holding half of it moves the player on its own.
+	bool sprinting;
+	u32 sprintweapon60;
 	// Where the camera ended up on the last frame it was behind a living
 	// player. Death stops the camera here and turns it to watch the body fall,
 	// so the two are read together: a distance of 0 means there is no frozen

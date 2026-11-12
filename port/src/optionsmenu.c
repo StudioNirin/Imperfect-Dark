@@ -3587,6 +3587,25 @@ static MenuItemHandlerResult menuhandlerModAkimboTriggers(s32 operation, struct 
 }
 
 /**
+ * Sprint: half again the running speed while it is on, no shooting, and a beat
+ * after it ends before the gun is up. The button is the left stick click on a
+ * controller and LShift on a keyboard, which is where crouch used to be: crouch
+ * went to B so the click could be this.
+ */
+static MenuItemHandlerResult menuhandlerModSprint(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GET:
+		return g_ModOptions.sprint;
+	case MENUOP_SET:
+		g_ModOptions.sprint = data->checkbox.value;
+		break;
+	}
+
+	return 0;
+}
+
+/**
  * Whether an explosion shakes the screen. The Video page's slider is how
  * much; this is whether.
  */
@@ -5433,6 +5452,14 @@ struct menuitem g_ExtendedDabsModCameraMenuItems[] = {
 		(uintptr_t)"Gun Sway With Tilt",
 		0,
 		menuhandlerModGunSway,
+	},
+	{
+		MENUITEMTYPE_CHECKBOX,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Sprint",
+		0,
+		menuhandlerModSprint,
 	},
 	{
 		MENUITEMTYPE_CHECKBOX,

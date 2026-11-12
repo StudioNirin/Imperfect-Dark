@@ -788,6 +788,34 @@ static s32 bmoveUseDownStep(s32 samplenum, s32 numsamples)
  * doorway would go where the last second was taking them rather than where they
  * are pointing now. A dodge is the opposite of a moment.
  */
+/**
+ * Sprint's price: no gun while the run is going, and SPRINT_RECOVERY60 after it
+ * ends for any reason - the trigger pull that ends it included. That pull is
+ * read here rather than where the shot is fired because it has two jobs: it is
+ * the end of the run, and it is not a shot. The first shot after a sprint is the
+ * next pull, not the one that stopped it, which is what makes a sprint into a
+ * fighting distance rather than a way to close a corridor gunning.
+ */
+static void bmoveSprintFireGate(struct movedata *movedata)
+{
+	struct player *player = g_Vars.currentplayer;
+
+	if (player->sprintweapon60 != 0 && (s32)(player->sprintweapon60 - g_Vars.lvframe60) <= 0) {
+		player->sprintweapon60 = 0;
+	}
+
+	if (!player->sprinting && player->sprintweapon60 == 0) {
+		return;
+	}
+
+	if (movedata->triggeron || movedata->fireleft) {
+		player->sprinting = false;
+		player->sprintweapon60 = g_Vars.lvframe60 + SPRINT_RECOVERY60;
+		movedata->triggeron = false;
+		movedata->fireleft = false;
+	}
+}
+
 void bmoveDodgeTap(u32 crouchbutton, struct movedata *movedata)
 {
 	struct player *player = g_Vars.currentplayer;
@@ -1968,6 +1996,22 @@ void bmoveProcessInput(bool allowc1x, bool allowc1y, bool allowc1buttons, bool i
 
 							bmoveDodgeTap(pressed & DODGE_CROUCH_BUTTONS, &movedata);
 
+							// Sprint is a press for the same reason the two toggles
+							// beside it are: one that reads a hold flips itself on
+							// every sample the button is down.
+							if (modIsSprintOn() && (pressed & BUTTON_SPRINT)) {
+								g_Vars.currentplayer->sprinting = !g_Vars.currentplayer->sprinting;
+							}
+
+							// A crouch ends the run. Crouching is how you go under
+							// something and running is how you do not, and one of the
+							// two has to win the frame they are both asked for. The
+							// dodge comes off the same tap, so a sprint that turns
+							// into a roll is a sprint that ended.
+							if (pressed & DODGE_CROUCH_BUTTONS) {
+								g_Vars.currentplayer->sprinting = false;
+							}
+
 							// Spectator is taken here for the same reason as the
 							// other two: it is a press and not a hold.
 							if (pressed & BUTTON_SPECTATE) {
@@ -2352,6 +2396,7 @@ void bmoveProcessInput(bool allowc1x, bool allowc1y, bool allowc1buttons, bool i
 		playerUpdateZoom();
 	}
 
+	bmoveSprintFireGate(&movedata);
 	bmoveApplyMoveData(&movedata);
 
 	// Speed boost

@@ -418,6 +418,7 @@ struct modoptions {
 	s32 nofog;       // Disable Fog: no level is fogged, and each is drawn out to its far side
 	s32 glassseethrough; // percent of a distant window's see-through kept: 0 is stock's fade to opaque
 	s32 decalclip;   // Clip Decals at Edges: a wall hit is cut to the surface it lies on, none of it over a drop
+	s32 sprint;      // Sprint: half again the speed, no shooting, and a beat to bring the gun back
 	s32 flashlighting; // MODFLASHLIGHT_*: whether gunfire, explosions and sparks light up the rooms round them
 	s32 sitinchairs; // the use button on a Carrington Institute chair sits the player in it (sitchair.c)
 	s32 muzzleflashlight; // on GoldenEye's levels a muzzle flash lights the rooms round it too (always on Perfect Dark's)
@@ -449,6 +450,7 @@ s32 modGetGuardWeapons(void);
 bool modIsAkimboForPlayers(void);
 bool modIsAkimboForGuards(void);
 bool modIsAkimboTriggersOn(void);
+bool modIsSprintOn(void);
 bool modIsExplosionShakeOn(void);
 bool modIsCodAimingOn(void);
 bool modIsCodAimLockOn(void);

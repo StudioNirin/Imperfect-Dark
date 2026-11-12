@@ -591,6 +591,7 @@ PD_CONSTRUCTOR static void gameConfigInit(void)
 	configRegisterInt("Mod.GuardSpawnSpeed", &g_ModOptions.guardspawnspeed, MODALARM_SPEED_MIN, MODALARM_SPEED_MAX);
 	configRegisterInt("Mod.GuardWeapons", &g_ModOptions.guardweapons, MODALARM_WEAPONS_STAGE, MODALARM_WEAPONS_RANDOM);
 	configRegisterInt("Mod.Akimbo", &g_ModOptions.akimbo, MODAKIMBO_OFF, MODAKIMBO_MAX);
+	configRegisterInt("Mod.Sprint", &g_ModOptions.sprint, 0, 1);
 	configRegisterInt("Mod.AkimboTriggers", &g_ModOptions.akimbotriggers, 0, 1);
 	configRegisterInt("Mod.ExplosionShake", &g_ModOptions.explosionshake, 0, 1);
 	configRegisterInt("Mod.TranquilizerEffect", &g_ModOptions.tranqeffect, 0, 1);

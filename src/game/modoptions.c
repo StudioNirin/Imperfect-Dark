@@ -98,6 +98,7 @@ struct modoptions g_ModOptions = {
 	false,                    // nofog: every level's own fog
 	0,                        // glassseethrough: stock's windows, opaque past their fade distance
 	true,                     // decalclip: on for everyone (user, 2026-09-26); off is stock's whole marks
+	false,                    // sprint: half again the speed is a balance change, so a choice a player takes
 	MODFLASHLIGHT_ON,         // flashlighting: stock's flashes everywhere
 	false,                    // sitinchairs: stock's chairs are furniture
 	false,                    // muzzleflashlight: on GoldenEye's levels, off until it is lit per pixel (user, F3 20260929-045427)
@@ -447,6 +448,11 @@ static s32 modOwn(const s32 *field)
 bool modIsAkimboTriggersOn(void)
 {
 	return modOwn(&g_ModOptions.akimbotriggers) != 0;
+}
+
+bool modIsSprintOn(void)
+{
+	return modOwn(&g_ModOptions.sprint) != 0;
 }
 
 /**

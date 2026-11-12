@@ -218,6 +218,7 @@ static const struct netpredfield s_Fields[] = {
 	// replayed twice would otherwise come out of it holding a half-tap. The
 	// stance its ending settles into is crouchpos, which is above.
 	PF(crouchtapbutton), PF(crouchtap60), PF(dodgesettlepending),
+	PF(sprinting), PF(sprintweapon60),
 	// the aim: the mouse's crosshair turns the view past the edge while
 	// aiming, and the zoom scales every turn (bmoveProcessInput)
 	PF(swivelpos), PF(insightaimmode), PF(zoomintime), PF(zoomintimemax), PF(zoominfovy),

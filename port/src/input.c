@@ -240,8 +240,12 @@ void inputSetDefaultKeyBinds(s32 cidx, s32 n64mode)
 		{ CK_STICK_XPOS,    SDL_SCANCODE_RIGHT,  0                   },
 		{ CK_STICK_YNEG,    SDL_SCANCODE_DOWN,   0                   },
 		{ CK_STICK_YPOS,    SDL_SCANCODE_UP,     0                   },
-		{ CK_4000,          SDL_SCANCODE_LSHIFT, 0                   },
+		// Sprint took LShift, so half crouch moved to the key the combat roll
+		// vacated - which is free in the code, since nothing has read the roll's
+		// slot since the dodge came onto the crouch button's second tap.
+		{ CK_4000,          SDL_SCANCODE_C,      0                   },
 		{ CK_2000,          SDL_SCANCODE_LCTRL,  0                   },
+		{ CK_0100,          SDL_SCANCODE_LSHIFT, 0                   },
 		{ CK_0400,          0,                   0                   },
 		{ CK_1000,          SDL_SCANCODE_V,      0                   },
 		{ CK_ACCEPT,        SDL_SCANCODE_RETURN, SDL_SCANCODE_E      },
@@ -252,7 +256,9 @@ void inputSetDefaultKeyBinds(s32 cidx, s32 n64mode)
 		{ CK_A,      SDL_CONTROLLER_BUTTON_A             },
 		{ CK_X,      SDL_CONTROLLER_BUTTON_X             },
 		{ CK_Y,      SDL_CONTROLLER_BUTTON_Y             },
-		{ CK_DPAD_L, SDL_CONTROLLER_BUTTON_B,            },
+		// (its pad B went to crouch; D-pad left, via L_CBUTTONS, is the pad's
+		// weapon back now)
+		{ CK_DPAD_L, SDL_CONTROLLER_BUTTON_DPAD_LEFT,    },
 		{ CK_DPAD_D, SDL_CONTROLLER_BUTTON_LEFTSHOULDER  },
 		{ CK_LTRIG,  SDL_CONTROLLER_BUTTON_RIGHTSHOULDER },
 		{ CK_RTRIG,  VK_JOY1_LTRIG - VK_JOY1_BEGIN       },
@@ -264,7 +270,14 @@ void inputSetDefaultKeyBinds(s32 cidx, s32 n64mode)
 		{ CK_C_L,    SDL_CONTROLLER_BUTTON_DPAD_LEFT     },
 		{ CK_ACCEPT, SDL_CONTROLLER_BUTTON_A             },
 		{ CK_CANCEL, SDL_CONTROLLER_BUTTON_B             },
-		{ CK_8000,   SDL_CONTROLLER_BUTTON_LEFTSTICK     },
+		// Crouch, and with it the dodge, came off the left stick click and onto
+		// B, which frees the click for sprint. B's other job is menu Cancel, and
+		// the two live in different places: B cancels in a menu and crouches in a
+		// level. Weapon back loses its default B because a crouch and a weapon
+		// switch cannot share a button in the same context, and it keeps D-pad
+		// left, which every config has had it on since.
+		{ CK_8000,   SDL_CONTROLLER_BUTTON_B             },
+		{ CK_0100,   SDL_CONTROLLER_BUTTON_LEFTSTICK     },
 		// The right stick click is free again now that nothing is bound to it by
 		// default, but the toggle stays where every config has had it since.
 		{ CK_1000,   SDL_CONTROLLER_BUTTON_BACK          },
