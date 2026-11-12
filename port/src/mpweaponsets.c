@@ -549,6 +549,38 @@ void mpWeaponSetsSelfTest(void)
 			mpWeaponSetsTestCheck("a slot moved off it is dirty",
 					mpWeaponSetsIsDirty(first + 1));
 
+						g_MpWeaponSetNum = first + 1;
+
+			mpWeaponSetsTestCheck("the six slots take input for a saved set",
+					!mpWeaponSlotsAreLocked());
+
+			g_MpWeaponSetNum = 0;
+
+			mpWeaponSetsTestCheck("and not for one of the game's sets",
+					mpWeaponSlotsAreLocked());
+
+			g_MpWeaponSetNum = WEAPONSET_CUSTOM;
+
+			mpWeaponSetsTestCheck("and do for Custom", !mpWeaponSlotsAreLocked());
+
+			for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+				g_MpSetup.weapons[i] = (u8) ((i + 3) % 6);
+			}
+
+			mpWeaponSetsUpdate(1, g_MpSetup.weapons);
+
+			bool kept = true;
+
+			for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+				kept = kept && g_MpWeaponSets[first + 1].slots[i]
+					== g_MpWeapons[g_MpSetup.weapons[i]].weaponnum;
+			}
+
+			mpWeaponSetsTestCheck("saving a set that has its name already keeps it",
+					s_Num == 2 && kept && mpWeaponSetsGet(1) != NULL
+					&& strcmp(mpWeaponSetsGet(1)->name, "UI Set") == 0
+					&& !mpWeaponSetsIsDirty(first + 1));
+
 			mpWeaponSetsTestCheck("the list owns the set and no empty row",
 					mpWeaponSetsOwns(first + 1) && !mpWeaponSetsOwns(first + MPWEAPONSET_MAXSAVED - 1));
 		}
@@ -619,4 +651,39 @@ bool mpWeaponSetsIsDirty(s32 listindex)
 	}
 
 	return false;
+}
+
+/**
+ * A saved set's guns, written again where they lie.
+ *
+ * This is what Save Set means while one of the player's own sets is the one on
+ * screen and its slots have moved: the set already has a name, and a second
+ * entry with the same name and different guns is not a thing a player asked
+ * for. The name is left alone, so a set is renamed by saving it as Custom
+ * under a new name.
+ */
+bool mpWeaponSetsUpdate(s32 index, const u8 *optionslots)
+{
+	struct mpweaponsetentry *entry;
+
+	if (index < 0 || index >= s_Num) {
+		return false;
+	}
+
+	entry = &s_Sets[index];
+
+	for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+		s32 option = optionslots[i];
+
+		entry->slots[i] = (option >= 0 && option < NUM_MPWEAPONS)
+			? g_MpWeapons[option].weaponnum : WEAPON_NONE;
+	}
+
+	if (mpWeaponSetsWriteFile() < 0) {
+		return false;
+	}
+
+	mpWeaponSetsPutRow(index);
+
+	return true;
 }

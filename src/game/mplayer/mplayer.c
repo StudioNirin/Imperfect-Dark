@@ -1,4 +1,7 @@
 #include <ultra64.h>
+#ifndef PLATFORM_N64
+#include "mpweaponsets.h"
+#endif
 #include <stddef.h>
 #include "constants.h"
 #ifndef PLATFORM_N64
@@ -1862,6 +1865,31 @@ void func0f1895e8(void)
 s32 mpGetWeaponSet(void)
 {
 	return mpCountWeaponSetThing(g_MpWeaponSetNum);
+}
+
+/**
+ * Whether the six weapon slots of the setup page take input.
+ *
+ * The slots are the setup itself, so the game only lets them be edited while
+ * the set being shown is Custom - a named set's rows would otherwise be a
+ * picture of something that the next mpApplyWeaponSet() undoes. A set the
+ * player saved by name is theirs, and editing one of those is the whole point
+ * of saving it, so those take input too; what they are showing stays named,
+ * and setup.c is what says whether it has been changed since it was saved.
+ */
+bool mpWeaponSlotsAreLocked(void)
+{
+	if (mpGetWeaponSet() == func0f189088()) {
+		return false;
+	}
+
+#ifndef PLATFORM_N64
+	if (mpWeaponSetsOwns(g_MpWeaponSetNum)) {
+		return false;
+	}
+#endif
+
+	return true;
 }
 
 bool mpIsPaused(void)

@@ -135,12 +135,34 @@ the table index of the set being looked at (`g_MpWeaponSetNum`, which the
   or teaching those two walkers to rank this block first while leaving the table
   where it is. The second is the one to do; it must keep the predicate's
   `!= WEAPON_DISABLED` quirk that `func0f188f9c` carries an `@bug?` comment on.
-- A saved set's row is editable today - nothing disables
-  `menuhandlerMpWeaponSlot` - and `func0f18913c()` (one caller, `mplayer.c:4974`)
-  is what turns a slot edit into Custom or back into the set the six guns still
-  match. So a set that seems locked in play is a different bug from the UI, and
-  `func0f1895e8()` re-applying the current set on a feature unlock
-  (`challenge.c:233`) is where to look first.
+## Why the six slots are locked, and what unlocks them
+
+The six weapon rows are not disabled by their handler - `menuhandlerMpWeaponSlot`
+has no disabled check, which is what makes this hard to find from the setup
+side. **Menu.c routes their input away**: the rows carry
+`MENUITEMFLAG_MPWEAPONSLOT`, and `menu.c`'s per-row input choice sends them a
+`spd8` (an empty input set, so a click lands nowhere) for as long as the set
+being shown is not Custom - `mpGetWeaponSet() != func0f189088()`, and
+`func0f189088()` is `mpCountWeaponSetThing(MP_NUM_WEAPONSETS + 2)`, the offered
+index of `WEAPONSET_CUSTOM`. A named set's slots are a picture of what
+`mpApplyWeaponSet()` will put back, so the game refuses the edit rather than
+letting one be silently undone.
+
+The rule is `mpWeaponSlotsAreLocked()` (`mplayer.c`, beside the function it
+compares against), and it lets the player's own sets through as well as Custom:
+editing a set they saved is the point of saving it. The dropdown keeps naming
+the set - it is not switched to Custom on the first edit, which would throw the
+name away for the sake of an edit - and `mpWeaponSetsIsDirty()` is what says
+whether what is on screen still is that set, which the Save Set row shows by
+greying out. `--test-mpweaponsets` pins all three cases: a saved set unlocks
+them, one of the game's sets does not, Custom does.
+
+So Save Set means two things, and which one it is depends on what is on screen:
+for Custom it asks for a name and appends; for the player's own set with its
+slots moved it writes the guns **back into that set** (`mpWeaponSetsUpdate()`)
+and never asks, because the name is already chosen and a second entry with the
+same name and other guns is not what the button pressing means. Renaming is
+still Custom's business: pick the set, and save as Custom under the new name.
 - The name on the wire, and `Custom (my pistols)` in the client's rules page.
 - `mpsetups.bin` has an export/import pair (`mpsetups-ext.bin`); the weapon
   sets' file has no such thing, and sharing sets between machines means copying

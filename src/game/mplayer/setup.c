@@ -1906,6 +1906,16 @@ static MenuItemHandlerResult menuhandlerMpSaveSetRow(s32 operation, struct menui
 	}
 
 	if (operation == MENUOP_SET) {
+		if (mpWeaponSetsOwns(g_MpWeaponSetNum)) {
+			// The set on screen is one of the player's own and its slots have
+			// moved (the row is disabled when they have not), so it is written
+			// back where it is: the name is already chosen, and a second entry
+			// with that name and other guns is not what pressing this means.
+			mpWeaponSetsUpdate(g_MpWeaponSetNum - mpWeaponSetsFirst(), g_MpSetup.weapons);
+
+			return 0;
+		}
+
 		// as the Save Settings row does: the page is put down rather than
 		// stacked on, since a room's setup pages already sit one deeper and
 		// menu.c drops a push past its cap without a word (netplay.md)

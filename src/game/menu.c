@@ -5337,7 +5337,7 @@ void dialogTick(struct menudialog *dialog, struct menuinputs *inputs, u32 tickfl
 
 				if (mpIsPlayerLockedOut(g_MpPlayerNum) && (item->flags & MENUITEMFLAG_LOCKABLEMINOR)) {
 					inputsptr = &spd8;
-				} else if ((item->flags & MENUITEMFLAG_MPWEAPONSLOT) && mpGetWeaponSet() != func0f189088()) {
+				} else if ((item->flags & MENUITEMFLAG_MPWEAPONSLOT) && mpWeaponSlotsAreLocked()) {
 					inputsptr = &spd8;
 				} else if (g_MenuData.root == MENUROOT_12) {
 					inputsptr = &spd8;

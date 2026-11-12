@@ -33,6 +33,8 @@ const struct mpweaponsetentry *mpWeaponSetsGet(s32 index);
 // The name's own, or -1 for a name nothing will show. slots as g_MpSetup.weapons
 s32 mpWeaponSetsSave(const char *name, const u8 *optionslots);
 bool mpWeaponSetsDelete(s32 index);
+// The set's guns written again under the name it already has
+bool mpWeaponSetsUpdate(s32 index, const u8 *optionslots);
 // Where the saved sets sit in the Combat Simulator's list, -1 for none
 s32 mpWeaponSetsFirst(void);
 // Whether the game's own list's index is one of the saved sets
