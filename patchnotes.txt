@@ -41,7 +41,7 @@
 # mod-base 69
 
 notes 80 2026-11-12
-Custom Weapon Sets: on the weapons page - the same page in an online room and in the Combat Simulator - "Save Custom Set" keeps the six slots you chose under a name you type, and "Saved Sets" lists the ones you saved so picking one puts those six guns back. Saved sets show in the Set list beside the stock ones, by the name you gave them. A set keeps the guns themselves rather than the page's row numbers, so a set made with a mod mounted still means those guns with a different mod loaded. They live in mpweaponsets.bin in the save folder.
+Custom Weapon Sets: on the weapons page - the same page in an online room and in the Combat Simulator - "Save Set" keeps the six guns you chose under a name you type, and the set then shows in the Set list as "CX: name" so it can be picked again like any other set. "Remove Set" deletes the one you are looking at, and keeps the guns in the slots. A saved set stores the guns themselves rather than the page's row numbers, so a set made with a mod mounted still means those guns with a different mod loaded. They live in mpweaponsets.bin in the save folder.
 notes 79 2026-11-12
 Start Armed moves out of Room Rules and onto the Weapons page, under Set and above GoldenEye Cheat Guns. It reads the same in an online room and in the Combat Simulator, since both open the same Weapons page. Start Armed For stays in Room Rules.
 notes 78 2026-11-12

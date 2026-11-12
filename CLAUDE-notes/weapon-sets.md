@@ -97,10 +97,50 @@ Rooms already refuse a joiner on `NETREFUSE_PROTOCOL` and `NETREFUSE_BUILD`, so
 appending a field to a message cannot split a room that could otherwise have
 formed; `NET_PROTOCOL_VERSION` still goes up with it.
 
+## What the page shows
+
+`Save Set` and `Remove Set` are rows of the weapons page, and both are keyed off
+the table index of the set being looked at (`g_MpWeaponSetNum`, which the
+`Set:` dropdown's `GETSELECTEDINDEX` reaches through `mpGetWeaponSet()` as an
+*offered* index - the two are not the same number):
+
+- Save Set is there when the current set is Custom or one of the player's own,
+  and is **disabled** while the slots still match a saved set
+  (`mpWeaponSetsIsDirty()`) - picking a set and leaving it alone has nothing to
+  save again. Pressing it puts down a name page (`menuPopDialog()` then
+  `menuPushDialog()`, as Save Settings does) rather than stacking one, since a
+  room's setup pages already sit a layer deeper (netplay.md, the
+  `menuPushDialog()` cap that is silent when it refuses).
+- Remove Set is there only for the player's own sets, and leaves the six slots
+  holding those guns with the page back on `WEAPONSET_CUSTOM`: the name goes,
+  the loadout stays, and Save Set comes back to give them another.
+- The `CX: ` mark is on the row only. `struct mpweaponsetentry.name` keeps what
+  the player typed - that is what a wire field and a management list want - and
+  the prefix is composed per row into `s_Shown[]` because `langAddPortText()`
+  keeps the pointer it is handed, so one shared buffer would leave the whole
+  block showing whichever name was written last. Deleting re-puts **every** row:
+  the sets above the deleted one move up, and writing only from the deleted
+  index down leaves the rows below showing sets they no longer hold (the gate
+  caught exactly that).
+
 ## Not done
 
-- Deleting a saved set from the menu (the store does it: `mpWeaponSetsDelete()`,
-  and `--test-mpweaponsets` covers the shift-up into the vacated row).
+- Putting the player's sets at the **top** of the Set list. The list's order is
+  the table's order and nothing else: `func0f188f9c()` walks `g_MpWeaponSets`
+  forward counting the offered rows to turn a shown row into a table index, and
+  `mpGetWeaponSet()` counts backwards over the same predicate to go the other
+  way. So "top" means either physically inserting at indices 0-15 - which moves
+  every stock index, and a saved setup keeps the set by number, and
+  `mpSetWeaponSet(0)` is a reset to Pistols, and `g_GeSetsFirst` is recorded -
+  or teaching those two walkers to rank this block first while leaving the table
+  where it is. The second is the one to do; it must keep the predicate's
+  `!= WEAPON_DISABLED` quirk that `func0f188f9c` carries an `@bug?` comment on.
+- A saved set's row is editable today - nothing disables
+  `menuhandlerMpWeaponSlot` - and `func0f18913c()` (one caller, `mplayer.c:4974`)
+  is what turns a slot edit into Custom or back into the set the six guns still
+  match. So a set that seems locked in play is a different bug from the UI, and
+  `func0f1895e8()` re-applying the current set on a feature unlock
+  (`challenge.c:233`) is where to look first.
 - The name on the wire, and `Custom (my pistols)` in the client's rules page.
 - `mpsetups.bin` has an export/import pair (`mpsetups-ext.bin`); the weapon
   sets' file has no such thing, and sharing sets between machines means copying

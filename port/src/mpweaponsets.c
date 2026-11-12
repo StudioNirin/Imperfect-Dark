@@ -37,14 +37,17 @@
 // defined in the Combat Simulator (mplayer.c), like netrules.c and gexplus.c reach it
 extern s32 g_MpWeaponSetNum;
 
-// The weapons page's rows, driven by the self-test below
-extern MenuItemHandlerResult menuhandlerMpSavedSets(s32 operation, struct menuitem *item, union handlerdata *data);
+// The weapons page's save row, driven by the self-test below
 extern MenuItemHandlerResult menuhandlerMpSaveCustomSet(s32 operation, struct menuitem *item, union handlerdata *data);
 
 static struct mpweaponsetentry s_Sets[MPWEAPONSET_MAXSAVED];
 static s32 s_Num;
 // Where this file's block of rows sits in g_MpWeaponSets, -1 while it does not
 static s32 s_First = -1;
+// The names as the list shows them. langAddPortText() keeps the pointer, so
+// each row needs its own store - one buffer reused by every row would leave the
+// whole block showing whatever name was written last.
+static char s_Shown[MPWEAPONSET_MAXSAVED][MPSETUP_MAXNAME + 8];
 
 static void mpWeaponSetsPutRow(s32 index);
 static void mpWeaponSetsDisableAlt(struct mpweaponset *set);
@@ -240,9 +243,10 @@ bool mpWeaponSetsDelete(s32 index)
 		return false;
 	}
 
-	// the set that moved up takes the row the deleted one held, and the row it
-	// vacated goes out of the list
-	for (s32 i = s_Num; i < MPWEAPONSET_MAXSAVED; i++) {
+	// Every row again: the sets above the deleted one moved up a row each, and
+	// the row it vacated goes out of the list. Writing from the deleted index
+	// alone would leave the rows below showing the sets they no longer hold.
+	for (s32 i = 0; i < MPWEAPONSET_MAXSAVED; i++) {
 		mpWeaponSetsPutRow(i);
 	}
 
@@ -309,9 +313,12 @@ static void mpWeaponSetsPutRow(s32 index)
 	// keeps for its not-yet-earned guns.
 	mpWeaponSetsDisableAlt(set);
 
-	// langAddPortText() dedups, so writing the same name back is free. It hands
-	// back 0 only once its 512 strings are gone, which 16 names will not reach
-	set->name = langAddPortText(entry->name);
+	// CX: because these sit in the list among the game's own sets, and a player
+	// picking "Pistols, mine" out of that list has no other way to know the row
+	// is theirs. The store keeps the bare name; only the row carries the mark.
+	// langAddPortText() dedups, so writing the same name back is free.
+	snprintf(s_Shown[index], sizeof(s_Shown[index]), "CX: %s", entry->name);
+	set->name = langAddPortText(s_Shown[index]);
 }
 
 /**
@@ -425,8 +432,8 @@ void mpWeaponSetsSelfTest(void)
 		mpWeaponSetsTestCheck("the set keeps its guns, not the page's rows", guns);
 		char *shown = langGet(g_MpWeaponSets[first].name);
 
-		mpWeaponSetsTestCheck("the row carries the name typed",
-				shown != NULL && strcmp(shown, "My Pistols") == 0);
+		mpWeaponSetsTestCheck("the list marks the set as the player's own",
+				shown != NULL && strcmp(shown, "CX: My Pistols") == 0);
 
 		// Every offered row shows once and the rows held for sets that were
 		// never saved show nowhere: this is what keeps the sets a mod borrows
@@ -448,7 +455,8 @@ void mpWeaponSetsSelfTest(void)
 			if (index < first + s_Num) {
 				seen++;
 				name = mpGetWeaponSetName(i);
-				seenname = seenname || (name != NULL && strcmp(name, "My Pistols") == 0);
+				seenname = seenname
+					|| (name != NULL && strcmp(name, "CX: My Pistols") == 0);
 			} else {
 				emptyseen++;
 			}
@@ -456,7 +464,7 @@ void mpWeaponSetsSelfTest(void)
 
 		mpWeaponSetsTestCheck("the saved set is offered once", seen == 1);
 		mpWeaponSetsTestCheck("the rows held for nothing are not offered", emptyseen == 0);
-		mpWeaponSetsTestCheck("the list names the saved set by the name typed", seenname);
+		mpWeaponSetsTestCheck("the list names the saved set as CX: and by name", seenname);
 
 		mpWeaponSetsLoad();
 		mpWeaponSetsTestCheck("the file reads back the same set",
@@ -471,14 +479,26 @@ void mpWeaponSetsSelfTest(void)
 
 		mpWeaponSetsSave("Second", slots);
 		mpWeaponSetsTestCheck("a second set takes the next row",
-				s_Num == 2 && strcmp(langGet(g_MpWeaponSets[first + 1].name), "Second") == 0);
+				s_Num == 2 && mpWeaponSetsGet(1) != NULL
+				&& strcmp(mpWeaponSetsGet(1)->name, "Second") == 0
+				&& strcmp(langGet(g_MpWeaponSets[first + 1].name), "CX: Second") == 0);
 
 		mpWeaponSetsTestCheck("deleting the first moves the second up",
 				mpWeaponSetsDelete(0) && s_Num == 1
-				&& strcmp(langGet(g_MpWeaponSets[first].name), "Second") == 0);
+				&& strcmp(langGet(g_MpWeaponSets[first].name), "CX: Second") == 0);
 
 		mpWeaponSetsTestCheck("deleting past the last is refused",
 				!mpWeaponSetsDelete(5));
+
+		s32 left = 0;
+
+		for (s32 i = 0; i < func0f189058(false); i++) {
+			if (mpWeaponSetsOwns(func0f188f9c(i))) {
+				left++;
+			}
+		}
+
+		mpWeaponSetsTestCheck("the row the delete vacated is out of the list", left == 1);
 
 		// The weapons page's own rows, driven here the way netlobbysimtest.sh
 		// walks a room's pages: what the player's keyboard row and the saved
@@ -507,9 +527,11 @@ void mpWeaponSetsSelfTest(void)
 				g_MpSetup.weapons[i] = 0;
 			}
 
-			memset(&data, 0, sizeof(data));
-			data.list.value = 1;
-			menuhandlerMpSavedSets(MENUOP_SET, &item, &data);
+			s32 offered = mpWeaponSetsOfferedIndex(1);
+
+			if (offered >= 0) {
+				mpSetWeaponSet(offered);
+			}
 
 			bool back = true;
 
@@ -519,11 +541,16 @@ void mpWeaponSetsSelfTest(void)
 
 			mpWeaponSetsTestCheck("picking the set puts the six slots back", back);
 
-			memset(&data, 0, sizeof(data));
-			menuhandlerMpSavedSets(MENUOP_GETOPTIONCOUNT, &item, &data);
+			mpWeaponSetsTestCheck("a set as picked is not dirty",
+					!mpWeaponSetsIsDirty(first + 1));
 
-			mpWeaponSetsTestCheck("the page's list counts the saved sets",
-					data.list.value == s_Num);
+			g_MpSetup.weapons[0] = (u8) ((picked[0] + 1) % 6);
+
+			mpWeaponSetsTestCheck("a slot moved off it is dirty",
+					mpWeaponSetsIsDirty(first + 1));
+
+			mpWeaponSetsTestCheck("the list owns the set and no empty row",
+					mpWeaponSetsOwns(first + 1) && !mpWeaponSetsOwns(first + MPWEAPONSET_MAXSAVED - 1));
 		}
 
 		remove(fsFullPath(s_Path));
@@ -560,4 +587,36 @@ s32 mpWeaponSetsOfferedIndex(s32 index)
 	}
 
 	return -1;
+}
+
+/**
+ * Whether the six slots have moved away from this set's guns.
+ *
+ * The page's rows are option indices and a set keeps weapon numbers, so the
+ * two are met in the middle the same way mpApplyWeaponSet() meets them. This
+ * is what a "Save" row asks before greying itself out: a set picked and left
+ * alone has nothing to save again.
+ */
+bool mpWeaponSetsIsDirty(s32 listindex)
+{
+	const struct mpweaponsetentry *entry;
+	s32 at = listindex - s_First;
+
+	if (s_First < 0 || at < 0 || at >= s_Num) {
+		return false;
+	}
+
+	entry = &s_Sets[at];
+
+	for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+		s32 option = g_MpSetup.weapons[i];
+		u8 gun = (option >= 0 && option < NUM_MPWEAPONS)
+			? g_MpWeapons[option].weaponnum : WEAPON_NONE;
+
+		if (gun != entry->slots[i]) {
+			return true;
+		}
+	}
+
+	return false;
 }

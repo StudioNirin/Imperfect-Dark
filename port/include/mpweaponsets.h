@@ -39,6 +39,8 @@ s32 mpWeaponSetsFirst(void);
 bool mpWeaponSetsOwns(s32 listindex);
 // The set's place in the list the dropdown shows, or -1
 s32 mpWeaponSetsOfferedIndex(s32 index);
+// Whether the page's six slots have moved away from this set's guns
+bool mpWeaponSetsIsDirty(s32 listindex);
 // --test-mpweaponsets: a scratch file of our own, and what the store has to
 // get right (tools/ci/mpweaponsetstest.sh)
 void mpWeaponSetsTestFile(void);

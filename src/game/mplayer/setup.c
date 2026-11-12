@@ -38,6 +38,9 @@
 #include "input.h"
 #include "mpsetups.h"
 #include "mpweaponsets.h"
+
+// defined in the Combat Simulator (mplayer.c), as netrules.c reaches it
+extern s32 g_MpWeaponSetNum;
 #include "game/modoptions.h"
 
 struct menuitem g_MpCharacterMenuItems[];
@@ -1852,41 +1855,6 @@ MenuItemHandlerResult menuhandlerMpStartArmed(s32 operation, struct menuitem *it
 
 
 /**
- * The weapon sets this machine saved by name, as a page of its own.
- *
- * Picking one puts its guns in the six slots: the set's index is chosen and
- * mpApplyWeaponSet() does the rest, which is the same thing a stock set does
- * and why nothing here writes g_MpSetup.weapons itself.
- */
-MenuItemHandlerResult menuhandlerMpSavedSets(s32 operation, struct menuitem *item, union handlerdata *data)
-{
-	switch (operation) {
-	case MENUOP_GETOPTIONCOUNT:
-		data->list.value = mpWeaponSetsNum();
-		break;
-	case MENUOP_GETOPTIONTEXT: {
-		const struct mpweaponsetentry *entry = mpWeaponSetsGet(data->list.value);
-
-		return (uintptr_t) (entry != NULL ? entry->name : "");
-	}
-	case MENUOP_SET: {
-		s32 offered = mpWeaponSetsOfferedIndex(data->list.value);
-
-		if (offered >= 0) {
-			mpSetWeaponSet(offered);
-		}
-
-		break;
-	}
-	}
-
-	return 0;
-}
-
-// The page below, declared here because its row is written above it
-extern struct menudialogdef g_MpSavedSetsMenuDialog;
-
-/**
  * "Save Custom Set": the six slots as they stand, under a name typed here.
  *
  * The store keeps the guns those rows are showing rather than the rows
@@ -1911,49 +1879,91 @@ MenuItemHandlerResult menuhandlerMpSaveCustomSet(s32 operation, struct menuitem 
 	return 0;
 }
 
-static MenuItemHandlerResult menuhandlerMpSavedSetsPage(s32 operation, struct menuitem *item, union handlerdata *data)
+// The name page below, declared here because its rows are written above it
+extern struct menudialogdef g_MpSaveWeaponSetNameMenuDialog;
+
+/**
+ * Whether the slots are a set this player could save, or delete.
+ *
+ * Custom always is. One of the player's own sets is, until a slot moves away
+ * from it - which is also the difference between a Save row that does
+ * something and one that writes the same set out again, so that row is
+ * disabled rather than hidden while the set stands as it was saved.
+ */
+static bool mpSaveWeaponSetRowShown(void)
 {
+	return g_MpWeaponSetNum == WEAPONSET_CUSTOM || mpWeaponSetsOwns(g_MpWeaponSetNum);
+}
+
+static MenuItemHandlerResult menuhandlerMpSaveSetRow(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_CHECKHIDDEN) {
+		return !mpSaveWeaponSetRowShown();
+	}
+
+	if (operation == MENUOP_CHECKDISABLED) {
+		return mpWeaponSetsOwns(g_MpWeaponSetNum) && !mpWeaponSetsIsDirty(g_MpWeaponSetNum);
+	}
+
 	if (operation == MENUOP_SET) {
-		menuPushDialog(&g_MpSavedSetsMenuDialog);
+		// as the Save Settings row does: the page is put down rather than
+		// stacked on, since a room's setup pages already sit one deeper and
+		// menu.c drops a push past its cap without a word (netplay.md)
+		menuPopDialog();
+		menuPushDialog(&g_MpSaveWeaponSetNameMenuDialog);
 	}
 
 	return 0;
 }
 
-struct menuitem g_MpSavedSetsMenuItems[] = {
-	{
-		MENUITEMTYPE_LIST,
-		0,
-		0,
-		0x00000078,
-		0x00000042,
-		menuhandlerMpSavedSets,
-	},
-	{
-		MENUITEMTYPE_SEPARATOR,
-		0,
-		0,
-		0,
-		0,
-		NULL,
-	},
+static MenuItemHandlerResult menuhandlerMpRemoveSetRow(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_CHECKHIDDEN) {
+		return !mpWeaponSetsOwns(g_MpWeaponSetNum);
+	}
+
+	if (operation == MENUOP_SET) {
+		s32 index = g_MpWeaponSetNum - mpWeaponSetsFirst();
+
+		if (mpWeaponSetsDelete(index)) {
+			// The guns stay in the six slots and the name goes, which is what
+			// a delete of the set being looked at has to mean: the page says
+			// Custom, and Save Set comes back to give them another name.
+			g_MpWeaponSetNum = WEAPONSET_CUSTOM;
+		} else {
+			sysLogPrintf(LOG_NOTE, "menu: the weapon set %d was not there to delete", index);
+		}
+	}
+
+	return 0;
+}
+
+struct menuitem g_MpSaveWeaponSetNameMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_LESSLEFTPADDING | MENUITEMFLAG_SMALLFONT,
-		(uintptr_t)"Pick one to put its guns in the six slots\n",
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_LESSLEFTPADDING,
+		(uintptr_t)"Enter the set name:\n",
 		0,
 		NULL,
+	},
+	{
+		MENUITEMTYPE_KEYBOARD,
+		MPSETUP_MAXNAME,
+		0,
+		0,
+		1,
+		menuhandlerMpSaveCustomSet,
 	},
 	{ MENUITEMTYPE_END },
 };
 
-struct menudialogdef g_MpSavedSetsMenuDialog = {
+struct menudialogdef g_MpSaveWeaponSetNameMenuDialog = {
 	MENUDIALOGTYPE_DEFAULT,
-	(uintptr_t)"Saved Weapon Sets",
-	g_MpSavedSetsMenuItems,
+	(uintptr_t)"Weapon Set Name",
+	g_MpSaveWeaponSetNameMenuItems,
 	NULL,
-	MENUDIALOGFLAG_LITERAL_TEXT | MENUDIALOGFLAG_CLOSEONSELECT,
+	MENUDIALOGFLAG_LITERAL_TEXT,
 	NULL,
 };
 
@@ -2010,28 +2020,20 @@ struct menuitem g_MpWeaponsMenuItems[] = {
 		menuhandlerMpGeCheatGuns,
 	},
 	{
-		MENUITEMTYPE_LABEL,
+		MENUITEMTYPE_SELECTABLE,
 		0,
-		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_LESSLEFTPADDING | MENUITEMFLAG_SMALLFONT,
-		(uintptr_t)"Save Custom Set (type a name)\n",
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Save Set\n",
 		0,
-		NULL,
-	},
-	{
-		MENUITEMTYPE_KEYBOARD,
-		MPSETUP_MAXNAME,
-		0,
-		0,
-		0,
-		menuhandlerMpSaveCustomSet,
+		menuhandlerMpSaveSetRow,
 	},
 	{
 		MENUITEMTYPE_SELECTABLE,
 		0,
 		MENUITEMFLAG_LITERAL_TEXT,
-		(uintptr_t)"Saved Sets\n",
+		(uintptr_t)"Remove Set\n",
 		0,
-		menuhandlerMpSavedSetsPage,
+		menuhandlerMpRemoveSetRow,
 	},
 #endif
 	{
