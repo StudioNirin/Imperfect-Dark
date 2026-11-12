@@ -49,6 +49,7 @@ s32 bmoveGetCrouchPosByPlayer(s32 playernum);
 // it from outside, which is the only way to put a double tap and a direction on
 // the same frame without a hand on a pad (lvTestDodgeTick).
 void bmoveDodgeTap(u32 crouchbutton, struct movedata *movedata);
+s32 bmoveTestSprint(s32 op);
 #endif
 
 #endif

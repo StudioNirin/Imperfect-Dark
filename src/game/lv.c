@@ -164,6 +164,7 @@ extern f32 g_PoseFace;
 extern s32 g_PosePlay;
 extern s32 g_PosePush;
 extern s32 g_TestDodge;
+extern s32 g_TestSprint;
 extern s32 g_NumPoseAnims;
 #endif
 
@@ -2695,6 +2696,88 @@ static void lvTestAnimTick(void)
 #define DODGE_TEST_STEP 120
 #define DODGE_TEST_START 300
 
+// --test-sprint: one run, and the four things about it that were wrong. The
+// frames are the test: the arm takes the reload's sixteen ticks down and twenty
+// three back up, and the lockout is a second, so a step that read the gun too
+// early would report a lockout that was really an animation.
+#define SPRINT_TEST_START 300
+#define SPRINT_TEST_PULL 30
+#define SPRINT_TEST_DURING 40
+#define SPRINT_TEST_RISE 70
+#define SPRINT_TEST_FREE 95
+#define SPRINT_TEST_SWITCH 108
+
+/**
+ * --test-sprint: a run, a trigger pulled inside it, and a switch asked for
+ * during one.
+ *
+ * What is pinned is what was reported broken: the first press runs (the first
+ * version's own gate ended the run in the same frame, because putting the gun
+ * away was a weapon switch and a weapon switch ends a run), the weapon is the
+ * same weapon before, during and after (it was switched out for unarmed, which
+ * turned a trigger into a punch and the HUD into a fist), the arm is down while
+ * the run is up, and a trigger asked of a locked-out gun is refused - and
+ * accepted once the lockout is spent, because a gate that never lets go is the
+ * same bug wearing a beard.
+ */
+static void lvTestSprintTick(void)
+{
+	struct player *player = g_Vars.players[g_Vars.currentplayernum];
+	struct hand *hand;
+	s32 into;
+	s32 fired;
+
+	if (!g_TestSprint || player == NULL) {
+		return;
+	}
+
+	hand = &player->hands[HAND_RIGHT];
+	into = g_Vars.lvframenum - SPRINT_TEST_START;
+
+	if (into < 0) {
+		return;
+	}
+
+	if (into == 0) {
+		if (player->gunctrl.weaponnum <= WEAPON_UNARMED) {
+			sysLogPrintf(LOG_NOTE, "sprinttest: no gun in hand at frame %d - the arena interfered",
+					g_Vars.lvframenum);
+		}
+
+		bmoveTestSprint(0);
+		sysLogPrintf(LOG_NOTE, "sprinttest: start: sprinting %d weapon %d (dead %d mode %d)",
+				player->sprinting, player->gunctrl.weaponnum, player->isdead,
+				player->bondmovemode);
+	} else if (into == 20) {
+		sysLogPrintf(LOG_NOTE, "sprinttest: during: sprinting %d arm %d drop %.1f weapon %d",
+				player->sprinting, hand->useposrot, hand->posrotmtx.m[3][1],
+				player->gunctrl.weaponnum);
+	} else if (into == SPRINT_TEST_PULL) {
+		fired = bmoveTestSprint(2);
+		sysLogPrintf(LOG_NOTE, "sprinttest: pull: fired %d sprinting %d weapon %d",
+				fired, player->sprinting, player->gunctrl.weaponnum);
+	} else if (into == SPRINT_TEST_DURING) {
+		fired = bmoveTestSprint(2);
+		sysLogPrintf(LOG_NOTE, "sprinttest: lockout: fired %d sprinting %d weapon %d",
+				fired, player->sprinting, player->gunctrl.weaponnum);
+	} else if (into == SPRINT_TEST_RISE) {
+		sysLogPrintf(LOG_NOTE, "sprinttest: rising: sprinting %d arm %d drop %.1f weapon %d",
+				player->sprinting, hand->useposrot, hand->posrotmtx.m[3][1],
+				player->gunctrl.weaponnum);
+	} else if (into == SPRINT_TEST_FREE) {
+		fired = bmoveTestSprint(2);
+		sysLogPrintf(LOG_NOTE, "sprinttest: free: fired %d weapon %d", fired,
+				player->gunctrl.weaponnum);
+	} else if (into == SPRINT_TEST_SWITCH) {
+		bmoveTestSprint(0);
+		bmoveTestSprint(3);
+	} else if (into == SPRINT_TEST_SWITCH + 2) {
+		sysLogPrintf(LOG_NOTE, "sprinttest: switch: sprinting %d weapon %d",
+				player->sprinting, player->gunctrl.weaponnum);
+		bmoveTestSprint(4);
+	}
+}
+
 // --test-dodge: one gesture, and what it was made of.
 struct dodgetestcase {
 	f32 forwards;
@@ -3044,6 +3127,7 @@ void lvTick(void)
 		// --test-dodge: the crouch double tap put through every direction, and
 		// what came out of each (lvTestDodgeTick)
 		lvTestDodgeTick();
+		lvTestSprintTick();
 
 		// --exit-frame: a measured run ends on a level frame, not a clock
 		if (g_ExitFrame > 0 && g_Vars.lvframenum >= g_ExitFrame) {

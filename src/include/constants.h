@@ -5375,12 +5375,19 @@ enum weaponnum {
 #define HUDCENTER_NORMAL 1 // center HUD in 4:3 window
 #define HUDCENTER_WIDE 2   // center HUD in 16:9 window
 
-// Sprint: half again the top running speed, and the time after the run ends -
-// on its own, on a crouch, or on a trigger pull - during which the hands are
-// still coming down and no gun fires. TICKS() is 60ths on NTSC and scales for
-// PAL; the simulation is a fixed 60 Hz step whatever the display runs at.
+// Sprint: half again the top running speed, and the lockout after the run ends -
+// on its own, on a crouch, or on a trigger pull - during which the gun is still
+// coming up and no gun fires.
+//
+// The unit is 60ths, and TICKS() is what a 60th means on this cartridge: it is
+// the identity on NTSC and rescales to PAL's fifty (`TICKS(180)` is the ROM's own
+// three seconds of running). It is not seconds, which is what it was written as
+// once: SPRINT_RECOVERY60 read TICKS(1) as a second and got one tick, and a
+// sprint that lets you shoot the frame after it ends is a sprint with no rule in
+// it at all (user, 2026-11-12). The simulation is a fixed 60 Hz step whatever the
+// display runs at, so 60 of them is a second on a 240 Hz screen too.
 #define SPRINT_SPEED_MULT  1.5f
-#define SPRINT_RECOVERY60  TICKS(1)
+#define SPRINT_RECOVERY60  TICKS(60)
 
 #define CROUCHMODE_HOLD 0   // hold the crouch buttons to keep crouching
 #define CROUCHMODE_ANALOG 1 // analog crouch like on n64

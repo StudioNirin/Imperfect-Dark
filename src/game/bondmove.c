@@ -797,35 +797,23 @@ static s32 bmoveUseDownStep(s32 samplenum, s32 numsamples)
  * fighting distance rather than a way to close a corridor gunning.
  */
 /**
- * The run begins: the gun goes down through its own put-away, by asking for the
- * hands to be unarmed the same way an out-of-ammo switch does (bondgun.c). This
- * is not a pose held over the gun - the hand is unarmed for the duration, which
- * is why the animation is the game's own and why nothing has to be told that the
- * weapon is unavailable: an empty hand cannot fire.
- *
- * What the run came down from is remembered rather than read back afterwards,
- * because a sprinting player's hands are empty and Perfect Dark equips what an
- * empty hand walks over - the run can end holding a different gun, and it keeps
- * it (see bmoveSprintStop()).
+ * The run begins, and the arm holding the gun starts down - the same offset a
+ * reload takes a gun through (bgunSprintArm()), so the hand keeps its weapon,
+ * its ammo and its HUD, and there is nothing to give back afterwards.
  */
 static void bmoveSprintStart(void)
 {
 	struct player *player = g_Vars.currentplayer;
 
 	player->sprinting = true;
-	player->sprintreturnweapon = -1;
-
-	if (player->gunctrl.weaponnum > WEAPON_UNARMED) {
-		player->sprintreturnweapon = player->gunctrl.weaponnum;
-		bgunEquipWeapon(WEAPON_UNARMED);
-	}
+	player->sprintarm60 = g_Vars.lvframe60;
 }
 
 /**
- * The run ends, and the gun comes back up through its own draw: SPRINT_RECOVERY60
- * from here before the trigger does anything, on top of the draw the hand machine
- * will not let be skipped. A switch the player asked for during the run wins over
- * the remembered weapon - the sprint does not take back a gun they chose.
+ * The run ends, and the arm comes back up over the same ticks a reload takes to
+ * raise a gun. Firing stays locked out past that - SPRINT_RECOVERY60 from here,
+ * which is longer than the lift, so the gun is up and steady before it can be
+ * fired.
  */
 static void bmoveSprintStop(void)
 {
@@ -836,15 +824,8 @@ static void bmoveSprintStop(void)
 	}
 
 	player->sprinting = false;
+	player->sprintarm60 = g_Vars.lvframe60;
 	player->sprintweapon60 = g_Vars.lvframe60 + SPRINT_RECOVERY60;
-
-	if (player->sprintreturnweapon >= 0) {
-		if (player->gunctrl.switchtoweaponnum < 0 && player->gunctrl.weaponnum <= WEAPON_UNARMED) {
-			bgunEquipWeapon(player->sprintreturnweapon);
-		}
-
-		player->sprintreturnweapon = -1;
-	}
 }
 
 static void bmoveSprintFireGate(struct movedata *movedata)
@@ -855,13 +836,10 @@ static void bmoveSprintFireGate(struct movedata *movedata)
 		player->sprintweapon60 = 0;
 	}
 
-	// A weapon switch ends the run the same way a crouch does. Left to run on, the
-	// switch and the remembered weapon would both be reaching for switchtoweaponnum
-	// in the same frame, and a sprint holding a gun is neither of the two rules.
-	if (player->sprinting && player->gunctrl.switchtoweaponnum >= 0
-			&& player->gunctrl.switchtoweaponnum != player->sprintreturnweapon) {
+	// A weapon switch ends the run the same way a crouch does: the gun the player
+	// chose is not the one the run is holding down.
+	if (player->sprinting && player->gunctrl.switchtoweaponnum >= 0) {
 		bmoveSprintStop();
-		return;
 	}
 
 	if (!player->sprinting && player->sprintweapon60 == 0) {
@@ -873,6 +851,45 @@ static void bmoveSprintFireGate(struct movedata *movedata)
 		movedata->triggeron = false;
 		movedata->fireleft = false;
 	}
+}
+
+/**
+ * --test-sprint: the run put through without a hand on a pad. Nothing in the
+ * joystick layer takes a fake press (--test-dodge), so these are the calls a
+ * press, a pull and a switch reach, and what the frame's own gate answers to a
+ * trigger. Which is the shape the bugs were in: a press that started a run the
+ * same frame's gate then ended, and a pull cleared by a gate sitting a hundred
+ * lines downstream of where the gun system was handed it.
+ */
+s32 bmoveTestSprint(s32 op)
+{
+	struct player *player = g_Vars.currentplayer;
+	struct movedata md;
+
+	switch (op) {
+	case 0:
+		bmoveSprintStart();
+		break;
+	case 1:
+		bmoveSprintStop();
+		break;
+	case 2:
+		bmoveResetMoveData(&md);
+		md.triggeron = true;
+		bmoveSprintFireGate(&md);
+
+		return md.triggeron ? 1 : 0;
+	case 3:
+		// A switch the player asked for, left pending the way bgunEquipWeapon()
+		// leaves it. The frame's own gate call is what has to end the run.
+		player->gunctrl.switchtoweaponnum = player->gunctrl.weaponnum;
+		break;
+	case 4:
+		player->gunctrl.switchtoweaponnum = -1;
+		break;
+	}
+
+	return 0;
 }
 
 void bmoveDodgeTap(u32 crouchbutton, struct movedata *movedata)

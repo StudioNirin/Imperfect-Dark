@@ -92,6 +92,7 @@ f32 g_PoseFace = -999.f; // --test-anim-face DEGREES: which way to look, so the 
 s32 g_PosePlay = false; // --test-anim-play: play each animation and shoot it frame by frame, instead of freezing one frame
 s32 g_PosePush = 0; // --test-anim-push FWD|BACK|LEFT|RIGHT: shove the body along while the animation plays
 s32 g_TestDodge = false; // --test-dodge: the crouch double tap put through every direction (lvTestDodgeTick)
+s32 g_TestSprint = false; // --test-sprint: a sprint, a trigger inside it, and a switch (lvTestSprintTick)
 s32 g_NumPoseAnims = 0;
 s32 g_TickExtraSleep = true;
 
@@ -388,6 +389,7 @@ int main(int argc, const char **argv)
 	g_StateHashEvery = sysArgGetInt("--state-hash", 0);
 	g_ShotFrame = sysArgGetInt("--screenshot-frame", 0);
 	g_TestDodge = sysArgCheck("--test-dodge");
+	g_TestSprint = sysArgCheck("--test-sprint");
 
 	// --test-anim 0x64,0x65: our own body held in each named animation in turn,
 	// one screenshot each, for the animations the game never asks of a player

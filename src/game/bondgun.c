@@ -98,6 +98,10 @@
 
 // Max downwards pitch when changing guns or reloading a classic gun
 #define MAX_PITCH 0.87252569198608f
+// Sprint's arm, over the reload's own two timings: sixteen ticks down, twenty
+// three back up (bgunTickIncReload()).
+#define SPRINT_ARM_DOWN60 TICKS(16)
+#define SPRINT_ARM_UP60   TICKS(23)
 
 #if VERSION >= VERSION_PAL_BETA
 struct sndstate *g_CasingAudioHandles[2];
@@ -4181,6 +4185,61 @@ bool bgunSetState(s32 handnum, s32 state)
 	return valid;
 }
 
+/**
+ * Sprint's arm. The hand keeps its gun and the arm that holds it goes down, by
+ * writing the same offset a reload writes (RELOAD_LOWER -> SOUND -> RAISE): the
+ * hand tick clears useposrot every pass, so a lowered gun is not a state but a
+ * thing written again each frame - which is also why a reload, a throw or a
+ * switch takes the arm back the moment any of them starts. They write their own
+ * offset, and this writes only while the hand is simply holding its gun.
+ *
+ * Down over SPRINT_ARM_DOWN60, up over SPRINT_ARM_UP60, the reload's own two
+ * timings, so the lift at the end of a run reads as the gun coming back up.
+ */
+static void bgunSprintArm(s32 handnum)
+{
+	struct player *player = g_Vars.currentplayer;
+	struct hand *hand = &player->hands[handnum];
+	s32 t;
+
+	// inuse and not visible: hand->visible is written by the draw, so it is the
+	// wrong thing to gate a tick on - a hand with no model simply gets an offset
+	// it does not use.
+	if (!modIsSprintOn() || !hand->inuse) {
+		return;
+	}
+
+	// Only a hand that is just holding its gun. Anything else owns its own arm.
+	if (hand->state != HANDSTATE_IDLE) {
+		return;
+	}
+
+	if (player->sprinting) {
+		t = (s32)(g_Vars.lvframe60 - player->sprintarm60);
+
+		if (t < SPRINT_ARM_DOWN60) {
+			bgunSetArmPitch(hand, (f32) t * MAX_PITCH / SPRINT_ARM_DOWN60);
+		} else {
+			bgunSetArmPitch(hand, MAX_PITCH);
+		}
+
+		return;
+	}
+
+	if (player->sprintarm60 == 0) {
+		return;
+	}
+
+	t = (s32)(g_Vars.lvframe60 - player->sprintarm60);
+
+	if (t >= SPRINT_ARM_UP60) {
+		player->sprintarm60 = 0;
+		return;
+	}
+
+	bgunSetArmPitch(hand, (f32)(SPRINT_ARM_UP60 - t) * MAX_PITCH / SPRINT_ARM_UP60);
+}
+
 void bgunTickHand(s32 handnum)
 {
 	struct hand *hand = &g_Vars.currentplayer->hands[handnum];
@@ -4240,6 +4299,8 @@ void bgunTickHand(s32 handnum)
 	gegunsOwnThrowTick(hand, handnum, g_Vars.lvupdate60freal);
 	gegunsOwnTaserTick(hand, handnum, g_Vars.lvupdate60freal);
 #endif
+
+	bgunSprintArm(handnum);
 }
 
 void bgunTickSwitch(void)

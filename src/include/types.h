@@ -3052,10 +3052,10 @@ struct player {
 	// of the sprint holding half of it moves the player on its own.
 	bool sprinting;
 	u32 sprintweapon60;
-	// What the run came down from, -1 if the hands were already empty. The gun is
-	// genuinely switched out for WEAPON_UNARMED for the run - bgunEquipWeapon(),
-	// so the hand plays its own put-away and draw - and this is what comes back.
-	s32 sprintreturnweapon;
+	// The frame the hand's arm started the move it is on down, or back up. The
+	// gun is never put away: the arm that holds it is taken down the way a
+	// reload takes it down, and the hand keeps its weapon (bgunSprintArm()).
+	u32 sprintarm60;
 	// Where the camera ended up on the last frame it was behind a living
 	// player. Death stops the camera here and turns it to watch the body fall,
 	// so the two are read together: a distance of 0 means there is no frozen
