@@ -38,6 +38,27 @@
 #define CRASHREPORT_DIR      "$S/crashreports"
 #define CRASHREPORT_MAXNOTE  200
 
+/**
+ * Where a report is POSTed: Mod.CrashServer, with "/crash" on the end.
+ *
+ * Empty by default, and empty means nowhere - the report stays the file it was
+ * written as, and every page that offers to send one says to mail it to
+ * CRASHREPORT_CONTACT instead of leaving the player to guess.
+ *
+ * This used to ride on Mod.GhostServer, which is how a build of this fork came to
+ * be posting a player's settings and log to somebody else's server. The ghost
+ * races do live there and they are a different thing from a crash report: one is
+ * a score the player chose to submit to a competition, the other is our bug
+ * report. When a server of our own is up, Mod.CrashServer is the one line it
+ * takes to switch the button back on.
+ */
+extern char g_CrashNetUrl[256];
+
+// Where a player can send a report when this build has nowhere to send one.
+#define CRASHREPORT_CONTACT "contact@studionirin.com"
+
+
+
 // What a report may grow to. The log tail is the only part that is not bounded
 // by what wrote it, and it is cut to fit this.
 #define CRASHREPORT_MAXTEXT  32768
@@ -105,6 +126,15 @@ s32 crashReportCount(void);
  * Look for reports left by a previous run. Called once at startup.
  */
 void crashReportScan(void);
+
+/**
+ * Whether this build has anywhere to send one: Mod.CrashServer is not empty.
+ *
+ * Separate from crashReportCanSend(), which asks whether the build was compiled
+ * with an HTTP client at all. A page that offers a Send button without this
+ * answer is offering a failure the player did nothing to cause.
+ */
+s32 crashReportHasServer(void);
 
 /**
  * Send one report, with an optional note the player typed.

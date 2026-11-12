@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 77 2026-11-11
+Crash reports: the game no longer offers to send them to a server that is not ours, and says where the file is and what address reaches us instead
+
 notes 76 2026-11-11
 Dab's Mod Options: the page no longer crashes on Windows with Akimbo Triggers switched on
 Dab's Mod Options: COD Style Aiming's Aim Mode key row is Aim Mode's again, and the combat roll's key row has gone with its button

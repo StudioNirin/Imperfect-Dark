@@ -10,6 +10,7 @@ the long form.
 - **The Mod Options bind row that read one element past its table (2026-11-11, Windows)** — the last section: a `read of ffffffffffffffff` in `menuCalculateItemSizeOwn()`'s `strcmp(text, "")` at `menu.c:777`, on a label that came out of `modMenuBinds[9]` in a table of nine (0-8); the combat roll's bind entry had been deleted out of the middle of it and the page's rows still named their binds by number, so seven read one bind along, one read nothing, and `MENUOP_CHECKHIDDEN` hid the bad row only while Akimbo Triggers was off. On Linux the word past the end is other `.rodata` - a readable, wrong label - which is why no build here ever faulted. Rows carry the **contkey** in `param3` now, and `modMenuBindRow()` answers NULL.
 
 
+- **Reports have nowhere to go, on purpose (2026-11-11)** — the last section but one: `Mod.CrashServer` is empty by default and `crashReportSend()` refuses with a sentence naming the folder the file is in and the address to mail (`CRASHREPORT_CONTACT`, contact@studionirin.com); the dialog's button stopped saying "to Dab" because until this commit a build of this fork was POSTing a player's settings and log to **Dab's** ghost server, `Mod.GhostServer` being `https://texturepacks.art/pdghosts`. The ghost races still live there and still use it - a submitted time and a bug report are different things - so the two are no longer the same setting. One ini line turns the button back on when a server of our own is up.
 What a player's crash looks like from this end, and how it gets here.
 
 Before this, a crash reached us as a screenshot of the dialog: an exception
@@ -38,10 +39,15 @@ and holds:
   Start could not show the binds, and they turned out cut by pd.ini saves)
 - the last `CRASHREPORT_LOGLINES` (200) lines of the log
 
-**Sending** is `crashReportSend()`, which POSTs to `<Mod.GhostServer>/crash`
+**Sending** is `crashReportSend()`, which POSTs to `<Mod.CrashServer>/crash`
 through `ghostnetSend()` - the same transport the ghost client and the updater
 use, so there is one WinHTTP half and one libcurl half in the port and not
 three. A report that is sent is deleted locally; one that is not stays.
+
+**`Mod.CrashServer` is empty, so no build of this fork sends anywhere** - see the
+last section. `crashReportCanSend()` asks whether the build was compiled with an
+HTTP client; `crashReportHasServer()` asks whether there is anywhere to send to,
+and it is the second one a page has to consult before offering a button.
 
 ## The log is a ring, not the file
 
@@ -451,3 +457,42 @@ and not converted to contkeys. If a settings page ever shows a row naming anothe
 setting's key, or a row vanishes behind a switch that has nothing to do with it,
 diff the row list's numbers against the table's length before believing the menu
 engine; `git log -S modMenuBinds` finds the removal that shifted them.
+
+## Reports have nowhere to go, on purpose (2026-11-11)
+
+The crash dialog's button said **Send report to Dab** and the Perfect Menu's row
+said **Send to Dab**, and both were true in the worst way: `crashReportSend()`
+built its URL from `g_GhostNetUrl`, which is `Mod.GhostServer`, whose default is
+`https://texturepacks.art/pdghosts` - **Dab's** server. So a build of this fork
+was posting a player's build stamp, their whole `[Mod]` and `[Game]` sections and
+200 lines of their log to somebody else's host, under a button that named the one
+person it was not going to.
+
+It is now its own setting, **`Mod.CrashServer`**, and its default is empty, which
+means nowhere:
+
+- `crashReportHasServer()` is the runtime answer, distinct from
+  `crashReportCanSend()`'s compile-time one (has an HTTP client at all). The
+  dialog only offers a Send button when there is somewhere to send, so a player is
+  never invited to cause themselves a failure.
+- With no server the dialog says where the file is (the game's own `crashreports`
+  folder, beside the program) and that mailing it to `CRASHREPORT_CONTACT`
+  (`contact@studionirin.com`) is what reaches this fork; the Crash Reports page
+  says the same and says plainly that its Send can only fail; and
+  `crashReportSend()` refuses with that sentence rather than a transport error, so
+  the log and the page agree.
+- Ghost racing is untouched: `Mod.GhostServer` still defaults to
+  `texturepacks.art/pdghosts` and `g_GhostNetUrl` is still what the ghosts, the
+  account and the pins are for. Splitting them is the point - a submitted time is
+  something the player entered a competition with, a crash report is this fork's
+  bug report, and the fork has no server of its own yet (`deploy/lobby/` is built
+  and container-tested and undeployed; `pdghostd` is deferred).
+
+When a server exists, `Mod.CrashServer=https://host` is the whole of turning the
+button back on; the endpoint is the `POST /crash` documented under **The other
+end**, and nothing on the sending side changes.
+
+Why the address is in the game: an email the player sends is a report this fork
+does receive today, and the alternative - a button that appears to work - is how a
+player ends up believing a crash was reported when it went to a host that will
+never show it to us.

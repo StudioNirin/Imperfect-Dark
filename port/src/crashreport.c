@@ -281,6 +281,13 @@ s32 crashReportCanSend(void)
 
 #ifdef PD_GHOST_NET
 
+char g_CrashNetUrl[256] = ""; // Mod.CrashServer; empty means nowhere, see crashreport.h
+
+s32 crashReportHasServer(void)
+{
+	return g_CrashNetUrl[0] != '\0';
+}
+
 s32 crashReportSend(const char *path, const char *note, char *err, u32 errsize)
 {
 	struct ghostnetreq req;
@@ -296,6 +303,16 @@ s32 crashReportSend(const char *path, const char *note, char *err, u32 errsize)
 
 	if (path == NULL || path[0] == '\0') {
 		snprintf(err, errsize, "there is no report to send");
+		return false;
+	}
+
+	if (g_CrashNetUrl[0] == '\0') {
+		// Asked and refused, which is the honest answer: this build has no server of
+		// its own to ask. The report is on disk either way, so the sentence says what
+		// to do with it rather than reporting a failure nobody caused.
+		snprintf(err, errsize,
+				"this build has no report server (Mod.CrashServer is empty) - the file is in the"
+				" game's crashreports folder, and can be mailed to " CRASHREPORT_CONTACT);
 		return false;
 	}
 
@@ -340,7 +357,7 @@ s32 crashReportSend(const char *path, const char *note, char *err, u32 errsize)
 				VERSION_HASH, VERSION_TARGET, VERSION_CHANNEL, notebuf, escaped);
 	}
 
-	snprintf(url, sizeof(url), "%s/crash", g_GhostNetUrl);
+	snprintf(url, sizeof(url), "%s/crash", g_CrashNetUrl);
 
 	memset(&req, 0, sizeof(req));
 	memset(&buf, 0, sizeof(buf));

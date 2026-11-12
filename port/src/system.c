@@ -261,11 +261,36 @@ static void sysFatalDialog(const char *shown, const char *full)
 		return;
 	}
 
+	// Where it would go. This fork's builds used to send to the ghost server,
+	// which belongs to somebody else, so the honest default is no server - and a
+	// dialog that offers a button this build cannot honour is worse than one that
+	// says where the file is and who wants it.
+	if (!crashReportHasServer()) {
+		char msg[1536];
+
+		snprintf(msg, sizeof(msg),
+				"%s\n\nA report of this was saved in this game's crashreports folder,\n"
+				"next to the program. It holds the message above, which build this is,\n"
+				"your game settings and the last few hundred lines of the log.\n\n"
+				"This build has no report server to send it to. Mailing that file to\n"
+				"%s is what reaches us; so does Send Crash Report on the Perfect\n"
+				"Menu, once a build has a server set (Mod.CrashServer).",
+				shown, CRASHREPORT_CONTACT);
+
+		if (SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fatal error", msg, NULL) < 0) {
+			// No box at all: a headless run, or a display that went with the crash.
+			// Fall back to the plain error rather than nothing.
+			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Fatal error", shown, NULL);
+		}
+
+		return;
+	}
+
 	// What is in it, said before it is offered rather than after. A player
 	// deciding whether to send their log should be told it is their log.
 	snprintf(text, sizeof(text),
-			"%s\n\nA report of this was saved.\n"
-			"Sending it to Dab includes the message above, which build this is, "
+			"%s\n\nA report of this was saved in this game's crashreports folder.\n"
+			"Sending it includes the message above, which build this is, "
 			"your game settings and the last few hundred lines of the log.\n"
 			"You can also send it from Send Crash Report on the Perfect Menu next time, "
 			"with a note about what you were doing.",
@@ -274,7 +299,7 @@ static void sysFatalDialog(const char *shown, const char *full)
 	memset(buttons, 0, sizeof(buttons));
 	buttons[0].flags = SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
 	buttons[0].buttonid = 1;
-	buttons[0].text = "Send report to Dab";
+	buttons[0].text = "Send Report";
 	buttons[1].flags = SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT;
 	buttons[1].buttonid = 0;
 	buttons[1].text = "Close";
@@ -301,14 +326,15 @@ static void sysFatalDialog(const char *shown, const char *full)
 
 	if (crashReportSend(path, "", err, sizeof(err))) {
 		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Report sent",
-				"Thank you. The report is on its way to Dab.", NULL);
+				"Thank you. The report is on its way.", NULL);
 	} else {
 		char msg[512];
 
 		snprintf(msg, sizeof(msg),
 				"The report could not be sent: %s\n\n"
-				"It is still saved, and Send Crash Report on the Perfect Menu will try again.",
-				err);
+				"It is still saved in this game's crashreports folder, and Send Crash Report "
+				"on the Perfect Menu will try again. Mailing the file to %s reaches us too.",
+				err, CRASHREPORT_CONTACT);
 
 		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Not sent", msg, NULL);
 	}

@@ -28,7 +28,7 @@ or a section heading, don't read one whole.
 - [goldfinger64.md](CLAUDE-notes/goldfinger64.md) — Goldfinger 64, a GoldenEye ROM hack converted beside GE Plus: where it comes from, the converter's per-ROM layouts, a variant's arenas, no XBLA on its stages
 - [tnd64.md](CLAUDE-notes/tnd64.md) — Tomorrow Never Dies 64 (Expanded 06-22), the second hack: its row, animations read by id, names in two banks, wide rooms cut into pieces, its AI hooks; at run time its Perfect Menu row, fourteen missions (getimes.bin), blue watch, eight men a level
 - [ghost-trials.md](CLAUDE-notes/ghost-trials.md) — Ghost Trials networking; the account page's one Sign In (a new name makes the account) and the PC on-screen keyboard (types at once, Enter OK, Escape CANCEL)
-- [crash-reports.md](CLAUDE-notes/crash-reports.md) — Crash reports; the Mod Options bind row that read past its table (a row's index outliving the table entry it pointed at, and why only Windows faulted)
+- [crash-reports.md](CLAUDE-notes/crash-reports.md) — Crash reports; the Mod Options bind row that read past its table (a row's index outliving the table entry it pointed at, and why only Windows faulted); reports now go to `Mod.CrashServer`, which is empty by default, so a fork build posts a player's log to nobody, and the pages say to mail contact@studionirin.com
 - [updater.md](CLAUDE-notes/updater.md) — Check for Updates
 - [texture-packs.md](CLAUDE-notes/texture-packs.md) — Texture packs
 - [xbla.md](CLAUDE-notes/xbla.md) — The Xbox 360 XBLA release: its textures, and drawing its models; `Mod.XblaMeshes` is the last of the switches `xblaSwitchGetEnabled()` ANDs and the release's data tables follow it, so it is a gameplay switch (2026-11-11)

@@ -65,7 +65,7 @@ static char *menutextCrashReportStatus(struct menuitem *item)
 		return g_Text;
 	case STATE_SENT:
 		snprintf(g_Text, sizeof(g_Text),
-				"%s", langTr("Sent. Thank you - that is the whole of what Dab gets to see of a crash.\n"));
+				"%s", langTr("Sent. Thank you - that is all of a crash\nwe ever get to see.\n"));
 		return g_Text;
 	case STATE_FAILED:
 		snprintf(g_Text, sizeof(g_Text),
@@ -85,13 +85,28 @@ static char *menutextCrashReportStatus(struct menuitem *item)
 	// their log should be told that is what it is. Wrapped by hand and kept
 	// short, because the dialog is only as wide as its widest line and the
 	// menu does not fold one that runs past the edge.
-	snprintf(g_Text, sizeof(g_Text),
-			langTr("A crash from %s is waiting.\n"
-			"It holds the error and its stack, the\n"
-			"build, your game settings and the last\n"
-			"few hundred lines of the log - nothing\n"
-			"else, and nothing unless you press Send.\n"),
-			crashReportPendingWhen());
+	// Hand wrapped, and kept short: the dialog is only as wide as its widest
+	// line and the menu does not fold one that runs off the edge.
+	if (crashReportHasServer()) {
+		snprintf(g_Text, sizeof(g_Text),
+				langTr("A crash from %s is waiting.\n"
+				"It holds the error and its stack, the\n"
+				"build, your game settings and the last\n"
+				"few hundred lines of the log - nothing\n"
+				"else, and nothing unless you press Send.\n"),
+				crashReportPendingWhen());
+	} else {
+		snprintf(g_Text, sizeof(g_Text),
+				langTr("A crash from %s is waiting.\n"
+				"It holds the error and its stack, the\n"
+				"build, your game settings and the last\n"
+				"few hundred lines of the log.\n"
+				"This build has no report server, so\n"
+				"Send below can only fail. The file is\n"
+				"in this game's crashreports folder and\n"
+				"mailing it to %s reaches us.\n"),
+				crashReportPendingWhen(), CRASHREPORT_CONTACT);
+	}
 
 	return g_Text;
 }
@@ -241,7 +256,7 @@ struct menuitem g_CrashReportMenuItems[] = {
 		MENUITEMTYPE_SELECTABLE,
 		0,
 		MENUITEMFLAG_LITERAL_TEXT,
-		(uintptr_t)"Send to Dab\n",
+		(uintptr_t)"Send Report\n",
 		0,
 		menuhandlerCrashReportSend,
 	},

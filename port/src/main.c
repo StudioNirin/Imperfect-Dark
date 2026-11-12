@@ -708,6 +708,10 @@ PD_CONSTRUCTOR static void gameConfigInit(void)
 	// Empty for the releases this build's channel points at. See the note in
 	// update.c for what setting it means.
 	configRegisterString("Mod.UpdateServer", g_UpdateUrl, sizeof(g_UpdateUrl) - 1);
+	// Not defaulted to Mod.GhostServer's host on purpose: that server is the ghost
+	// races', and it is not this fork's. Empty is nowhere to send, and the crash
+	// pages say so and give the address to mail instead (crashreport.h).
+	configRegisterString("Mod.CrashServer", g_CrashNetUrl, sizeof(g_CrashNetUrl) - 1);
 
 	for (s32 j = 0; j < MAX_LOCAL_PLAYERS; ++j) {
 		const s32 i = j + 1;
