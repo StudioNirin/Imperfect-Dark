@@ -796,6 +796,57 @@ static s32 bmoveUseDownStep(s32 samplenum, s32 numsamples)
  * next pull, not the one that stopped it, which is what makes a sprint into a
  * fighting distance rather than a way to close a corridor gunning.
  */
+/**
+ * The run begins: the gun goes down through its own put-away, by asking for the
+ * hands to be unarmed the same way an out-of-ammo switch does (bondgun.c). This
+ * is not a pose held over the gun - the hand is unarmed for the duration, which
+ * is why the animation is the game's own and why nothing has to be told that the
+ * weapon is unavailable: an empty hand cannot fire.
+ *
+ * What the run came down from is remembered rather than read back afterwards,
+ * because a sprinting player's hands are empty and Perfect Dark equips what an
+ * empty hand walks over - the run can end holding a different gun, and it keeps
+ * it (see bmoveSprintStop()).
+ */
+static void bmoveSprintStart(void)
+{
+	struct player *player = g_Vars.currentplayer;
+
+	player->sprinting = true;
+	player->sprintreturnweapon = -1;
+
+	if (player->gunctrl.weaponnum > WEAPON_UNARMED) {
+		player->sprintreturnweapon = player->gunctrl.weaponnum;
+		bgunEquipWeapon(WEAPON_UNARMED);
+	}
+}
+
+/**
+ * The run ends, and the gun comes back up through its own draw: SPRINT_RECOVERY60
+ * from here before the trigger does anything, on top of the draw the hand machine
+ * will not let be skipped. A switch the player asked for during the run wins over
+ * the remembered weapon - the sprint does not take back a gun they chose.
+ */
+static void bmoveSprintStop(void)
+{
+	struct player *player = g_Vars.currentplayer;
+
+	if (!player->sprinting) {
+		return;
+	}
+
+	player->sprinting = false;
+	player->sprintweapon60 = g_Vars.lvframe60 + SPRINT_RECOVERY60;
+
+	if (player->sprintreturnweapon >= 0) {
+		if (player->gunctrl.switchtoweaponnum < 0 && player->gunctrl.weaponnum <= WEAPON_UNARMED) {
+			bgunEquipWeapon(player->sprintreturnweapon);
+		}
+
+		player->sprintreturnweapon = -1;
+	}
+}
+
 static void bmoveSprintFireGate(struct movedata *movedata)
 {
 	struct player *player = g_Vars.currentplayer;
@@ -804,13 +855,21 @@ static void bmoveSprintFireGate(struct movedata *movedata)
 		player->sprintweapon60 = 0;
 	}
 
+	// A weapon switch ends the run the same way a crouch does. Left to run on, the
+	// switch and the remembered weapon would both be reaching for switchtoweaponnum
+	// in the same frame, and a sprint holding a gun is neither of the two rules.
+	if (player->sprinting && player->gunctrl.switchtoweaponnum >= 0
+			&& player->gunctrl.switchtoweaponnum != player->sprintreturnweapon) {
+		bmoveSprintStop();
+		return;
+	}
+
 	if (!player->sprinting && player->sprintweapon60 == 0) {
 		return;
 	}
 
 	if (movedata->triggeron || movedata->fireleft) {
-		player->sprinting = false;
-		player->sprintweapon60 = g_Vars.lvframe60 + SPRINT_RECOVERY60;
+		bmoveSprintStop();
 		movedata->triggeron = false;
 		movedata->fireleft = false;
 	}
@@ -2000,7 +2059,11 @@ void bmoveProcessInput(bool allowc1x, bool allowc1y, bool allowc1buttons, bool i
 							// beside it are: one that reads a hold flips itself on
 							// every sample the button is down.
 							if (modIsSprintOn() && (pressed & BUTTON_SPRINT)) {
-								g_Vars.currentplayer->sprinting = !g_Vars.currentplayer->sprinting;
+								if (g_Vars.currentplayer->sprinting) {
+									bmoveSprintStop();
+								} else {
+									bmoveSprintStart();
+								}
 							}
 
 							// A crouch ends the run. Crouching is how you go under
@@ -2009,7 +2072,7 @@ void bmoveProcessInput(bool allowc1x, bool allowc1y, bool allowc1buttons, bool i
 							// dodge comes off the same tap, so a sprint that turns
 							// into a roll is a sprint that ended.
 							if (pressed & DODGE_CROUCH_BUTTONS) {
-								g_Vars.currentplayer->sprinting = false;
+								bmoveSprintStop();
 							}
 
 							// Spectator is taken here for the same reason as the
@@ -2282,6 +2345,11 @@ void bmoveProcessInput(bool allowc1x, bool allowc1y, bool allowc1buttons, bool i
 	}
 
 #ifndef PLATFORM_N64
+	// Sprint's lockout, ahead of both triggers going into the gun system: the
+	// left hand's at bgunSetLeftTrigger() and the right at bgunTickGameplay().
+	// This ran after them the first time - the pull ended the sprint and the gun
+	// fired anyway 112 lines later, in the same frame (user, 2026-11-12).
+	bmoveSprintFireGate(&movedata);
 	bgunSetLeftTrigger(movedata.fireleft);
 #endif
 	bgunTickGameplay(movedata.triggeron);
@@ -2396,7 +2464,6 @@ void bmoveProcessInput(bool allowc1x, bool allowc1y, bool allowc1buttons, bool i
 		playerUpdateZoom();
 	}
 
-	bmoveSprintFireGate(&movedata);
 	bmoveApplyMoveData(&movedata);
 
 	// Speed boost

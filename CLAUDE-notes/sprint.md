@@ -2,12 +2,64 @@
 
 ## Digest
 
+- **The fire gate is in front of the gun system, not behind it**: `bgunSetLeftTrigger()` and `bgunTickGameplay()` at bondmove.c:2285
+- **The gun really is switched out for `WEAPON_UNARMED`** for the run, and what that means for pickups
+- **A weapon switch ends the run**, and the player's choice wins over the remembered gun
+- **`TICKS()` is 60ths on NTSC** - the simulation is a fixed 60 Hz step at any render rate
+## Digest
+
 - **What the speed is made of**: `player->speedboost` already existed; sprint multiplies after it
 - **The bit**: `CONT_0100`, free because nothing ever bound it - not the roll's dead `CONT_0800`
 - **Why no protocol bump**: the wire's `u32 buttons` *is* `OSContPad.button`
 - **The default control scheme**: crouch (and the dodge) to pad B, weapon back off B, half crouch to C
 - **Not yet done**: no bind row, untested feel, thin geometry at double speed
 - **The positional defaults trap** in `modoptions.c`
+
+## The fire gate sits in front of the gun system
+
+Both trigger paths leave `bmoveTickPlayer()` two hundred lines before the end of
+it: `bgunSetLeftTrigger(movedata.fireleft)` and `bgunTickGameplay(movedata.triggeron)`.
+The first version of the gate ran beside `bmoveApplyMoveData()`, which is **112
+lines later** - so the pull ended the sprint (that half worked, which is why the
+report said "it stopped the sprint") and the gun fired anyway in the same frame,
+because the gun system had already been handed the trigger. Anything that is going
+to refuse a shot has to be in front of those two calls. `movedata.triggeron` is not
+"the shot"; it is a claim about the trigger, and the shot is decided downstream.
+
+## The gun is genuinely unarmed for the run
+
+`bmoveSprintStart()` calls `bgunEquipWeapon(WEAPON_UNARMED)` and remembers what it
+came down from in `player->sprintreturnweapon`; `bmoveSprintStop()` puts it back.
+That is the game's own switch, so the put-away and draw animations are the real
+`HANDSTATE_CHANGEGUN` machine (`UNEQUIP -> LOWER -> LOAD -> draw`, bondgun.c) and
+nothing had to be told the weapon is unavailable - an empty hand cannot fire. The
+lockout on top is `SPRINT_RECOVERY60`, `TICKS(1)`, and the draw itself cannot be
+skipped underneath it.
+
+Four consequences that are not obvious from the two functions:
+
+- **An empty hand picks guns up.** Perfect Dark equips what a player with nothing
+  in hand walks over, so a sprint can end holding a different gun. It keeps it:
+  `bmoveSprintStop()` only restores the remembered weapon if the hands are *still*
+  empty, so a pickup during the run is never taken back.
+- **A weapon switch ends the run**, and the switch wins. `gunctrl.switchtoweaponnum`
+  is the one slot both the sprint's restore and the player's own choice reach for;
+  letting a run hold on while the player picks a gun means two writers in the same
+  frame. The gate function sees a pending switch that is not the remembered gun and
+  stops the run without restoring.
+- **A gun picked up mid-run is held up, not down**, until the run ends. The fire
+  gate is a state test, not a pose test, so it still cannot be fired.
+- `sprintreturnweapon` is a prediction field: a rollback that came out of the sprint
+  remembering nothing would leave the player unarmed with no way to ask for the gun.
+
+## `TICKS()` and a 240 Hz display
+
+`TICKS(val)` is `val` on NTSC and `val * 50 / 60` on PAL, and `val` is 60ths of a
+second: the *simulation* is a fixed 60 Hz step (`g_Vars.lvframe60`,
+`g_Vars.lvupdate60`, and `lvupdate60freal` for the fraction of a tick a rendered
+frame covers). A 240 Hz display renders four frames per logic tick and moves
+nothing extra, so `TICKS(1)` is one second at any refresh - write timings in
+seconds through `TICKS()`, which is what `bodytime` does.
 
 ## What the speed is made of
 
@@ -69,8 +121,8 @@ returning player who wants sprint edits `CK_0100=` or waits for the row.
 
 ## Not yet done
 
-- **No bind row.** The Sprint checkbox is on the Mod Options player page; the
-  button is only rebindable in `pd.ini`. `modMenuBinds[]` wants a `CK_0100`
+- **No bind row.** Sprint is a checkbox on Imperfect Settings; the button is only
+  rebindable in `pd.ini`. `modMenuBinds[]` wants a `CK_0100`
   entry and `g_ExtendedDabsModPlayerMenuItems` a row carrying `param3 =
   CK_0100`, keyed by contkey (optionsmenu.c).
 - **Nobody has played it.** Untuned: `SPRINT_SPEED_MULT` 1.5,

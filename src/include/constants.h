@@ -5375,11 +5375,12 @@ enum weaponnum {
 #define HUDCENTER_NORMAL 1 // center HUD in 4:3 window
 #define HUDCENTER_WIDE 2   // center HUD in 16:9 window
 
-// Sprint: half again the top running speed, and the 60ths after the run ends -
+// Sprint: half again the top running speed, and the time after the run ends -
 // on its own, on a crouch, or on a trigger pull - during which the hands are
-// still coming down and no gun fires.
+// still coming down and no gun fires. TICKS() is 60ths on NTSC and scales for
+// PAL; the simulation is a fixed 60 Hz step whatever the display runs at.
 #define SPRINT_SPEED_MULT  1.5f
-#define SPRINT_RECOVERY60  30
+#define SPRINT_RECOVERY60  TICKS(1)
 
 #define CROUCHMODE_HOLD 0   // hold the crouch buttons to keep crouching
 #define CROUCHMODE_ANALOG 1 // analog crouch like on n64
