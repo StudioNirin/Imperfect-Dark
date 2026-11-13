@@ -538,7 +538,9 @@ void mpWeaponSetsSelfTest(void)
 
 			data.keyboard.string = "UI Set";
 			menuhandlerMpSaveCustomSet(MENUOP_SETTEXT, &item, &data);
-			menuhandlerMpSaveCustomSet(MENUOP_SET, &item, &data);
+			// and NOT MENUOP_SET: a keyboard row is never given that operation
+			// (menuitem.c sends MENUOP_SETTEXT from OK), so driving it here would
+			// test a path the menu cannot reach
 
 			mpWeaponSetsTestCheck("the page's row saves the six slots",
 					s_Num == 2 && mpWeaponSetsGet(1) != NULL
@@ -557,7 +559,9 @@ void mpWeaponSetsSelfTest(void)
 			// typing and not only by the store's lookup
 			data.keyboard.string = "ui set";
 			menuhandlerMpSaveCustomSet(MENUOP_SETTEXT, &item, &data);
-			menuhandlerMpSaveCustomSet(MENUOP_SET, &item, &data);
+			// and NOT MENUOP_SET: a keyboard row is never given that operation
+			// (menuitem.c sends MENUOP_SETTEXT from OK), so driving it here would
+			// test a path the menu cannot reach
 
 			mpWeaponSetsTestCheck("a name already taken asks instead of writing",
 					memcmp(saved_slots, mpWeaponSetsGet(1)->slots, NUM_MPWEAPONSLOTS) == 0
@@ -578,7 +582,9 @@ void mpWeaponSetsSelfTest(void)
 			g_MpWeaponSetNum = mpWeaponSetsFirst() + 1;
 			data.keyboard.string = "UI Set";
 			menuhandlerMpSaveCustomSet(MENUOP_SETTEXT, &item, &data);
-			menuhandlerMpSaveCustomSet(MENUOP_SET, &item, &data);
+			// and NOT MENUOP_SET: a keyboard row is never given that operation
+			// (menuitem.c sends MENUOP_SETTEXT from OK), so driving it here would
+			// test a path the menu cannot reach
 
 			mpWeaponSetsTestCheck("the set's own name asks as well",
 					memcmp(saved_slots, mpWeaponSetsGet(1)->slots, NUM_MPWEAPONSLOTS) == 0

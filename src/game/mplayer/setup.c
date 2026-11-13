@@ -1956,17 +1956,20 @@ MenuItemHandlerResult menuhandlerMpSaveCustomSet(s32 operation, struct menuitem 
 		snprintf(data->keyboard.string, MPSETUP_MAXNAME + 1, "%s", s_SetNameDraft);
 		break;
 	case MENUOP_SETTEXT:
-		// Only what was typed. Nothing is decided here: this is the operation that
-		// took the menu's layer bookkeeping down under itself when a dialog was
-		// popped from it, and the game's own name page (menuhandlerMpSetupName)
-		// keeps the same split - text here, the save under MENUOP_SET below, which
-		// is what its OK reaches
+	{
+		s32 found;
+
+		// The whole decision lives here, because this is the only operation a
+		// keyboard row is ever given: menuitem.c sends MENUOP_SETTEXT from OK and
+		// from Start and never sends MENUOP_SET to one - whatever a MENUOP_SET case
+		// in the game's own menuhandlerMpSetupName suggests. Two consequences, both
+		// paid for here: the self-test drives MENUOP_SETTEXT, or it proves logic the
+		// menu never reaches; and nothing here may pop the dialog, because a pop
+		// from this operation takes the menu's frame down under itself
+		// (weapon-sets.md)
 		snprintf(s_SetNameDraft, sizeof(s_SetNameDraft), "%s", data->keyboard.string);
 		s_SetNameOverwrite = -1;
-		break;
-	case MENUOP_SET:
-	{
-		s32 found = mpWeaponSetsFind(s_SetNameDraft);
+		found = mpWeaponSetsFind(s_SetNameDraft);
 
 		if (s_SetNameDraft[0] == '\0') {
 			// Nothing to name it by: leave the field as it is, which is the only
