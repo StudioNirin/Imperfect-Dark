@@ -4438,9 +4438,12 @@ string), which needed no wire field. So a client is told the host's name and
 nothing a client runs draws it. The field stays, because pulling it back means
 burning another protocol number to remove eighteen inert bytes already published
 to the dev channel, and the number is what tells two builds they differ. Do not
-extend it without a receiver. Two things that follow: the client-side composition
-in `mpGetWeaponSetName()` is unreachable and is to be deleted, and a bug found
-while writing this section is therefore rendered moot rather than fixed -
+extend it without a receiver. Two things followed, and both were acted on the
+same day: the client-side composition in `mpGetWeaponSetName()` was deleted (it
+was unreachable, and code that advertises a feature nobody renders gets trusted
+and then "fixed"), which left `netRulesApply()` holding the name in the room's
+rules and saying it once in the log and nothing else - and the bug found while
+writing this section is therefore rendered moot rather than fixed:
 `netRulesApply()` recorded the name against a table index while
 `mpGetWeaponSetName()` asks after `func0f188f9c()`, which returns an offered
 index, and those two spaces are only the same numbers when this machine's store

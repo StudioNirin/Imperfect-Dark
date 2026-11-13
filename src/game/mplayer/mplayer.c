@@ -1747,27 +1747,10 @@ s32 func0f189088(void)
 	return mpCountWeaponSetThing(MP_NUM_WEAPONSETS + 2);
 }
 
-static char s_ForeignSetName[MPSETUP_MAXNAME + 32];
-
 char *mpGetWeaponSetName(s32 index)
 {
 	index = func0f188f9c(index);
 
-#ifndef PLATFORM_N64
-	// The room's rules named the set the match plays by: this machine's list
-	// cannot name a set its host saved by hand, and the number it travels by is
-	// the host's numbering, which here may well be a set of this machine's own
-	{
-		const char *hostnamed = mpWeaponSetsForeignNameFor(index);
-
-		if (hostnamed != NULL) {
-			snprintf(s_ForeignSetName, sizeof(s_ForeignSetName), "%s (%s)",
-					langGet(L_MPWEAPONS_041) /* "Custom" */, hostnamed);
-
-			return s_ForeignSetName;
-		}
-	}
-#endif
 
 	if (index < 0 || index >= MP_NUM_WEAPONSETS + 2) {
 		return langGet(L_MPWEAPONS_041); // "Custom"

@@ -1406,7 +1406,7 @@ static void netRulesSaveInto(struct netrulessaved *out)
 	memcpy(out->difficulties, g_MpSimulantDifficultiesPerNumPlayers, sizeof(out->difficulties));
 	memcpy(out->players, g_PlayerConfigsArray, sizeof(out->players));
 	memcpy(out->teamnames, g_BossFile.teamnames, sizeof(out->teamnames));
-	snprintf(out->weaponsetname, sizeof(out->weaponsetname), "%s", mpWeaponSetsForeignName());
+	snprintf(out->weaponsetname, sizeof(out->weaponsetname), "%s", s_NetRules.weaponsetname);
 	out->weaponsetnum = g_MpWeaponSetNum;
 	memcpy(out->filters, g_MpWeaponSetRandomFilters, sizeof(out->filters));
 	memcpy(out->unlocked, g_MpFeaturesUnlocked, sizeof(out->unlocked));
@@ -1546,8 +1546,9 @@ static void netRulesPut(const struct netrulesmsg *rules, s32 coop)
 	// client whose list is shorter still says what the room plays by. This is
 	// the one thing that says a number is somebody else's: read against this
 	// machine's list it would name one of its own sets (mpGetWeaponSetName).
-	mpWeaponSetsSetForeignName(rules->weaponsetname, g_MpWeaponSetNum);
-
+	// Read, kept in the room's rules and said once in the log: nothing a client
+	// runs draws it, because the room's Settings page belongs to the owner alone
+	// (weapon-sets.md, netplay.md)
 	if (rules->weaponsetname[0] != '\0') {
 		sysLogPrintf(LOG_NOTE, "net: rules: the host's weapon set is named `%s`", rules->weaponsetname);
 	}
@@ -1743,7 +1744,8 @@ static void netRulesRestoreFrom(const struct netrulessaved *saved)
 	memcpy(g_MpSimulantDifficultiesPerNumPlayers, saved->difficulties, sizeof(saved->difficulties));
 	memcpy(g_PlayerConfigsArray, saved->players, sizeof(saved->players));
 	memcpy(g_BossFile.teamnames, saved->teamnames, sizeof(saved->teamnames));
-	mpWeaponSetsSetForeignName(saved->weaponsetname, g_MpWeaponSetNum);
+	snprintf(s_NetRules.weaponsetname, sizeof(s_NetRules.weaponsetname), "%s",
+			saved->weaponsetname);
 	g_MpWeaponSetNum = saved->weaponsetnum;
 	memcpy(g_MpWeaponSetRandomFilters, saved->filters, sizeof(saved->filters));
 	memcpy(g_MpFeaturesUnlocked, saved->unlocked, sizeof(saved->unlocked));

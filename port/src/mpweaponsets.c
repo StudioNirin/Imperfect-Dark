@@ -52,11 +52,7 @@ static s32 s_First = -1;
 // each row needs its own store - one buffer reused by every row would leave the
 // whole block showing whatever name was written last.
 static char s_Shown[MPWEAPONSET_MAXSAVED][MPSETUP_MAXNAME + 8];
-// The name the room's rules brought with them for the set the match plays by
-// (netrules.c), and this machine's number for that set: -1 when the rules named
-// nothing, which is every room whose host plays by the game's own sets
-static char s_ForeignName[MPSETUP_MAXNAME + 1];
-static s32 s_ForeignIndex = -1;
+
 
 static void mpWeaponSetsPutRow(s32 index);
 static void mpWeaponSetsDisableAlt(struct mpweaponset *set);
@@ -662,22 +658,6 @@ void mpWeaponSetsSelfTest(void)
 					func0f188f9c(mpWeaponSetStockOfferedFirst()) < first
 					&& !mpWeaponSetsOwns(func0f188f9c(mpWeaponSetStockOfferedFirst())));
 
-			mpWeaponSetsSetForeignName(mpWeaponSetsGet(1)->name, first + 1);
-
-			mpWeaponSetsTestCheck("a name the rules brought is shown for that row",
-					mpWeaponSetsForeignNameFor(first + 1) != NULL
-					&& strcmp(mpWeaponSetsForeignNameFor(first + 1), "UI Set") == 0
-					&& strstr(mpGetWeaponSetName(mpCountWeaponSetThing(first + 1)), "UI Set") != NULL);
-
-			mpWeaponSetsTestCheck("and only for that row",
-					mpWeaponSetsForeignNameFor(first) == NULL
-					&& mpWeaponSetsForeignNameFor(0) == NULL);
-
-			mpWeaponSetsSetForeignName("", 0);
-
-			mpWeaponSetsTestCheck("a room that named nothing names nothing here",
-					mpWeaponSetsForeignNameFor(first + 1) == NULL);
-
 			s32 findable = mpWeaponSetsSave("Findable", g_MpSetup.weapons);
 			s32 again = mpWeaponSetsNum();
 
@@ -834,33 +814,6 @@ const char *mpWeaponSetsNamedFor(s32 listindex)
 	return s_Sets[at].name;
 }
 
-/**
- * The rules' name for the set the room plays by, and where it belongs here.
- *
- * The client's own list cannot name a set its host saved by hand, and the
- * number it travels by is the host's numbering - read against this machine's
- * list it would name one of this machine's own sets. So the rules' name outranks
- * the list, for the one row the room is playing by and for nothing else. A room
- * that named nothing clears it, so a machine that played by a named set does not
- * go on naming its own afterwards.
- */
-void mpWeaponSetsSetForeignName(const char *name, s32 listindex)
-{
-	snprintf(s_ForeignName, sizeof(s_ForeignName), "%s", name != NULL ? name : "");
-	s_ForeignIndex = s_ForeignName[0] != '\0' ? listindex : -1;
-}
-
-const char *mpWeaponSetsForeignNameFor(s32 listindex)
-{
-	return (s_ForeignIndex >= 0 && listindex == s_ForeignIndex) ? s_ForeignName : NULL;
-}
-
-// The name on its own, for the migration snapshot to carry on
-const char *mpWeaponSetsForeignName(void)
-{
-	return s_ForeignName;
-}
-
 // Case-insensitive equality, spelled out rather than strcasecmp: the same
 // source builds against mingw, where the header that declares it has moved
 static bool mpWeaponSetsNameEqual(const char *a, const char *b)
@@ -900,3 +853,4 @@ s32 mpWeaponSetsFind(const char *name)
 
 	return -1;
 }
+
