@@ -2645,7 +2645,24 @@ static MenuItemHandlerResult menuhandlerBind(s32 operation, struct menuitem *ite
 		menuPushDialog(&g_ExtendedBindKeyMenuDialog);
 		break;
 	case MENUOP_GETSELECTEDINDEX:
+		// One row, several bindings: a contkey holds INPUT_MAX_BINDS of them
+		// (binds[player][contkey][INPUT_MAX_BINDS]) and this row's dropdown is how
+		// they are chosen. It displayed slot 0 however the others were filled, so
+		// a command held only on the pad - Sprint's left stick with the keyboard
+		// slot empty - read NONE on a page whose row is not empty, and a player
+		// could not tell unbound from bound-on-the-other-device. Show the first
+		// slot that is filled.
 		data->dropdown.value = 0;
+		binds = inputKeyGetBinds(g_ExtMenuPlayer, menuBinds[idx].ck);
+
+		if (binds != NULL) {
+			for (s32 i = 0; i < INPUT_MAX_BINDS; i++) {
+				if (binds[i] != 0) {
+					data->dropdown.value = i;
+					break;
+				}
+			}
+		}
 	}
 
 	return 0;
@@ -4741,7 +4758,24 @@ static MenuItemHandlerResult menuhandlerModBind(s32 operation, struct menuitem *
 		menuPushDialog(&g_ExtendedBindKeyMenuDialog);
 		break;
 	case MENUOP_GETSELECTEDINDEX:
+		// One row, several bindings: a contkey holds INPUT_MAX_BINDS of them
+		// (binds[player][contkey][INPUT_MAX_BINDS]) and this row's dropdown is how
+		// they are chosen. It displayed slot 0 however the others were filled, so
+		// a command held only on the pad - Sprint's left stick with the keyboard
+		// slot empty - read NONE on a page whose row is not empty, and a player
+		// could not tell unbound from bound-on-the-other-device. Show the first
+		// slot that is filled.
 		data->dropdown.value = 0;
+		binds = inputKeyGetBinds(g_ExtMenuPlayer, bind->ck);
+
+		if (binds != NULL) {
+			for (s32 i = 0; i < INPUT_MAX_BINDS; i++) {
+				if (binds[i] != 0) {
+					data->dropdown.value = i;
+					break;
+				}
+			}
+		}
 	}
 
 	return 0;

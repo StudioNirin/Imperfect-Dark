@@ -120,3 +120,29 @@ until the language packs are redone, which is how new copy already behaves.
 The two defaults that came with the page are fresh-install defaults like entry 74's:
 `sprint` on, `roll` `MODROLL_EVERYONE` (`modoptions.c`'s positional defaults list -
 **at the end of it**, never inserted into the middle).
+
+## A command holds several bindings, and the bind row shows one of them
+
+`binds[player][contkey][INPUT_MAX_BINDS]` in `port/src/input.c`, four slots, and
+pd.ini writes them one line comma-separated (`CK_0100=LEFT_SHIFT, JOY1_LSTICK`).
+So a command bound on both devices is one line with two names, and it has always
+been able to be: the Sprint default ships that way.
+
+The row on the Key Bindings page is a dropdown over those slots
+(`MENUOP_GETOPTIONCOUNT` is `INPUT_MAX_BINDS`, `MENUOP_GETOPTIONTEXT` names the
+key in the slot or `NONE`), and choosing a slot opens the prompt, which writes
+**that slot** (`inputKeyBind(idx, ck, g_BindIndex, vk)`). Re-binding a slot never
+clears the others. Nothing is lost by touching a row.
+
+What was wrong is that `MENUOP_GETSELECTEDINDEX` returned 0, so the collapsed row
+showed slot 0 whatever else was filled: Sprint with only the pad bound read
+`NONE` on a page whose row was not empty, which is indistinguishable from
+unbound. It now returns the first filled slot, on both pages with bind rows (Key
+Bindings' `menuhandlerBind` and Dab's Mod Options' `menuhandlerModKeyBind`, which
+is the same shape over `modMenuBinds[]`).
+
+Still one-slot-per-glance by design of the widget: the row cannot show all four
+at once without the label carrying them, which is a layout change, not a handler
+one. A player who wants both devices bound picks the second slot in the dropdown
+and binds it; there is no affordance saying so.
+
