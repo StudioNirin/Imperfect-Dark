@@ -40,6 +40,10 @@ extern s32 g_MpWeaponSetNum;
 // The weapons page's save row, driven by the self-test below
 extern MenuItemHandlerResult menuhandlerMpSaveCustomSet(s32 operation, struct menuitem *item, union handlerdata *data);
 
+// And its six slots, same reason
+extern MenuItemHandlerResult menuhandlerMpWeaponSlot(s32 operation, struct menuitem *item, union handlerdata *data);
+extern s32 mpGetWeaponSlot(s32 slot);
+
 static struct mpweaponsetentry s_Sets[MPWEAPONSET_MAXSAVED];
 static s32 s_Num;
 // Where this file's block of rows sits in g_MpWeaponSets, -1 while it does not
@@ -540,6 +544,7 @@ void mpWeaponSetsSelfTest(void)
 					s_Num == 2 && mpWeaponSetsGet(1) != NULL
 					&& strcmp(mpWeaponSetsGet(1)->name, "UI Set") == 0);
 
+			struct menuitem slotitem = item;
 			u8 saved_slots[NUM_MPWEAPONSLOTS];
 			memcpy(saved_slots, mpWeaponSetsGet(1)->slots, NUM_MPWEAPONSLOTS);
 
@@ -675,6 +680,22 @@ void mpWeaponSetsSelfTest(void)
 
 			s32 findable = mpWeaponSetsSave("Findable", g_MpSetup.weapons);
 			s32 again = mpWeaponSetsNum();
+
+			{
+				s32 before = mpGetWeaponSlot(0);
+
+				g_MpWeaponSetNum = mpWeaponSetStockOfferedFirst();
+				slotitem.param3 = 0;
+				data.dropdown.value = (s32) ((before + 1) % mpGetNumWeaponOptions());
+				menuhandlerMpWeaponSlot(MENUOP_SET, &slotitem, &data);
+
+				mpWeaponSetsTestCheck("touching a slot on one of the game's sets makes it Custom",
+						g_MpWeaponSetNum == WEAPONSET_CUSTOM
+						&& mpGetWeaponSlot(0) != before
+						&& mpWeaponSetsOwns(g_MpWeaponSetNum) == false);
+
+				g_MpSetup.weapons[0] = (u8) before;
+			}
 
 			mpWeaponSetsTestCheck("one name is one set, whichever case it is typed in",
 					findable >= 0 && mpWeaponSetsFind("findable") == findable

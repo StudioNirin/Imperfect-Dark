@@ -645,6 +645,15 @@ MenuItemHandlerResult menuhandlerMpWeaponSlot(s32 operation, struct menuitem *it
 		return (uintptr_t) mpGetWeaponLabel(data->dropdown.value);
 #endif
 	case MENUOP_SET:
+		if (mpWeaponSlotsAreLocked()) {
+			// The gun is what they came for: the set the game shipped is a
+			// starting point, and the number that says so is changed on the way
+			// to the slot, not before it. WEAPONSET_CUSTOM keeps the six as they
+			// stand - mpApplyWeaponSet only writes the slots for the game's own
+			// sets - so the fill the stock set gave survives the switch.
+			g_MpWeaponSetNum = WEAPONSET_CUSTOM;
+		}
+
 		mpSetWeaponSlot(item->param3, data->dropdown.value);
 		break;
 	case MENUOP_GETSELECTEDINDEX:

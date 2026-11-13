@@ -5337,9 +5337,13 @@ void dialogTick(struct menudialog *dialog, struct menuinputs *inputs, u32 tickfl
 
 				if (mpIsPlayerLockedOut(g_MpPlayerNum) && (item->flags & MENUITEMFLAG_LOCKABLEMINOR)) {
 					inputsptr = &spd8;
-				} else if ((item->flags & MENUITEMFLAG_MPWEAPONSLOT) && mpWeaponSlotsAreLocked()) {
-					inputsptr = &spd8;
 				} else if (g_MenuData.root == MENUROOT_12) {
+					// The weapon slots used to be cut off here as well, which made
+					// a row the game's own set fills inert: the player had to pick
+					// Custom as a second step before they could touch a gun. The
+					// row's own handler switches the set now (menuhandlerMpWeaponSlot),
+					// so a locked set is a starting point rather than a wall
+					// (weapon-sets.md)
 					inputsptr = &spd8;
 				}
 
