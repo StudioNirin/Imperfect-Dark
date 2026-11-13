@@ -239,4 +239,40 @@ page asking about its own name asks twice; the owner's call was that overwriting
 set's guns is worth a question whoever typed the name, and the question's Yes is
 first so the cursor lands on it.
 
+## The overwrite question was built twice and neither shape worked (2026-11-13)
+
+Both shapes are gone; the page now states the rule instead of asking. Recorded
+because three rounds went into it and the reasons are not visible in the code.
+
+**A row cannot appear inside an already-laid-out page.** `MENUOP_CHECKHIDDEN` is
+consulted in `src/game/menu.c`'s row measurement, where a hidden row is measured to
+`*width = 0; *height = 0`. That is done when the dialog is laid out, so three rows
+hidden at open never get a size back when a collision is detected later - the flag
+was set correctly, nothing drew, nothing wrote, and the player saw a silent failure.
+Pages that do reveal rows do so after the player activates a row, which re-lays-out;
+a keyboard commit does not.
+
+**A keyboard row cannot change the dialog stack in either direction.** Popping its
+own dialog from `MENUOP_SETTEXT` or `MENUOP_SET` crashes in `menuUpdateCurFrame`;
+pushing a dialog from the same place crashes in `dialogCalculateContentSize`
+measuring text for a page mid-edit - both symbolised, both found by the gate
+driving `MENUOP_SETTEXT`, which is the only operation a keyboard row is ever given
+(`menuitem.c`, OK at line 1722). So the game's own `menuhandlerMpSetupName` pushing
+`g_FilemgrFileSavedMenuDialog` from a `MENUOP_SET` case is code that has probably
+never run in anybody's copy, and is not evidence that the shape works.
+
+**What shipped instead:** one `Save Set` row, the name page, and a line under the
+keyboard - *"Entering an existing custom set name will overwrite that set."* A name
+already used writes that set with the guns on screen; a new name adds one. No
+question, because the store holds only this player's own sets, so nothing but a set
+they made themselves is reachable by typing a name, and the name is the thing they
+just typed on purpose. A name matching one of the game's own sets cannot collide
+with anything (those are not in the store) and shows as `CX: Pistols` beside them,
+which is what the prefix is for.
+
+Ask-before-overwrite is not a bad idea, but in this menu it has to be a dialog
+pushed from a **selectable** row, before the name page opens - which is the
+two-row shape (Save Set / Save Set As) the owner rejected for failing silently when
+a taken name was typed into Save As. Either the ask comes before the typing, or the
+page says what the typing does. It cannot come after.
 

@@ -40,6 +40,8 @@
 #
 # mod-base 69
 
+notes 85 2026-11-13
+Saving a custom weapon set now overwrites by name, and the name page says so above the keyboard: "Entering an existing custom set name will overwrite that set." Only your own sets are reachable that way - the store holds nothing else - so naming one Pistols is fine, it just shows as CX: Pistols beside the game's own. The Yes/No rows that sat uselessly on that page are gone.
 notes 84 2026-11-13
 Fixes to the weapon set name page from the reports: the Overwrite question no longer sits on the page when nothing collided with a name (it was half hidden, so the Yes and No did nothing), it now appears for the set's own name as well as another set's, Yes is the default, and saving a set no longer drops you out to the main menu - you stay on the weapons page where the set is selected.
 notes 83 2026-11-13
