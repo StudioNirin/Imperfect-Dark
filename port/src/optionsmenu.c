@@ -2446,6 +2446,10 @@ static const struct menubind menuBinds[] = {
 	{ CK_C_D,    LANG_N("Backward [CD]\n"),     LANG_N("N64 C-Down\n") },
 	{ CK_C_R,    LANG_N("Strafe Right [CR]\n"), LANG_N("N64 C-Right\n") },
 	{ CK_C_L,    LANG_N("Strafe Left [CL]\n"),  LANG_N("N64 C-Left\n") },
+	// Sprint came in with the fork's own control set and had no row, so its
+	// button could only be moved by editing pd.ini. Above Reload because that is
+	// where the running hand already is.
+	{ CK_0100,   LANG_N("Sprint [+]\n"),        LANG_N("N64 Ext 0100\n") },
 	{ CK_X,      LANG_N("Reload [X]\n"),        LANG_N("N64 Ext X\n") },
 	{ CK_Y,      LANG_N("Next Weapon [Y]\n"),   LANG_N("N64 Ext Y\n") },
 	{ CK_8000,   LANG_N("Cycle Crouch [+]\n"),  LANG_N("N64 Ext 8000\n") },
@@ -2490,6 +2494,9 @@ struct menuitem g_ExtendedBindsMenuItems[] = {
 	DEFINE_MENU_BIND(),
 	DEFINE_MENU_BIND(),
 	DEFINE_MENU_BIND(),
+	DEFINE_MENU_BIND(),
+	// Sprint, paired with menuBinds[]'s row above; the two are indexed
+	// against each other (menutextBind), so they move together
 	DEFINE_MENU_BIND(),
 	DEFINE_MENU_BIND(),
 	DEFINE_MENU_BIND(),
