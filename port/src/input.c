@@ -1634,6 +1634,114 @@ const u32 *inputKeyGetBinds(s32 idx, u32 ck)
 	return binds[idx][ck];
 }
 
+/**
+ * Which family a binding belongs to: keyboard and mouse, or controller.
+ *
+ * The code says it, because the vk space is laid out by device - scancodes, then
+ * the mouse buttons from VK_MOUSE_BEGIN, then each controller's buttons from
+ * VK_JOY_BEGIN - so this is arithmetic rather than a table that could fall
+ * behind a new button. -1 is "nothing", which is not the same question as
+ * "neither family": an empty slot must not answer as though it were waiting for
+ * one device or the other, or a page looking for its own slot would overwrite it
+ * by accident.
+ */
+s32 inputBindFamily(u32 vk)
+{
+	if (vk == 0 || vk >= VK_TOTAL_COUNT) {
+		return -1;
+	}
+
+	return (vk >= VK_JOY_BEGIN) ? INPUT_BIND_FAMILY_CONTROLLER : INPUT_BIND_FAMILY_KEYBOARD;
+}
+
+/**
+ * The slot to read or write for one family, out of a command's four.
+ *
+ * A command holds INPUT_MAX_BINDS bindings of any devices mixed in any order,
+ * and nothing records which slot is whose - so a page that shows one device has
+ * to ask this instead of assuming slot 0 is the keyboard's. The family's own
+ * slot first, so rebinding a pad button replaces it; then an empty one, so a
+ * second binding is added without a player choosing a slot number; then -1, which
+ * is the state where all four are taken by the other family and the player has
+ * to make room by deleting one.
+ */
+s32 inputBindFamilySlot(const u32 *binds, s32 family)
+{
+	if (binds == NULL || (family != INPUT_BIND_FAMILY_KEYBOARD && family != INPUT_BIND_FAMILY_CONTROLLER)) {
+		return -1;
+	}
+
+	for (s32 i = 0; i < INPUT_MAX_BINDS; i++) {
+		if (inputBindFamily(binds[i]) == family) {
+			return i;
+		}
+	}
+
+	for (s32 i = 0; i < INPUT_MAX_BINDS; i++) {
+		if (binds[i] == 0) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+static s32 s_BindTestChecks;
+static s32 s_BindTestFailed;
+
+static void inputBindTestCheck(const char *name, s32 pass)
+{
+	s_BindTestChecks++;
+
+	if (!pass) {
+		s_BindTestFailed++;
+	}
+
+	sysLogPrintf(LOG_NOTE, "bindfamilies test: %s %s", pass ? "ok" : "FAIL", name);
+}
+
+/**
+ * The families and the slot choice, over arrays built here.
+ *
+ * Nothing global is touched: the two functions take the four slots as a
+ * parameter, so the test cannot disturb a player's real bindings or need a
+ * scratch save file - which is the whole reason they take an array rather than a
+ * player index.
+ */
+void inputBindsSelfTest(void)
+{
+	const u32 kb[INPUT_MAX_BINDS] = { VK_LSHIFT, VK_MOUSE_LEFT, 0, 0 };
+	const u32 padfirst[INPUT_MAX_BINDS] = { VK_JOY1_LTRIG, 0, 0, 0 };
+	const u32 mixed[INPUT_MAX_BINDS] = { VK_LSHIFT, VK_JOY1_RTRIG, 0, 0 };
+	const u32 full[INPUT_MAX_BINDS] = { VK_LSHIFT, VK_SPACE, VK_MOUSE_RIGHT, VK_LALT };
+
+	inputBindTestCheck("nothing is no family", inputBindFamily(0) == -1);
+	inputBindTestCheck("a key is the keyboard's", inputBindFamily(VK_LSHIFT) == INPUT_BIND_FAMILY_KEYBOARD);
+	inputBindTestCheck("a mouse button is too", inputBindFamily(VK_MOUSE_LEFT) == INPUT_BIND_FAMILY_KEYBOARD);
+	inputBindTestCheck("a pad button is the controller's",
+			inputBindFamily(VK_JOY1_LTRIG) == INPUT_BIND_FAMILY_CONTROLLER);
+
+	inputBindTestCheck("a family reads its own slot, not the first one",
+			inputBindFamilySlot(mixed, INPUT_BIND_FAMILY_CONTROLLER) == 1
+			&& inputBindFamilySlot(mixed, INPUT_BIND_FAMILY_KEYBOARD) == 0);
+
+	inputBindTestCheck("with none of its own it takes the first empty slot",
+			inputBindFamilySlot(padfirst, INPUT_BIND_FAMILY_KEYBOARD) == 1);
+
+	inputBindTestCheck("and asks for room when the other family has it all",
+			inputBindFamilySlot(full, INPUT_BIND_FAMILY_CONTROLLER) == -1);
+
+	inputBindTestCheck("and never invents a slot out of an empty array",
+			inputBindFamilySlot(NULL, INPUT_BIND_FAMILY_KEYBOARD) == -1
+			&& inputBindFamilySlot(kb, 7) == -1);
+
+	if (s_BindTestFailed == 0) {
+		sysLogPrintf(LOG_NOTE, "bindfamilies test: all %d checks as expected", s_BindTestChecks);
+	} else {
+		sysLogPrintf(LOG_NOTE, "bindfamilies test: %d of %d CHECKS FAILED", s_BindTestFailed, s_BindTestChecks);
+	}
+}
+
 // a key held down by a test (inputTestHoldKey: netplay's --net-test-hold-key),
 // as if a player held it, through everything a real key goes through
 static u32 testHeldKey = 0;

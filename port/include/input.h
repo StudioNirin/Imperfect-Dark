@@ -261,6 +261,15 @@ void inputUpdate(void);
 
 // binds[] into the strings pd.ini is written from; configSave() calls it,
 // and it does nothing before inputInit() has read them
+// A command's several bindings are mixed in any order, so a page that shows one
+// device asks which of the four slots belong to it (input.c)
+#define INPUT_BIND_FAMILY_KEYBOARD 0
+#define INPUT_BIND_FAMILY_CONTROLLER 1
+s32 inputBindFamily(u32 vk);
+s32 inputBindFamilySlot(const u32 *binds, s32 family);
+// --test-bindfamilies
+void inputBindsSelfTest(void);
+
 void inputSaveBinds(void);
 
 // reset given player's binds to either PC or N64 defaults

@@ -121,28 +121,44 @@ The two defaults that came with the page are fresh-install defaults like entry 7
 `sprint` on, `roll` `MODROLL_EVERYONE` (`modoptions.c`'s positional defaults list -
 **at the end of it**, never inserted into the middle).
 
-## A command holds several bindings, and the bind row shows one of them
+## A command holds several bindings, and the two pages that show them
 
 `binds[player][contkey][INPUT_MAX_BINDS]` in `port/src/input.c`, four slots, and
-pd.ini writes them one line comma-separated (`CK_0100=LEFT_SHIFT, JOY1_LSTICK`).
-So a command bound on both devices is one line with two names, and it has always
-been able to be: the Sprint default ships that way.
+pd.ini writes them one line comma-separated (`CK_0100=LEFT_SHIFT,
+JOY1_LSTICK`). So a command bound on both devices is one line with two names, and
+it has always been able to be: the Sprint default ships that way.
 
-The row on the Key Bindings page is a dropdown over those slots
-(`MENUOP_GETOPTIONCOUNT` is `INPUT_MAX_BINDS`, `MENUOP_GETOPTIONTEXT` names the
-key in the slot or `NONE`), and choosing a slot opens the prompt, which writes
-**that slot** (`inputKeyBind(idx, ck, g_BindIndex, vk)`). Re-binding a slot never
-clears the others. Nothing is lost by touching a row.
+Nothing records which slot belongs to which device, and the slots take codes from
+one space that is itself laid out by device - scancodes, then the mouse buttons
+from `VK_MOUSE_BEGIN`, then each controller's from `VK_JOY_BEGIN` - so
+`inputBindFamily()` is range arithmetic and `inputBindFamilySlot()` answers "the
+slot that is already this device's, else the first empty one, else -1". Those two
+are the whole split, they take the four slots as an array, and
+`--test-bindfamilies` (`tools/ci/bindfamilytest.sh`) runs them over arrays built
+in the test, so a player's bindings are nowhere near it.
 
-What was wrong is that `MENUOP_GETSELECTEDINDEX` returned 0, so the collapsed row
-showed slot 0 whatever else was filled: Sprint with only the pad bound read
-`NONE` on a page whose row was not empty, which is indistinguishable from
-unbound. It now returns the first filled slot, on both pages with bind rows (Key
-Bindings' `menuhandlerBind` and Dab's Mod Options' `menuhandlerModKeyBind`, which
-is the same shape over `modMenuBinds[]`).
+The Key Bindings page became two: **Keyboard & Mouse Binds** and **Controller
+Binds**, both listing every command from the same `menuBinds[]`, each row showing
+only its own device's binding or `NONE`, and Delete on one page cannot strip the
+other's. A row is a dropdown with **one** option rather than the four slots, and
+the page picks the slot - which is what makes rebinding a pad button replace it,
+binding the other device add to the same command, and nobody have to know what
+"slot 3" means. `inputBindFamilySlot` returning -1 is said in the log rather than
+worked around: all four slots being the other device's is a state the player has
+to make room in, and quietly overwriting a binding they can see on the other page
+is not the answer.
 
-Still one-slot-per-glance by design of the widget: the row cannot show all four
-at once without the label carrying them, which is a layout change, not a handler
-one. A player who wants both devices bound picks the second slot in the dropdown
-and binds it; there is no affordance saying so.
+The rows find their command by which array they live in (`bindDeviceRow`), not by
+a positional index handed to the row: each page carries two reset rows, Back and a
+terminator after the command rows, so an offset alone says nothing about whether
+it names a command, and a row pointing past the table it reads is the crash this
+file has already had (crash-reports.md).
 
+**Left to delete:** the single page the two replace still exists unreferenced -
+`g_ExtendedBindsMenuItems`, `g_ExtendedBindsMenuDialog`, `menutextBind`,
+`menuhandlerBind` (`menuhandlerOpenBindsMenu` is gone, which is the only reason
+the build is warning-free). It is inert, not slow, but it is two ways to edit the
+same thing sitting in one file, and `menuhandlerBind`'s "first filled slot" fix
+belongs to it. Deleting it is a line-range job across interleaved code: resolve
+every boundary first and refuse to write if they overlap, which is the guard that
+stopped one such attempt from corrupting this file rather than only warning.

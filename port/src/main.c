@@ -95,6 +95,7 @@ s32 g_PosePush = 0; // --test-anim-push FWD|BACK|LEFT|RIGHT: shove the body alon
 s32 g_TestDodge = false; // --test-dodge: the crouch double tap put through every direction (lvTestDodgeTick)
 s32 g_TestMpWeaponSets = false; // --test-mpweaponsets: the saved weapon sets' store (mpWeaponSetsSelfTest)
 s32 g_TestSprint = false; // --test-sprint: a sprint, a trigger inside it, and a switch (lvTestSprintTick)
+s32 g_TestBindFamilies = false; // --test-bindfamilies: which of a command's four bindings is whose (inputBindsSelfTest)
 s32 g_NumPoseAnims = 0;
 s32 g_TickExtraSleep = true;
 
@@ -335,6 +336,15 @@ int main(int argc, const char **argv)
 
 	if (g_TestMpWeaponSets) {
 		mpWeaponSetsSelfTest();
+	}
+
+	// Read with the flag above and not with the --test flags further down: this
+	// runs at that point in startup, and reading it here afterwards would ask the
+	// question before the answer arrived
+	g_TestBindFamilies = sysArgCheck("--test-bindfamilies");
+
+	if (g_TestBindFamilies) {
+		inputBindsSelfTest();
 	}
 
 	// netplay: --host/--connect open their socket once the mods are mounted

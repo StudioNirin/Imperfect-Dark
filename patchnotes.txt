@@ -40,6 +40,8 @@
 #
 # mod-base 69
 
+notes 83 2026-11-13
+Key bindings are two pages now, Keyboard & Mouse and Controller, both listing every command. A command can be bound on both devices at once and the old single page could only show one of them, so a button you had on the pad looked unbound. Each page shows and edits only its own device, so rebinding a pad button replaces it, Delete on one page cannot strip the other, and nobody has to pick a slot number. Sprint sits above Reload on both.
 notes 82 2026-11-13
 Sprint now has its own row on the Key Bindings page, above Reload, so it can be rebound without editing the config file. Saved weapon sets behave the way saving does elsewhere: a name already in use asks whether to overwrite, and saving a set you are on comes up with its name already typed, so leaving it overwrites and changing it keeps both. Picking a weapon while one of the game's own weapon sets is selected now switches to Custom as it sets the slot, instead of doing nothing until you selected Custom first. And a keybind row whose command is bound only on the pad no longer reads NONE - it shows the button that is bound.
 notes 81 2026-11-12

@@ -2668,6 +2668,245 @@ static MenuItemHandlerResult menuhandlerBind(s32 operation, struct menuitem *ite
 	return 0;
 }
 
+/*
+ * The two device pages.
+ *
+ * A command holds INPUT_MAX_BINDS bindings with the devices mixed in any order,
+ * and nothing in the storage says which slot belongs to which device, so the one
+ * page that used to list them could show only one of them - and did, which made a
+ * command bound only on the pad look unbound. Two pages, each showing one device's
+ * binding and writing only that device's slot (inputBindFamilySlot), so rebinding
+ * a pad button replaces it, binding the other device adds to the same command, and
+ * Delete on one page cannot strip the other.
+ *
+ * The row is a dropdown with ONE option rather than the four slots: the slot count
+ * is the storage's business, and a player choosing "slot 3" is not a thing anybody
+ * wanted. The page picks the slot; the prompt is the shared one, unchanged.
+ */
+static struct menuitem g_ExtendedBindsKbMenuItems[];
+static struct menuitem g_ExtendedBindsPadMenuItems[];
+static const char *menutextBindDevice(struct menuitem *item);
+static MenuItemHandlerResult menuhandlerBindDevice(s32 operation, struct menuitem *item, union handlerdata *data);
+
+#define DEFINE_MENU_BIND_DEVICE() \
+	{ \
+		MENUITEMTYPE_DROPDOWN, \
+		0, \
+		0, \
+		(uintptr_t)menutextBindDevice, \
+		0, \
+		menuhandlerBindDevice, \
+	}
+
+#define DEFINE_MENU_BIND_DEVICE_TAIL \
+	{ MENUITEMTYPE_SEPARATOR, 0, 0, 0, 0, NULL }, \
+	{ MENUITEMTYPE_SELECTABLE, 0, MENUITEMFLAG_LITERAL_TEXT, (uintptr_t)"Reset to PC Defaults\n", 0, menuhandlerResetBindsPC }, \
+	{ MENUITEMTYPE_SELECTABLE, 0, MENUITEMFLAG_LITERAL_TEXT, (uintptr_t)"Reset to N64 Defaults\n", 0, menuhandlerResetBindsN64 }, \
+	{ MENUITEMTYPE_SEPARATOR, 0, 0, 0, 0, NULL }, \
+	{ MENUITEMTYPE_SELECTABLE, 0, MENUITEMFLAG_SELECTABLE_CLOSESDIALOG, L_OPTIONS_213, 0, NULL }, \
+	{ MENUITEMTYPE_END }
+
+static struct menuitem g_ExtendedBindsKbMenuItems[] = {
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE_TAIL
+};
+
+static struct menuitem g_ExtendedBindsPadMenuItems[] = {
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE(),
+	DEFINE_MENU_BIND_DEVICE_TAIL
+};
+
+/**
+ * Which device page a row is on, found by the array it lives in.
+ *
+ * Not by a positional index handed to the row: a page's trailing rows (the two
+ * resets, Back, the terminator) sit after the command rows, so an offset alone
+ * says nothing about whether it names a command at all - and a row reading past
+ * the table it points into is the crash this file has already had once.
+ */
+static struct menuitem *bindDeviceRow(const struct menuitem *item, s32 *family, s32 *idx)
+{
+	struct menuitem *base = NULL;
+
+	if (item >= g_ExtendedBindsKbMenuItems
+			&& item < &g_ExtendedBindsKbMenuItems[ARRAYCOUNT(g_ExtendedBindsKbMenuItems)]) {
+		base = g_ExtendedBindsKbMenuItems;
+		*family = INPUT_BIND_FAMILY_KEYBOARD;
+	} else if (item >= g_ExtendedBindsPadMenuItems
+			&& item < &g_ExtendedBindsPadMenuItems[ARRAYCOUNT(g_ExtendedBindsPadMenuItems)]) {
+		base = g_ExtendedBindsPadMenuItems;
+		*family = INPUT_BIND_FAMILY_CONTROLLER;
+	} else {
+		return NULL;
+	}
+
+	*idx = item - base;
+
+	if (*idx < 0 || *idx >= (s32) ARRAYCOUNT(menuBinds)) {
+		return NULL;
+	}
+
+	return base;
+}
+
+static const char *menutextBindDevice(struct menuitem *item)
+{
+	s32 family;
+	s32 idx;
+
+	if (bindDeviceRow(item, &family, &idx) == NULL) {
+		return "";
+	}
+
+	return g_PlayerExtCfg[g_ExtMenuPlayer].extcontrols ?
+		langTr(menuBinds[idx].name) : langTr(menuBinds[idx].n64name);
+}
+
+static MenuItemHandlerResult menuhandlerBindDevice(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	s32 family;
+	s32 idx;
+	const u32 *binds;
+	s32 slot;
+
+	static char keyname[64];
+
+	if (bindDeviceRow(item, &family, &idx) == NULL) {
+		return 0;
+	}
+
+	binds = inputKeyGetBinds(g_ExtMenuPlayer, menuBinds[idx].ck);
+	slot = inputBindFamilySlot(binds, family);
+
+	switch (operation) {
+	case MENUOP_GETOPTIONCOUNT:
+		// One option, the device's own binding: see the note above the pages
+		data->dropdown.value = 1;
+		break;
+	case MENUOP_GETOPTIONTEXT:
+		if (slot >= 0 && binds[slot] != 0) {
+			strncpy(keyname, inputGetKeyName(binds[slot]), sizeof(keyname) - 1);
+			keyname[sizeof(keyname) - 1] = '\0';
+
+			for (char *p = keyname; *p; ++p) {
+				if (*p == '_') {
+					*p = ' ';
+				}
+			}
+
+			return (intptr_t)keyname;
+		}
+
+		return (intptr_t)"NONE";
+	case MENUOP_SET:
+		if (slot < 0) {
+			// All four of the command's bindings are the other device's. Said,
+			// not guessed at: quietly overwriting one would take a binding the
+			// player can see on the other page
+			sysLogPrintf(LOG_NOTE, "options: %s has no free binding slot for this device",
+					menuBinds[idx].name);
+			break;
+		}
+
+		g_ExtendedBindKeyMenuItems[0].param2 = (uintptr_t)menuBinds[idx].name;
+		g_BindIndex = slot;
+		g_BindContKey = menuBinds[idx].ck;
+		g_BindKeySetter = NULL;
+		inputClearLastKey();
+		menuPushDialog(&g_ExtendedBindKeyMenuDialog);
+		break;
+	case MENUOP_GETSELECTEDINDEX:
+		data->dropdown.value = 0;
+	}
+
+	return 0;
+}
+
+// The per-player title and the two flags the page it replaces had: Start selects
+// a row rather than closing, and Back does not leave a page a player may be
+// halfway through rebinding
+static char *menutitleBindsKb(void *dialog)
+{
+	static char title[80];
+
+	snprintf(title, sizeof(title), langTr("Player %d Keyboard Binds"), g_ExtMenuPlayer + 1);
+
+	return title;
+}
+
+static char *menutitleBindsPad(void *dialog)
+{
+	static char title[80];
+
+	snprintf(title, sizeof(title), langTr("Player %d Controller Binds"), g_ExtMenuPlayer + 1);
+
+	return title;
+}
+
+struct menudialogdef g_ExtendedBindsKbMenuDialog = {
+	MENUDIALOGTYPE_DEFAULT,
+	(uintptr_t)menutitleBindsKb,
+	g_ExtendedBindsKbMenuItems,
+	NULL,
+	MENUDIALOGFLAG_STARTSELECTS | MENUDIALOGFLAG_IGNOREBACK,
+	NULL,
+};
+
+struct menudialogdef g_ExtendedBindsPadMenuDialog = {
+	MENUDIALOGTYPE_DEFAULT,
+	(uintptr_t)menutitleBindsPad,
+	g_ExtendedBindsPadMenuItems,
+	NULL,
+	MENUDIALOGFLAG_STARTSELECTS | MENUDIALOGFLAG_IGNOREBACK,
+	NULL,
+};
+
 static MenuItemHandlerResult menuhandlerResetBindsPC(s32 operation, struct menuitem *item, union handlerdata *data)
 {
 	if (operation == MENUOP_SET) {
@@ -2724,10 +2963,20 @@ static MenuItemHandlerResult menuhandlerOpenGameMenu(s32 operation, struct menui
 	return 0;
 }
 
-static MenuItemHandlerResult menuhandlerOpenBindsMenu(s32 operation, struct menuitem *item, union handlerdata *data)
+
+static MenuItemHandlerResult menuhandlerOpenBindsKbMenu(s32 operation, struct menuitem *item, union handlerdata *data)
 {
 	if (operation == MENUOP_SET) {
-		g_ExtNextDialog = &g_ExtendedBindsMenuDialog;
+		g_ExtNextDialog = &g_ExtendedBindsKbMenuDialog;
+		menuPushDialog(&g_ExtendedSelectPlayerMenuDialog);
+	}
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerOpenBindsPadMenu(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_SET) {
+		g_ExtNextDialog = &g_ExtendedBindsPadMenuDialog;
 		menuPushDialog(&g_ExtendedSelectPlayerMenuDialog);
 	}
 	return 0;
@@ -8142,9 +8391,17 @@ struct menuitem g_ExtendedMenuItems[] = {
 		MENUITEMTYPE_SELECTABLE,
 		0,
 		MENUITEMFLAG_LITERAL_TEXT,
-		(uintptr_t)"Key Bindings\n",
+		(uintptr_t)"Keyboard & Mouse Binds\n",
 		0,
-		menuhandlerOpenBindsMenu,
+		menuhandlerOpenBindsKbMenu,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Controller Binds\n",
+		0,
+		menuhandlerOpenBindsPadMenu,
 	},
 	{
 		MENUITEMTYPE_SELECTABLE,
