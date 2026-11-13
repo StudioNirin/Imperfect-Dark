@@ -2050,8 +2050,8 @@ struct menuitem g_MpSaveWeaponSetNameMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_LESSLEFTPADDING,
-		(uintptr_t)"Entering an existing custom set name\nwill overwrite that set.\n",
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SMALLFONT | MENUITEMFLAG_LESSLEFTPADDING,
+		(uintptr_t)"Reusing a set's name\noverwrites that set.\n",
 		0,
 		NULL,
 	},
