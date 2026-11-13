@@ -44,6 +44,9 @@ extern MenuItemHandlerResult menuhandlerMpSaveCustomSet(s32 operation, struct me
 extern MenuItemHandlerResult menuhandlerMpWeaponSlot(s32 operation, struct menuitem *item, union handlerdata *data);
 extern s32 mpGetWeaponSlot(s32 slot);
 
+// Whether the page is asking about a name that is already taken (setup.c)
+extern bool mpWeaponSetOverwriteIsAsking(void);
+
 static struct mpweaponsetentry s_Sets[MPWEAPONSET_MAXSAVED];
 static s32 s_Num;
 // Where this file's block of rows sits in g_MpWeaponSets, -1 while it does not
@@ -535,39 +538,56 @@ void mpWeaponSetsSelfTest(void)
 
 			data.keyboard.string = "UI Set";
 			menuhandlerMpSaveCustomSet(MENUOP_SETTEXT, &item, &data);
+			menuhandlerMpSaveCustomSet(MENUOP_SET, &item, &data);
 
 			mpWeaponSetsTestCheck("the page's row saves the six slots",
 					s_Num == 2 && mpWeaponSetsGet(1) != NULL
-					&& strcmp(mpWeaponSetsGet(1)->name, "UI Set") == 0);
+					&& strcmp(mpWeaponSetsGet(1)->name, "UI Set") == 0
+					&& !mpWeaponSetOverwriteIsAsking());
 
 			struct menuitem slotitem = item;
 			u8 saved_slots[NUM_MPWEAPONSLOTS];
 			memcpy(saved_slots, mpWeaponSetsGet(1)->slots, NUM_MPWEAPONSLOTS);
 
-			// The page follows a set it just saved, so the collision only
-			// arrives from somewhere else: Custom, with the same name typed in
-			// another case - the page's own question proven by the typing rather
-			// than only by the store's lookup
-			g_MpWeaponSetNum = WEAPONSET_CUSTOM;
-
 			for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
 				g_MpSetup.weapons[i] = (u8) ((i + 3) % 6);
 			}
 
+			// Typed in another case, so the page's collision is proven by the
+			// typing and not only by the store's lookup
 			data.keyboard.string = "ui set";
 			menuhandlerMpSaveCustomSet(MENUOP_SETTEXT, &item, &data);
+			menuhandlerMpSaveCustomSet(MENUOP_SET, &item, &data);
 
-			mpWeaponSetsTestCheck("a name already taken is not written over by the page",
+			mpWeaponSetsTestCheck("a name already taken asks instead of writing",
 					memcmp(saved_slots, mpWeaponSetsGet(1)->slots, NUM_MPWEAPONSLOTS) == 0
-					&& s_Num == 2);
+					&& s_Num == 2 && mpWeaponSetOverwriteIsAsking());
 
+			// The question is three rows, and a selectable row with no hide case is
+			// never hidden: this is the check that a page does not offer Yes and No
+			// about a collision that has not happened
+			data.keyboard.string = "";
+			menuhandlerMpSaveCustomSet(MENUOP_SETTEXT, &item, &data);
+
+			mpWeaponSetsTestCheck("and the question is off the page until something collides",
+					!mpWeaponSetOverwriteIsAsking());
+
+			// Standing on the set with its own name typed: that asks too, because
+			// saving over a set's guns costs a player something whoever typed the
+			// name
 			g_MpWeaponSetNum = mpWeaponSetsFirst() + 1;
 			data.keyboard.string = "UI Set";
 			menuhandlerMpSaveCustomSet(MENUOP_SETTEXT, &item, &data);
+			menuhandlerMpSaveCustomSet(MENUOP_SET, &item, &data);
 
-			mpWeaponSetsTestCheck("the set's own name saves it where it stands",
-					memcmp(saved_slots, mpWeaponSetsGet(1)->slots, NUM_MPWEAPONSLOTS) != 0
-					&& s_Num == 2);
+			mpWeaponSetsTestCheck("the set's own name asks as well",
+					memcmp(saved_slots, mpWeaponSetsGet(1)->slots, NUM_MPWEAPONSLOTS) == 0
+					&& s_Num == 2 && mpWeaponSetOverwriteIsAsking());
+
+			// Nothing was written, which is the whole check - so the set still holds
+			// what it was saved with and the checks below read it unchanged
+			data.keyboard.string = "";
+			menuhandlerMpSaveCustomSet(MENUOP_SETTEXT, &item, &data);
 
 			// The set back as the checks below read it
 			for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {

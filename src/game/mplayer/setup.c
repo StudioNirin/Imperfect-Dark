@@ -1877,10 +1877,18 @@ MenuItemHandlerResult menuhandlerMpStartArmed(s32 operation, struct menuitem *it
 static char s_SetNameDraft[MPSETUP_MAXNAME + 1];
 static s32 s_SetNameOverwrite = -1;
 
-// Which set this page is standing on, in the store's numbering; -1 for Custom
-static s32 mpWeaponSetNumOwnInStore(void)
+/**
+ * Whether the overwrite question is showing.
+ *
+ * Named and not static because a row that is not hidden is invisible in a log and
+ * obvious on screen: the three rows that make the question each hide on this, and
+ * the gate asserts it, because a selectable row with no MENUOP_CHECKHIDDEN case is
+ * never hidden - which is how this page ended up offering Yes and No about a
+ * collision that had not happened, and a player pressing them found nothing there.
+ */
+bool mpWeaponSetOverwriteIsAsking(void)
 {
-	return mpWeaponSetsOwns(g_MpWeaponSetNum) ? g_MpWeaponSetNum - mpWeaponSetsFirst() : -1;
+	return s_SetNameOverwrite >= 0;
 }
 
 /**
@@ -1909,6 +1917,10 @@ static MenuItemHandlerResult menuhandlerMpOverwriteAsk(s32 operation, struct men
 
 static MenuItemHandlerResult menuhandlerMpOverwriteNo(s32 operation, struct menuitem *item, union handlerdata *data)
 {
+	if (operation == MENUOP_CHECKHIDDEN) {
+		return !mpWeaponSetOverwriteIsAsking();
+	}
+
 	if (operation == MENUOP_SET) {
 		// Back to the field with the word still in it: the name is the thing
 		// they were changing, so a No that cleared it would be a No that undid
@@ -1921,6 +1933,10 @@ static MenuItemHandlerResult menuhandlerMpOverwriteNo(s32 operation, struct menu
 
 static MenuItemHandlerResult menuhandlerMpOverwriteYes(s32 operation, struct menuitem *item, union handlerdata *data)
 {
+	if (operation == MENUOP_CHECKHIDDEN) {
+		return !mpWeaponSetOverwriteIsAsking();
+	}
+
 	if (operation == MENUOP_SET) {
 		if (s_SetNameOverwrite >= 0) {
 			mpWeaponSetsUpdate(s_SetNameOverwrite, g_MpSetup.weapons);
@@ -1940,28 +1956,36 @@ MenuItemHandlerResult menuhandlerMpSaveCustomSet(s32 operation, struct menuitem 
 		snprintf(data->keyboard.string, MPSETUP_MAXNAME + 1, "%s", s_SetNameDraft);
 		break;
 	case MENUOP_SETTEXT:
-	{
-		s32 own = mpWeaponSetNumOwnInStore();
-		s32 found;
-
+		// Only what was typed. Nothing is decided here: this is the operation that
+		// took the menu's layer bookkeeping down under itself when a dialog was
+		// popped from it, and the game's own name page (menuhandlerMpSetupName)
+		// keeps the same split - text here, the save under MENUOP_SET below, which
+		// is what its OK reaches
 		snprintf(s_SetNameDraft, sizeof(s_SetNameDraft), "%s", data->keyboard.string);
 		s_SetNameOverwrite = -1;
-		found = mpWeaponSetsFind(s_SetNameDraft);
+		break;
+	case MENUOP_SET:
+	{
+		s32 found = mpWeaponSetsFind(s_SetNameDraft);
 
 		if (s_SetNameDraft[0] == '\0') {
 			// Nothing to name it by: leave the field as it is, which is the only
 			// answer the player can act on
 			sysLogPrintf(LOG_NOTE, "menu: a custom weapon set saved nothing");
-		} else if (found >= 0 && found == own) {
-			// The name this page is already standing on: that is the save, and
-			// asking about it would be the page asking itself
-			mpWeaponSetsUpdate(found, g_MpSetup.weapons);
-			mpWeaponSetSelectStore(found);
 		} else if (found >= 0) {
-			// Somebody else's name, said out loud before a player's set loses
-			// the guns it was saved with
+			// A name the store already has asks, this page's own set included.
+			// Saving over a set is the one thing on this page that costs a player
+			// something, so the cost is said before it is paid rather than after
 			s_SetNameOverwrite = found;
 		} else if (mpWeaponSetsSave(s_SetNameDraft, g_MpSetup.weapons) >= 0) {
+			// Saved, and the page stays up: a keyboard row cannot close the dialog
+			// it sits in - menuPopDialog walks the menu's layers and takes the frame
+			// down under itself from here, in MENUOP_SET as much as in MENUOP_SETTEXT,
+			// which the gate found by driving this very path. The game's own name
+			// page leaves it up too, and Back now lands on the Weapons page rather
+			// than the main menu, because this page went on top of it. Pressing OK
+			// again with the same name asks about overwriting, which is the right
+			// answer to that press.
 			mpWeaponSetSelectStore(mpWeaponSetsNum() - 1);
 		} else {
 			sysLogPrintf(LOG_NOTE, "menu: a custom weapon set named `%s` saved nothing", s_SetNameDraft);
@@ -2011,10 +2035,14 @@ static MenuItemHandlerResult menuhandlerMpSaveSetRow(s32 operation, struct menui
 				mpWeaponSetsOwns(g_MpWeaponSetNum)
 					? mpWeaponSetsGet(g_MpWeaponSetNum - mpWeaponSetsFirst())->name : "");
 
-		// as the Save Settings row does: the page is put down rather than
-		// stacked on, since a room's setup pages already sit one deeper and
-		// menu.c drops a push past its cap without a word (netplay.md)
-		menuPopDialog();
+		// On top of the Weapons page, not in its place. This used to put the page
+		// down first, copied from "Save a Copy" (menuhandlerMpSaveSetupCopy), which
+		// means leaving the page you were on: here it meant closing the name page
+		// landed the player on the main menu with the Weapons page gone under them.
+		// "Save Settings" two rows up is the right model, and pushes without
+		// touching what is under it. Past menu.c's layer cap the push is refused and
+		// said, which leaves the player on the Weapons page rather than anywhere
+		// stranger (netplay.md)
 		menuPushDialog(&g_MpSaveWeaponSetNameMenuDialog);
 	}
 
@@ -2064,9 +2092,19 @@ struct menuitem g_MpSaveWeaponSetNameMenuItems[] = {
 		MENUITEMTYPE_LABEL,
 		0,
 		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_LESSLEFTPADDING,
-		(uintptr_t)"That name is taken.\nOverwrite the set saved under it?\n",
+		(uintptr_t)"A set is saved under that name.\nOverwrite it?\n",
 		0,
 		menuhandlerMpOverwriteAsk,
+	},
+	// Yes first: the cursor lands on the first row shown, and the question is the
+	// kind that should default to doing the thing the player just asked for
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SELECTABLE_CLOSESDIALOG,
+		(uintptr_t)"Yes\n",
+		0,
+		menuhandlerMpOverwriteYes,
 	},
 	{
 		MENUITEMTYPE_SELECTABLE,
@@ -2075,14 +2113,6 @@ struct menuitem g_MpSaveWeaponSetNameMenuItems[] = {
 		(uintptr_t)"No\n",
 		0,
 		menuhandlerMpOverwriteNo,
-	},
-	{
-		MENUITEMTYPE_SELECTABLE,
-		0,
-		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SELECTABLE_CLOSESDIALOG,
-		(uintptr_t)"Yes\n",
-		0,
-		menuhandlerMpOverwriteYes,
 	},
 	{ MENUITEMTYPE_END },
 };

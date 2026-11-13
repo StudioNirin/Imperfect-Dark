@@ -40,6 +40,8 @@
 #
 # mod-base 69
 
+notes 84 2026-11-13
+Fixes to the weapon set name page from the reports: the Overwrite question no longer sits on the page when nothing collided with a name (it was half hidden, so the Yes and No did nothing), it now appears for the set's own name as well as another set's, Yes is the default, and saving a set no longer drops you out to the main menu - you stay on the weapons page where the set is selected.
 notes 83 2026-11-13
 Key bindings are two pages now, Keyboard & Mouse and Controller, both listing every command. A command can be bound on both devices at once and the old single page could only show one of them, so a button you had on the pad looked unbound. Each page shows and edits only its own device, so rebinding a pad button replaces it, Delete on one page cannot strip the other, and nobody has to pick a slot number. Sprint sits above Reload on both.
 notes 82 2026-11-13

@@ -205,3 +205,38 @@ with saved sets it counts theirs first: a debugging knob, and no gate uses it.
 - `mpsetups.bin` has an export/import pair (`mpsetups-ext.bin`); the weapon
   sets` file has none, so sharing sets between machines means copying
   `mpweaponsets.bin` by hand.
+
+## Three menu facts the name page paid for (2026-11-13)
+
+**A keyboard row cannot close the dialog it sits in.** `menuPopDialog()` walks the
+menu's layers, and from a keyboard row's handler it takes the current frame down
+under itself - `menuUpdateCurFrame` through `menuPopDialog`, and the crash looks
+the same whether it comes from `MENUOP_SETTEXT` or `MENUOP_SET`, which was assumed
+otherwise for one round here. The gate drives both operations
+(`menuhandlerMpSaveCustomSet` under `MENUOP_SET`), so it is what found this rather
+than a reading of menu.c. Closing a page goes through a selectable row, which is
+why the overwrite question's Yes row carries
+`MENUITEMFLAG_SELECTABLE_CLOSESDIALOG`.
+
+**A selectable row with no `MENUOP_CHECKHIDDEN` case is never hidden.** The
+question is three rows and only the label was hidden, so the page offered
+`Yes`/`No` about a collision that had not happened, and pressing them did nothing
+visible. A row that should disappear has to be asked, each of them, and
+`mpWeaponSetOverwriteIsAsking()` is named and non-static so the gate can assert the
+predicate rather than the screenshot having to.
+
+**Push on top of the page you came from; pop only when leaving it is the point.**
+This page copied `menuhandlerMpSaveSetupCopy` ("Save a Copy"), which pops then
+pushes - correct for a copy, where the page you were on is done with. Here it meant
+closing the name page landed the player on the main menu with the Weapons page gone
+under them. `menuhandlerMpSaveSettings` two rows away is the save shape: push, and
+leave what is underneath. Worth checking which of those two a new page is like
+before copying either.
+
+**Any name already in the store asks, the set's own name included.** The first cut
+saved silently when the page was standing on that very set, on the reasoning that a
+page asking about its own name asks twice; the owner's call was that overwriting a
+set's guns is worth a question whoever typed the name, and the question's Yes is
+first so the cursor lands on it.
+
+
