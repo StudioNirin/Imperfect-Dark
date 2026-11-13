@@ -207,6 +207,18 @@ s32 mpWeaponSetsSave(const char *name, const u8 *optionslots)
 		return -1;
 	}
 
+	at = mpWeaponSetsFind(name);
+
+	if (at >= 0) {
+		// One name, one set. The page asks before it gets here (a name already
+		// taken opens the overwrite confirm, which writes through
+		// mpWeaponSetsUpdate), so arriving with a taken name is a caller that
+		// skipped that question - and two rows the player reads as the same set
+		// with different guns is not a thing a store should hold quietly.
+		sysLogPrintf(LOG_NOTE, "mpweaponsets: a set named `%s` is already saved", name);
+		return -1;
+	}
+
 	at = s_Num;
 	entry = &s_Sets[at];
 
@@ -528,9 +540,40 @@ void mpWeaponSetsSelfTest(void)
 					s_Num == 2 && mpWeaponSetsGet(1) != NULL
 					&& strcmp(mpWeaponSetsGet(1)->name, "UI Set") == 0);
 
+			u8 saved_slots[NUM_MPWEAPONSLOTS];
+			memcpy(saved_slots, mpWeaponSetsGet(1)->slots, NUM_MPWEAPONSLOTS);
+
+			// The page follows a set it just saved, so the collision only
+			// arrives from somewhere else: Custom, with the same name typed in
+			// another case - the page's own question proven by the typing rather
+			// than only by the store's lookup
+			g_MpWeaponSetNum = WEAPONSET_CUSTOM;
+
 			for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
-				g_MpSetup.weapons[i] = 0;
+				g_MpSetup.weapons[i] = (u8) ((i + 3) % 6);
 			}
+
+			data.keyboard.string = "ui set";
+			menuhandlerMpSaveCustomSet(MENUOP_SETTEXT, &item, &data);
+
+			mpWeaponSetsTestCheck("a name already taken is not written over by the page",
+					memcmp(saved_slots, mpWeaponSetsGet(1)->slots, NUM_MPWEAPONSLOTS) == 0
+					&& s_Num == 2);
+
+			g_MpWeaponSetNum = mpWeaponSetsFirst() + 1;
+			data.keyboard.string = "UI Set";
+			menuhandlerMpSaveCustomSet(MENUOP_SETTEXT, &item, &data);
+
+			mpWeaponSetsTestCheck("the set's own name saves it where it stands",
+					memcmp(saved_slots, mpWeaponSetsGet(1)->slots, NUM_MPWEAPONSLOTS) != 0
+					&& s_Num == 2);
+
+			// The set back as the checks below read it
+			for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+				g_MpSetup.weapons[i] = picked[i];
+			}
+
+			menuhandlerMpSaveCustomSet(MENUOP_SETTEXT, &item, &data);
 
 			s32 offered = mpWeaponSetsOfferedIndex(1);
 
@@ -629,6 +672,20 @@ void mpWeaponSetsSelfTest(void)
 
 			mpWeaponSetsTestCheck("a room that named nothing names nothing here",
 					mpWeaponSetsForeignNameFor(first + 1) == NULL);
+
+			s32 findable = mpWeaponSetsSave("Findable", g_MpSetup.weapons);
+			s32 again = mpWeaponSetsNum();
+
+			mpWeaponSetsTestCheck("one name is one set, whichever case it is typed in",
+					findable >= 0 && mpWeaponSetsFind("findable") == findable
+					&& mpWeaponSetsFind("FINDABLE") == findable
+					&& mpWeaponSetsFind("No Such Set") == -1);
+
+			mpWeaponSetsTestCheck("and a name taken is not saved a second time",
+					mpWeaponSetsSave("Findable", g_MpSetup.weapons) < 0
+					&& mpWeaponSetsNum() == again);
+
+			mpWeaponSetsDelete(findable);
 
 			mpWeaponSetsTestCheck("the list owns the set and no empty row",
 					mpWeaponSetsOwns(first + 1) && !mpWeaponSetsOwns(first + MPWEAPONSET_MAXSAVED - 1));
@@ -781,4 +838,44 @@ const char *mpWeaponSetsForeignNameFor(s32 listindex)
 const char *mpWeaponSetsForeignName(void)
 {
 	return s_ForeignName;
+}
+
+// Case-insensitive equality, spelled out rather than strcasecmp: the same
+// source builds against mingw, where the header that declares it has moved
+static bool mpWeaponSetsNameEqual(const char *a, const char *b)
+{
+	while (*a != '\0' && *b != '\0') {
+		char ca = (*a >= 'A' && *a <= 'Z') ? *a + ('a' - 'A') : *a;
+		char cb = (*b >= 'A' && *b <= 'Z') ? *b + ('a' - 'A') : *b;
+
+		if (ca != cb) {
+			return false;
+		}
+
+		a++;
+		b++;
+	}
+
+	return *a == '\0' && *b == '\0';
+}
+
+/**
+ * Which saved set goes by this name, or -1.
+ *
+ * Ignoring case: two rows the player reads as Pistols and pistols are one set
+ * with two guns, and the name is the only thing that tells them apart in a list.
+ */
+s32 mpWeaponSetsFind(const char *name)
+{
+	if (name == NULL || name[0] == '\0') {
+		return -1;
+	}
+
+	for (s32 i = 0; i < s_Num; i++) {
+		if (mpWeaponSetsNameEqual(s_Sets[i].name, name)) {
+			return i;
+		}
+	}
+
+	return -1;
 }

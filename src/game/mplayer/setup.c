@@ -1862,18 +1862,104 @@ MenuItemHandlerResult menuhandlerMpStartArmed(s32 operation, struct menuitem *it
  * mounted. An empty name saves nothing, which is what the row does nothing
  * looking like.
  */
+// What the player typed, and the set their last Enter collided with. No to the
+// question leaves them here with their word in the field, which is the whole
+// point of keeping it out of the row
+static char s_SetNameDraft[MPSETUP_MAXNAME + 1];
+static s32 s_SetNameOverwrite = -1;
+
+// Which set this page is standing on, in the store's numbering; -1 for Custom
+static s32 mpWeaponSetNumOwnInStore(void)
+{
+	return mpWeaponSetsOwns(g_MpWeaponSetNum) ? g_MpWeaponSetNum - mpWeaponSetsFirst() : -1;
+}
+
+/**
+ * Putting the page's label on the set just saved.
+ *
+ * The number is written and nothing else: no mpSetWeaponSet, no menu refresh.
+ * This runs from a keyboard row's own handler, in the middle of the frame that
+ * row is being edited in, and a dialog popped from there takes the menu's layer
+ * bookkeeping down under itself (menuUpdateCurFrame through menuPopDialog - the
+ * crash this shape used to have). The dropdown reads the number every frame, so
+ * it relabels itself, and the six slots already hold what was just written.
+ */
+static void mpWeaponSetSelectStore(s32 index)
+{
+	g_MpWeaponSetNum = mpWeaponSetsFirst() + index;
+}
+
+static MenuItemHandlerResult menuhandlerMpOverwriteAsk(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_CHECKHIDDEN) {
+		return s_SetNameOverwrite < 0;
+	}
+
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerMpOverwriteNo(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_SET) {
+		// Back to the field with the word still in it: the name is the thing
+		// they were changing, so a No that cleared it would be a No that undid
+		// the typing as well as the overwrite
+		s_SetNameOverwrite = -1;
+	}
+
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerMpOverwriteYes(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_SET) {
+		if (s_SetNameOverwrite >= 0) {
+			mpWeaponSetsUpdate(s_SetNameOverwrite, g_MpSetup.weapons);
+			mpWeaponSetSelectStore(s_SetNameOverwrite);
+		}
+
+		s_SetNameOverwrite = -1;
+	}
+
+	return 0;
+}
+
 MenuItemHandlerResult menuhandlerMpSaveCustomSet(s32 operation, struct menuitem *item, union handlerdata *data)
 {
 	switch (operation) {
 	case MENUOP_GETTEXT:
-		data->keyboard.string[0] = '\0';
+		snprintf(data->keyboard.string, MPSETUP_MAXNAME + 1, "%s", s_SetNameDraft);
 		break;
 	case MENUOP_SETTEXT:
-		if (mpWeaponSetsSave(data->keyboard.string, g_MpSetup.weapons) < 0) {
+	{
+		s32 own = mpWeaponSetNumOwnInStore();
+		s32 found;
+
+		snprintf(s_SetNameDraft, sizeof(s_SetNameDraft), "%s", data->keyboard.string);
+		s_SetNameOverwrite = -1;
+		found = mpWeaponSetsFind(s_SetNameDraft);
+
+		if (s_SetNameDraft[0] == '\0') {
+			// Nothing to name it by: leave the field as it is, which is the only
+			// answer the player can act on
 			sysLogPrintf(LOG_NOTE, "menu: a custom weapon set saved nothing");
+		} else if (found >= 0 && found == own) {
+			// The name this page is already standing on: that is the save, and
+			// asking about it would be the page asking itself
+			mpWeaponSetsUpdate(found, g_MpSetup.weapons);
+			mpWeaponSetSelectStore(found);
+		} else if (found >= 0) {
+			// Somebody else's name, said out loud before a player's set loses
+			// the guns it was saved with
+			s_SetNameOverwrite = found;
+		} else if (mpWeaponSetsSave(s_SetNameDraft, g_MpSetup.weapons) >= 0) {
+			mpWeaponSetSelectStore(mpWeaponSetsNum() - 1);
+		} else {
+			sysLogPrintf(LOG_NOTE, "menu: a custom weapon set named `%s` saved nothing", s_SetNameDraft);
 		}
 
 		break;
+	}
 	}
 
 	return 0;
@@ -1906,15 +1992,15 @@ static MenuItemHandlerResult menuhandlerMpSaveSetRow(s32 operation, struct menui
 	}
 
 	if (operation == MENUOP_SET) {
-		if (mpWeaponSetsOwns(g_MpWeaponSetNum)) {
-			// The set on screen is one of the player's own and its slots have
-			// moved (the row is disabled when they have not), so it is written
-			// back where it is: the name is already chosen, and a second entry
-			// with that name and other guns is not what pressing this means.
-			mpWeaponSetsUpdate(g_MpWeaponSetNum - mpWeaponSetsFirst(), g_MpSetup.weapons);
+		s_SetNameOverwrite = -1;
 
-			return 0;
-		}
+		// The name page either way, prefilled when the set already has one: that
+		// is what makes this Save (leave the word as it stands, overwrite) and
+		// Save As (change it, and both sets are kept) one gesture instead of two
+		// ideas the player has to already know. A fresh Custom starts blank.
+		snprintf(s_SetNameDraft, sizeof(s_SetNameDraft), "%s",
+				mpWeaponSetsOwns(g_MpWeaponSetNum)
+					? mpWeaponSetsGet(g_MpWeaponSetNum - mpWeaponSetsFirst())->name : "");
 
 		// as the Save Settings row does: the page is put down rather than
 		// stacked on, since a room's setup pages already sit one deeper and
@@ -1965,6 +2051,30 @@ struct menuitem g_MpSaveWeaponSetNameMenuItems[] = {
 		1,
 		menuhandlerMpSaveCustomSet,
 	},
+	{
+		MENUITEMTYPE_LABEL,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_LESSLEFTPADDING,
+		(uintptr_t)"That name is taken.\nOverwrite the set saved under it?\n",
+		0,
+		menuhandlerMpOverwriteAsk,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"No\n",
+		0,
+		menuhandlerMpOverwriteNo,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SELECTABLE_CLOSESDIALOG,
+		(uintptr_t)"Yes\n",
+		0,
+		menuhandlerMpOverwriteYes,
+	},
 	{ MENUITEMTYPE_END },
 };
 
@@ -1976,6 +2086,7 @@ struct menudialogdef g_MpSaveWeaponSetNameMenuDialog = {
 	MENUDIALOGFLAG_LITERAL_TEXT,
 	NULL,
 };
+
 
 #endif
 

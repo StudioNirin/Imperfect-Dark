@@ -41,6 +41,8 @@ s32 mpWeaponSetsFirst(void);
 bool mpWeaponSetsOwns(s32 listindex);
 // The name given to the set at that place in the list, or ""
 const char *mpWeaponSetsNamedFor(s32 listindex);
+// Which saved set goes by that name, ignoring case; -1 when none does
+s32 mpWeaponSetsFind(const char *name);
 // The name the room's rules brought for the set the match plays by, and whether
 // it belongs at that place in this machine's list (NULL when it does not)
 void mpWeaponSetsSetForeignName(const char *name, s32 listindex);
