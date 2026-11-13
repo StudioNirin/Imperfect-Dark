@@ -201,6 +201,11 @@
 //    counter-op's guards taken), u8 antiradius[12] (the guard's radius),
 //    s16 antibody[12], s16 antihead[12] (the guard's body and head it wears)
 // 33 (LAN and Direct Connect, 2026-10-14: CLAUDE-notes/netplay.md "LAN and
+// 34 (a saved weapon set's name): RULES ends its weapon set fields with
+//    str(MPSETUP_MAXNAME) weaponsetname, the name the host's player gave the set
+//    the match plays by - "" for the game's own sets. A client shows it as
+//    "Custom (name)" because the number beside it is the host's numbering, which
+//    on a shorter or longer list names one of the client's own sets.
 //    Direct Connect"): a room with no lobby server, served by its host's game
 //    over the session: ROOM (host -> client) is the room as pdlobbyd's state
 //    reply has it, ROOMACT (client -> host) a member's action on it; CONNECT's
@@ -212,7 +217,7 @@
 //    it, netcoop.c); the local player's SNAP block uses its free bytes
 //    203-207 for the rocket it flies (u8 rocket, u8 0, u16 rocketid, u16
 //    rocketgen: a client's Slayer fly-by-wire camera)
-#define NET_PROTOCOL_VERSION 33
+#define NET_PROTOCOL_VERSION 34
 
 #define NETMSG_CONNECT    1
 #define NETMSG_ACCEPT     2
@@ -430,6 +435,8 @@
  *                                 4-11 sims: the ROM/save layout)
  *   u32     scenario save bits    scenarioWriteSave()'s 32
  *   s32     weaponsetnum          g_MpWeaponSetNum
+ *   str(17) weaponsetname         (protocol 34) the host's own name for it,
+ *                                 "" when it is one of the game's sets
  *   u64     randomfilters         g_MpWeaponSetRandomFilters, one bit each
  *   u8      simslots[80]          g_MpSimSlots
  *   u8      nsims                 sims that follow (slots with simslots[i])

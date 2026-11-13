@@ -4406,6 +4406,45 @@ an exported handler - the neighbour to copy is
 `modGetSpawnWeapon()` with a direct `g_ModOptions.spawnweapon` write, which is
 what `optionsmenu.c`'s own copy of the handler does.
 
+## A saved weapon set's name on the wire (protocol 34, 2026-11-12)
+
+`RULES` ends its weapon set fields with `str(MPSETUP_MAXNAME) weaponsetname`
+(`netproto.h`): the name the host's player gave the set the match plays by, and
+`""` when it is one of the game's own. `netRulesWrite()` sends the store's bare
+name (`mpWeaponSetsNamedFor()`) - not the `CX:` mark the host's list puts on it,
+which is one machine's list's business - and `netRulesRead()` runs it through
+`netTextPrintable()` beside the team names, because the menu font is shown a
+string that arrived over the wire (the trap the weak-spot list records).
+
+The name is not decoration: it is what says a set number is **somebody else's**.
+`weaponsetnum` is the host's numbering against the host's list, and a client
+whose list is longer or shorter - other mods, other saved sets - reads that
+number as one of its own sets. `netRulesApply()` already kept the guns right (the
+slots travel, and an over-list number became `Custom` with a log line); what it
+could not say was which set the host was calling it. So the client shows
+`Custom (my pistols)` for exactly the row the room plays by:
+`mpWeaponSetsSetForeignName(name, index)` records the name with the number it
+became **after** that over-list mapping, `mpWeaponSetsForeignNameFor()` answers
+for that one row and no other, and `mpGetWeaponSetName()` - which both the `Set:`
+dropdown and the "Current Weapon Setup:" label go through - composes the words. A
+room that named nothing clears it, so a machine that played by a named set does
+not go on naming its own afterwards.
+
+It lives in `mpweaponsets.c` rather than `netrules.c` because the game side
+cannot reach the net code: the netplay API is `port/src/net/netint.h`, a private
+header, while `mpweaponsets.h` is already on the game's include path. So the name
+is handed through the layer that owns set names: port to port, game to port.
+`netRulesSnapshot()` carries it, so a migrated host keeps naming the room's set.
+
+`NET_PROTOCOL_VERSION` went 33 to 34, a hard break between builds by design:
+`netsession.c` checks the protocol before anything else ("past it a different
+version's fields need not parse"), so the consequence is `This host runs netplay
+protocol 34 and your game has 33 - one of you needs to update.` rather than a
+desync. The lobby server needs no change: it carries `proto` as an opaque value
+on the room record and can filter on it (`pdlobbyd.py`), never comparing it to a
+constant of its own. `--net-test-protocol` keeps the refusal path gated
+(`netsessiontest.sh`).
+
 ## `netlantest`'s broadcast case is red on this box (2026-11-12, not a build change)
 
 `tools/ci/netlantest.sh` runs four cases. LAN (found by loopback), Direct

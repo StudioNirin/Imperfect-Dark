@@ -42,6 +42,8 @@
 
 notes 80 2026-11-12
 Custom Weapon Sets: on the weapons page - the same page in an online room and in the Combat Simulator - "Save Set" keeps the six guns you chose under a name you type, and the set shows in the Set list as "CX: name", listed first so it is the easy one to find. Pick one and the six slots are editable, the way they are under Custom; "Save Set" then writes the changed guns back into that same set. "Remove Set" deletes the one you are looking at, and keeps the guns in the slots. A saved set stores the guns themselves rather than the page's row numbers, so a set made with a mod mounted still means those guns with a different mod loaded. They live in mpweaponsets.bin in the save folder.
+notes 81 2026-11-12
+A saved weapon set's name now reaches the other players: a client's room rules say "Custom (my pistols)" for the set the room plays by, instead of the name of whatever its own list happens to hold at that number. Netplay protocol 34, so a match needs everyone on the same build as it did before.
 notes 79 2026-11-12
 Start Armed moves out of Room Rules and onto the Weapons page, under Set and above GoldenEye Cheat Guns. It reads the same in an online room and in the Combat Simulator, since both open the same Weapons page. Start Armed For stays in Room Rules.
 notes 78 2026-11-12

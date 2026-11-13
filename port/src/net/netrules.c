@@ -23,6 +23,7 @@
 #include "game/lv.h"
 #include "net/net.h"
 #include "netint.h"
+#include "mpweaponsets.h"
 
 /**
  * The match's rules (spec-stage.md §3): the host's match state and its
@@ -171,6 +172,9 @@ struct netrulesmsg {
 	u8 weapons[NUM_MPWEAPONSLOTS];
 	u32 scenariobits;
 	s32 weaponsetnum;
+	// protocol 34: the host's own name for that set, when it saved one. The
+	// number means nothing to a client whose list differs (netproto.h)
+	char weaponsetname[MPSETUP_MAXNAME + 1];
 	u64 filters;
 	u8 simslots[MAX_BOTS];
 	struct netrulessim sims[MAX_BOTS];
@@ -209,6 +213,7 @@ struct netrulessaved {
 	struct mplockinfo lockinfo; // a net match's winner/loser can be slot 4-11
 	char teamnames[MAX_TEAMS][12];
 	s32 weaponsetnum;
+	char weaponsetname[MPSETUP_MAXNAME + 1]; // protocol 34
 	u8 filters[NUM_MPWEAPONS];
 	u8 unlocked[80];
 	u32 modunlocks;
@@ -1017,6 +1022,11 @@ void netRulesWrite(struct netbuf *b, u32 matchid)
 
 	netBufWriteS32(b, g_MpWeaponSetNum);
 
+	// the name the player typed, not the row's CX: mark (mpweaponsets.c): a
+	// client composes its own words around it, and the mark is this machine's
+	// list's business
+	netWriteStr(b, mpWeaponSetsNamedFor(g_MpWeaponSetNum), MPSETUP_MAXNAME);
+
 	for (i = 0; i < NUM_MPWEAPONS && i < 64; i++) {
 		filters |= g_MpWeaponSetRandomFilters[i] ? (1ULL << i) : 0;
 	}
@@ -1177,6 +1187,8 @@ s32 netRulesRead(struct netbuf *b)
 
 	s_NetRules.scenariobits = netBufReadU32(b);
 	s_NetRules.weaponsetnum = netBufReadS32(b);
+	netBufReadString(b, s_NetRules.weaponsetname, sizeof(s_NetRules.weaponsetname));
+	netTextPrintable(s_NetRules.weaponsetname, 1); // the font trusts this string
 	s_NetRules.filters = netReadU64(b);
 
 	for (i = 0; i < MAX_BOTS; i++) {
@@ -1394,6 +1406,7 @@ static void netRulesSaveInto(struct netrulessaved *out)
 	memcpy(out->difficulties, g_MpSimulantDifficultiesPerNumPlayers, sizeof(out->difficulties));
 	memcpy(out->players, g_PlayerConfigsArray, sizeof(out->players));
 	memcpy(out->teamnames, g_BossFile.teamnames, sizeof(out->teamnames));
+	snprintf(out->weaponsetname, sizeof(out->weaponsetname), "%s", mpWeaponSetsForeignName());
 	out->weaponsetnum = g_MpWeaponSetNum;
 	memcpy(out->filters, g_MpWeaponSetRandomFilters, sizeof(out->filters));
 	memcpy(out->unlocked, g_MpFeaturesUnlocked, sizeof(out->unlocked));
@@ -1527,6 +1540,16 @@ static void netRulesPut(const struct netrulesmsg *rules, s32 coop)
 		sysLogPrintf(LOG_NOTE, "net: rules: the host's weapon set %d is past this machine's list of %d: its guns as sent, Custom here",
 				rules->weaponsetnum, g_MpNumWeaponSets);
 		g_MpWeaponSetNum = WEAPONSET_CUSTOM;
+	}
+
+	// The host's name goes with whichever number the set ended up as, so a
+	// client whose list is shorter still says what the room plays by. This is
+	// the one thing that says a number is somebody else's: read against this
+	// machine's list it would name one of its own sets (mpGetWeaponSetName).
+	mpWeaponSetsSetForeignName(rules->weaponsetname, g_MpWeaponSetNum);
+
+	if (rules->weaponsetname[0] != '\0') {
+		sysLogPrintf(LOG_NOTE, "net: rules: the host's weapon set is named `%s`", rules->weaponsetname);
 	}
 
 	for (i = 0; i < NUM_MPWEAPONS && i < 64; i++) {
@@ -1720,6 +1743,7 @@ static void netRulesRestoreFrom(const struct netrulessaved *saved)
 	memcpy(g_MpSimulantDifficultiesPerNumPlayers, saved->difficulties, sizeof(saved->difficulties));
 	memcpy(g_PlayerConfigsArray, saved->players, sizeof(saved->players));
 	memcpy(g_BossFile.teamnames, saved->teamnames, sizeof(saved->teamnames));
+	mpWeaponSetsSetForeignName(saved->weaponsetname, g_MpWeaponSetNum);
 	g_MpWeaponSetNum = saved->weaponsetnum;
 	memcpy(g_MpWeaponSetRandomFilters, saved->filters, sizeof(saved->filters));
 	memcpy(g_MpFeaturesUnlocked, saved->unlocked, sizeof(saved->unlocked));
