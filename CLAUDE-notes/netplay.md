@@ -4430,6 +4430,24 @@ dropdown and the "Current Weapon Setup:" label go through - composes the words. 
 room that named nothing clears it, so a machine that played by a named set does
 not go on naming its own afterwards.
 
+**The name has no receiver, as of 2026-11-13.** The room's Settings page - map,
+mode, weapons - exists only for the room's owner: the other players never open it,
+and the lobby browser's `Weapons:` row is the host's own rendered text in the room
+record (`netlobby.c` sends it as JSON `weapons`, `netlobbymenu.c` shows that
+string), which needed no wire field. So a client is told the host's name and
+nothing a client runs draws it. The field stays, because pulling it back means
+burning another protocol number to remove eighteen inert bytes already published
+to the dev channel, and the number is what tells two builds they differ. Do not
+extend it without a receiver. Two things that follow: the client-side composition
+in `mpGetWeaponSetName()` is unreachable and is to be deleted, and a bug found
+while writing this section is therefore rendered moot rather than fixed -
+`netRulesApply()` recorded the name against a table index while
+`mpGetWeaponSetName()` asks after `func0f188f9c()`, which returns an offered
+index, and those two spaces are only the same numbers when this machine's store
+is empty (which is exactly why the self-check passed; a check that fed the
+production shapes would have failed). Read this before wiring anything to
+`weaponsetname`.
+
 It lives in `mpweaponsets.c` rather than `netrules.c` because the game side
 cannot reach the net code: the netplay API is `port/src/net/netint.h`, a private
 header, while `mpweaponsets.h` is already on the game's include path. So the name
