@@ -11,6 +11,9 @@ MenuItemHandlerResult mpArenaMenuHandler(s32 operation, struct menuitem *item, u
 void mpSetGexPlusMode(bool on);
 #endif
 char *mpMenuTextWeaponNameForSlot(struct menuitem *item);
+#ifndef PLATFORM_N64
+char *mpMenuTextRandomWeaponGroup(struct menuitem *item);
+#endif
 char *mpMenuTextSetupName(struct menuitem *item);
 MenuItemHandlerResult mpCharacterBodyMenuHandler(s32 operation, struct menuitem *item, union handlerdata *data, s32 mpbodynum, s32 mpheadnum, bool isplayer);
 MenuDialogHandlerResult menudialog0017a174(s32 operation, struct menudialogdef *dialogdef, union handlerdata *data);
@@ -189,5 +192,14 @@ MenuDialogHandlerResult menudialogCombatSimulator(s32 operation, struct menudial
 MenuItemHandlerResult menuhandlerMpAdvancedSetup(s32 operation, struct menuitem *item, union handlerdata *data);
 MenuItemHandlerResult menuhandlerMpDisplayTeam(s32 operation, struct menuitem *item, union handlerdata *data);
 MenuItemHandlerResult menuhandlerMpOneHitKills(s32 operation, struct menuitem *item, union handlerdata *data);
+
+#ifndef PLATFORM_N64
+// --test-randomgroups: the Random Weapons page, driven through its handlers
+// (setup.c, tools/ci/randomgroupstest.sh)
+void mpRandomGroupMenuSelfTest(void);
+// --test-startarmed: the spawn's shape and its ammunition, through the functions
+// the two spawn sites ask (setup.c, tools/ci/startarmedtest.sh)
+void mpStartArmedSelfTest(void);
+#endif
 
 #endif

@@ -190,6 +190,12 @@ void netLobbySendSettings(void);     // host: the Combat Simulator setup again
 void netLobbyPreviewRoom(struct netlobbyroom *out); // the room this machine's setup makes now (Create Room's preview)
 void netLobbyKick(const char *user);
 void netLobbyLaunch(s32 force);
+// The host's launch the room refused because some have not ticked Ready, with
+// the room's own words: spent by the asking, because a question the host has
+// answered, or launched past, does not come back (netlobbymenu.c's
+// "Launch anyway?" page). A LAN room refuses the same way (NETLANLAUNCH_NOTREADY)
+s32 netLobbyLaunchRefused(char *out, s32 size);
+void netLobbyLaunchRefusedClear(void);
 void netLobbyCancelLaunch(void);
 void netLobbyLeave(void);
 void netLobbySignIn(void);         // sign in now, once per account (the Online Game page's tick)

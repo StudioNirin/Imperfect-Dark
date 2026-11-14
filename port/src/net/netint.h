@@ -172,6 +172,10 @@ s32 netLanDirectWait(char *err, s32 errsize); // its room's index; -1 asking, -2
 s32 netLanHostOpen(const struct netlobbycreate *c, const char *name, char *err, s32 errsize);
 s32 netLanHosting(void);
 void netLanHostKick(const char *user);
+// 1: refused for want of ready players, which the host may answer by forcing
+// it (netLobbyLaunchRefused, netlobbymenu.c's Launch anyway? page). Any other
+// refusal (-1) is the last word: the room is already counting down or launched.
+#define NETLANLAUNCH_NOTREADY 1
 s32 netLanHostLaunch(s32 force, char *why, s32 whysize);
 void netLanHostCancelLaunch(void);
 void netLanHostReopen(void);

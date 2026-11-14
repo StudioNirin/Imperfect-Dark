@@ -4410,6 +4410,9 @@ static void netTestStartMatch(void)
 			g_MpSetup.weapons[s] = (v >= 0 && v < NUM_MPWEAPONS) ? (u8)v : MPWEAPON_NONE;
 			weapons = *end == ',' ? end + 1 : end;
 		}
+
+		// Named by number, so named as guns: no slot of this one's is random
+		mpClearWeaponSlotGroups();
 	}
 
 	// --net-test-timelimit N (minutes, 1-60) / --net-test-scorelimit N

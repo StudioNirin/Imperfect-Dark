@@ -176,6 +176,19 @@ loops, `textWrapN()`), `port/src/gexfront.c` (GE Plus's I8 glyphs).
 - A literal menu label is looked up by the English in `param2`; code that
   searches a label (`updateMaxAnisotropyLevel()`) must read `param2`, not the
   resolved text.
+- **A `MENUITEMFLAG_LITERAL_TEXT` row can hold no function pointer in `param2` or
+  `param3`.** `menuResolveParam2Text()` translates `param2` with `langTr()` when the
+  flag is set (so it must be a string), and the right-hand text in `param3` is
+  measured as `langTr(item->param3)` (`menuGetItemBlocksRequired()`'s LABEL/SELECTABLE
+  case) but drawn with plain `menuResolveText()` (`menuitemLabelRender`,
+  `menuitemSelectableRender`) - which calls anything at or past `0x5a00` as a
+  function, so a literal in that slot is read as a string once and jumped into once.
+  A row that builds its label at run time therefore drops the flag and puts a text
+  function in `param2` (which both passes then resolve the same way), translating
+  inside it with the `snprintf(buf, n, langTr("Format %s\\n"), x)` recipe above -
+  `mpMenuTextRandomWeaponGroup()`. A row wanting a dynamic *value* beside a static
+  label keeps the flag off too and puts the function in `param3`, as the simulant
+  slots do (`L_MPMENU_085` plus `mpMenuTextSimulantName`).
 - `menuPushDialog(&g_CiMenuViaPcMenuDialog)` from gdb at CI shows the Perfect
   Menu without driving the file select, and `menuPushRootDialog(&g_SoloMission
   BriefingMenuDialog, 2)` a mission's briefing; `build-wt/cmpgdb.sh`-style

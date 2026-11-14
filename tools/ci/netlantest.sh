@@ -11,6 +11,9 @@
 #              stage hash equal; the host ends it at frame 600; both are back
 #              in the room; the joiner's chat line reaches the host; the host
 #              closes the room and the joiner is told why
+#   force:     the joiner never ticks Ready; the host's Launch is refused, the
+#              room's page asks "Launch anyway?", answers itself, and the match
+#              runs with the unready player in it
 #   broadcast: the same found by the LAN broadcast alone (no loopback query)
 #   direct:    Direct Connect: the joiner asks 127.0.0.1:PORT by address
 #   password:  a locked room: a wrong password refused with why, the right
@@ -97,6 +100,27 @@ if want lan; then
 	pair lan lan "--net-lobby-end-frame 600" "--net-lobby-leave-frame 0"
 	round lan
 	check "lan: the host closed the room on its way out" "$OUT/lan-host.log" "lan: room .* closed by its host"
+fi
+
+if want force; then
+	# The host launching over a member who has not ticked Ready: the joiner sits
+	# unready on purpose, the host's Launch is refused by the room, and the page
+	# the refusal opens answers itself (--net-test-force-launch). What matters is
+	# the match after it: the unready player is in it, with the same stage hash.
+	pair force lan "--net-lobby-end-frame 600 --net-lobby-force-launch --net-test-force-launch" "--net-lobby-leave-frame 0 --net-lobby-no-ready"
+	check "force: the joiner stayed unready" "$OUT/force-join.log" "NOT ready on purpose"
+	check "force: the room refused the host" "$OUT/force-host.log" "Not everyone is ready"
+	check "force: the host was asked" "$OUT/force-host.log" "lobby force test: ok   the room asked the host"
+	check "force: the question named the member" "$OUT/force-host.log" "Waiting for: Joiny"
+	check "force: the room counted down forced" "$OUT/force-host.log" "launch (forced); counting down"
+	check "force: it counted down with a member unready" "$OUT/force-host.log" "lobby force test: ok   the room is counting down with a member not ready"
+	check "force: the room launched" "$OUT/force-host.log" "lan: room .* launched"
+	check "force: the unready joiner was in the match" "$OUT/force-join.log" "net: match 1: GO"
+	if [ "$(grep -h 'net: stage hash' "$OUT/force-host.log" | head -8 | md5sum)" = "$(grep -h 'net: stage hash' "$OUT/force-join.log" | head -8 | md5sum)" ]; then
+		pass "force: stage hash equal"
+	else
+		fail "force: stage hash differs"
+	fi
 fi
 
 if want broadcast; then

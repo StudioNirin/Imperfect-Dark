@@ -204,6 +204,22 @@
   against HEAD, an F3 `[netplay]` pacing line from a real match, and CI, which
   runs none of the net gates today.
 
+- **One more `NETKEY_SYNC` key, and why it rode the bump the batch already had
+  (2026-11-14)** — the section of that name: `Mod.StartArmedAkimbo`; why no
+  second protocol bump (35 in the tree, **34 at `HEAD`**, so ask which number is
+  in players' hands before reasoning about the one in the tree); why a *key*
+  needs no `settingsExtra()` when the curated list did; and `NET_MAXKEYS`' 48
+  against a SYNC class of 31, with the silently-dropped loop that waits for the
+  fourteenth key.
+- **A launch the room refused comes back to the host as a question (2026-11-14)**
+  — the section of that name: `force` in both launch paths all along with the
+  client pressing it with 0; the refusal remembered rather than handled in the
+  button's handler, because online it arrives a reply later; `NETLANLAUNCH_NOTREADY`
+  as an in-process value where LAN has no codes on the wire; the page-stack scan
+  that asks a host only where it pressed the button, and the three drops of the
+  pending refusal; the countdown a forced launch does not skip; `netlantest.sh`'s
+  `force` case; and the `netlobbytest.sh` rules check red since `6fb988022`.
+
 ## The shape
 
 One host, up to eleven clients (`MAX_PLAYERS` is 12 since phase 8; a room
@@ -4466,9 +4482,184 @@ on the room record and can filter on it (`pdlobbyd.py`), never comparing it to a
 constant of its own. `--net-test-protocol` keeps the refusal path gated
 (`netsessiontest.sh`).
 
+## The whole curated random weapon list on the wire (protocol 35, 2026-11-14)
+
+`RULES`' `randomfilters` - the list the `Random` weapon set and Start Armed's
+`Random` draw from (`g_MpWeaponSetRandomFilters`, `mplayer.c`) - was a `u64`,
+written, read and applied with `i < NUM_MPWEAPONS && i < 64`. This fork's table is
+81 rows, so rows 64-80 were never sent: a client kept its own bits there. It did
+not show, because the client writes the host's six arena slots straight through
+(`netrules.c`) and never re-runs `mpApplyWeaponSet()`, so nothing on a client read
+the array. Start Armed's Random reading it changed that - `mpGetSpawnWeapon()` runs
+on every peer from `playerSpawn()` and `bot.c`, and its candidate *count* decides
+how many draws it takes from the stage's stream, so a peer holding a stale tail
+both arms differently and falls out of step (`netplay.md`'s split stream). It is
+now `u8 randomfilters[NUM_MPWEAPONS]`.
+
+Two things that were part of the same defect and are fixed with it:
+
+- The **saved setup** carried the same `u64` (`pack/unpackWeaponSetRandomFilters
+  ()`, `mplayer.c`), so rows past the 64th came back as the boot default after a
+  restart - a curated list that deselected a GoldenEye gun silently selected it
+  again. The format grew to `MPSETUP_VERSION_RANDOMFILTERS` (4), still written
+  only when the older ones would lose something (`mpNeedsWideRandomFilters()`
+  beside `mpNeedsSimStats()`), and `mpsetupfileSaveWad()` now says at `LOG_ERROR`
+  if a block's bits outgrow `MPSETUP_BLOCKSIZE` rather than writing past it -
+  `savebufferOr()` has no bounds check.
+- A **live room never noticed the list changing**. `dialogRoomSettings`
+  (`netlobbymenu.c`) re-sends settings on close only if its snapshot differs -
+  `g_MpSetup`, the bots, co-op, `settingsExtra()` - and the filter array is in
+  none of them: not a config key, so invisible to `netRulesSyncHash()`, and not
+  part of `g_MpSetup`. It is hashed into `settingsExtra()` now. The general rule:
+  the room's change detection is a snapshot comparison, so an editable thing that
+  is neither a config key nor in `g_MpSetup` has to join that hash or the room
+  will not send it.
+
+`NET_PROTOCOL_VERSION` 34 to 35, a hard break as usual, so the consequence is
+`This host runs netplay protocol 35 and your game has 33 - one of you needs to
+update.` - a line `netsessiontest.sh` prints and checks. The same gates that cover
+`RULES` cover the widening (`netsnaptest.sh`, `netlobbysimtest.sh`); the feature's
+own gate is `tools/ci/randomgroupstest.sh` (`--test-randomgroups`, five verdicts).
+Mechanics of the list itself: `weapon-sets.md`, *Random weapon groups*.
+
+## A random weapon slot travels inside the six slots `RULES` already carries (2026-11-14)
+
+A slot of `g_MpSetup.weapons[]` can be one of the player's random weapon groups
+(`weapon-sets.md`, *A weapon slot holding a random group*). **No protocol change:**
+`RULES` has always written the six slots per match, so the host rolls each random
+slot in `mpStartMatch()` - before `netHostMatchStarting()` writes `RULES` - and the
+guns it landed on go out as the concrete six. The roll cannot happen anywhere later:
+`setupPlaceWeapon()` stocks the arena's floor from those six on the host while the
+clients are already placing from the `RULES` they were sent, and `netHostSendStage()`
+is called from inside `netHostMatchStarting()`, so a roll after that point is a roll
+the peers did not get.
+
+- **A client never draws for these slots.** Its candidate list is its own unlock
+  state - `g_ChallengeStats` arrives in `RULES`, so it agrees at the match's start
+  and can drift after it - and a draw it took alone would put it out of step with the
+  stage's stream, which is the failure mode the section above is about. It adopts the
+  six and clears its own markers, in `netRulesApply()` rather than waiting for
+  `mpReset()` to notice the rows stopped matching: a host migration in that window
+  would otherwise roll the local group rather than keep the dead host's choice.
+- **Host and clients resolve the same file differently, and that is the point.** The
+  host's setup says "slot 2 is `RX: Automatics`" and answers it once per match; the
+  client's copy of the same idea is retired on the way in, so its `mpReset()` cannot
+  re-draw it mid-match. `mpReconcileRandomWeaponSlots()` (every stage entry, every
+  peer) only *retires* markers - a re-roll there would move what the clients were
+  given at the match's start, and the stage hash would call the two arenas different.
+- **`--mp-weapons`** writes the six by row number, so both its sites (the offline one
+  in `pdmain.c`, the session one in `net/netsession.c`) clear the markers: a slot named
+  by a command line is named as a gun, and a marker left behind would claim a group for
+  it and re-draw it at the next match.
+
+## One more `NETKEY_SYNC` key, and why it rode the bump the batch already had (2026-11-14)
+
+Start Armed's pair became its own room rule: `Mod.StartArmedAkimbo` (Akimbo
+Start?), added to `s_NetKeys[]` (`netrules.c`) as `NETKEY_SYNC` one row under
+`Mod.StartArmed` (`weapon-sets.md`, *Start Armed, one gun or two*). What that
+cost, which is the interesting part, is nothing - and knowing why is worth more
+than the entry.
+
+- **No second protocol bump, because the batch's bump had not shipped.**
+  `NET_PROTOCOL_VERSION` reads 35 in the tree and **34 at `HEAD`**: the bump for
+  the curated list went in with work that has not been pushed, so a peer on a
+  published build is refused by the protocol gate before it can disagree about
+  one gun or two. A bump means "mixed versions would misbehave", and an
+  unrecognised key is exactly that - a client that does not know the key plays by
+  its own default and spawns holding what its host did not simulate it holding -
+  so had 35 been released this needed 36. **Before reasoning about the number in
+  the tree, ask which number is in players' hands** (`git show
+  HEAD:port/include/net/netproto.h`), because the two differ for as long as a
+  batch is unpushed and the whole argument turns on that.
+- **A key needs no `settingsExtra()`** and no work in the room's snapshot.
+  `netRulesSyncHash()` walks `s_NetKeys[]` and hashes what it reads (`netrules.c`),
+  so a key is in the room's change detection from the moment it is in the table -
+  the reason the curated list needed that extra call is that it is *not* a key
+  (the section above). Keys travel as name and value, so the receiver's side of a
+  new one is `configRegisterInt()` and nothing else.
+- **The class has headroom, and it is finite.** `NET_MAXKEYS` is 48 and the SYNC
+  class is at 31 keys, in a table whose other classes share the same cap
+  (`netRulesWriteClientKeys` caps at 48 for MUST/MUST_GE/REFUSE, and
+  `NET_MAXPLAYERKEYS` is 24 for the per-player class). A dozen more room rules
+  fit; the fourteenth will be silently dropped by `nkeys < NET_MAXKEYS`, which is
+  the same shape of bug as the 64-bit filter mask: a fixed size nobody wrote
+  down, reached by growing a list rather than by touching the code that reads it.
+- **Which class it is, and not `NETKEY_PLAYER`.** Whether the spawn's gun is
+  doubled is the room's, like the rest of Start Armed: a player choosing their own
+  answer would be simulated differently by their host, which is the one thing the
+  classes exist to prevent. `Mod.AkimboTriggers` next door is `NETKEY_PLAYER`
+  because it rebinds a pad and changes nothing in the world (`settings.md`).
+
+## A launch the room refused comes back to the host as a question (2026-11-14)
+
+A host who pressed Launch with a player not ready was refused, and the refusal
+went into `s_MainMessage` - the line under the roster - so the button looked
+broken. It now asks instead: the room's page opens `Launch anyway?` with No and
+Yes, and Yes launches with that player still not ready, in the match like
+everyone else. Two things were already there and one was not.
+
+- **`force` was always in both backends.** `netLobbyLaunch(s32 force)` sends
+  `{"force":true}` to `pdlobbyd` (`act_launch` skips its ready check on it) and
+  `netLanHostLaunch(s32 force, ...)` skips LAN's. The client called
+  `netLobbyLaunch(0)` and nothing else. So no protocol change, no `pdlobbyd`
+  change: the whole feature is the client remembering the room said no.
+- **A refusal is a shape, and LAN did not have one.** `pdlobbyd` answers a
+  refused launch with 409 and a `waiting[]` list, which the client already read
+  to write `Waiting for: names` - into the message, and then lost. LAN
+  returned a bare `-1`, which cannot be told from *room gone*, so a host would
+  have been asked to force a launch that could not be forced: LAN has no codes
+  on the wire (its `lobbyLocalAction` is an in-process call, unlike the lobby's
+  `s32`), so `NETLANLAUNCH_NOTREADY` lives in `netint.h` beside
+  `NETLAN_LAUNCH` as an in-process value.
+- **The asking is a frame, not a handler.** The online refusal lands on a reply
+  tick, a moment after the press, so the page cannot ask inside the button that
+  pressed it. `netlobby.c` remembers it (`lobbyLaunchRefused()`, drained by
+  `netLobbyLaunchRefused()`) and `netLobbyMenuFrame()` in `netlobbymenu.c` asks
+  when the room is in a state where forcing still means something - launch
+  state 0, this machine the host, the room still there, its page up. The
+  refusal is *kept* while the host is on another page (so it is asked when it
+  comes back) and drained by the first frame that may ask; a new launch,
+  leaving, and a room that is gone drop the pending one.
+- **Asked where the button was pressed.** Chat and Room Settings are dialogs
+  *over* the room's menu, so `lobbyRoomPageUp()` walks `menuGetDialogStack()`
+  instead of testing the top dialog: a host mid-conversation is not asked over
+  the Chat page, where the answer would be read through a page about something
+  else. It is asked when it comes back.
+- **Force does not skip the countdown.** `pdlobbyd`: "Force is not a skip of
+  the notice either: the five seconds still run, so a forced launch cannot
+  strand a player who has no dialog buttons at all" - the countdown carries
+  `NET_OPT_COUNTDOWN_MS` (5000) in `netlan.c` too. The five seconds are also
+  why a forced host sees `state 1` and its page's own line reads
+  `The match starts in 5 s.` rather than the refusal.
+
+Tested by `tools/ci/netlantest.sh`'s `force` case (the script runs five cases
+now, not the four the note below counts): the joiner never ticks Ready
+(`--net-lobby-no-ready`), the host launches anyway (`--net-lobby-force-launch`),
+and `--net-test-force-launch` waits for the dialog and answers it with
+`handlerForceLaunch`'s own `MENUOP_SET`, the way `simTestTick` drives the
+Simulants chain - then the gate reads that the room counted down forced, that
+it launched, and that the unready joiner was in the match with an equal stage
+hash. `netlobbytest.sh` has the same pair against a local `pdlobbyd`, which is
+where the online half is checked - the 409 with its `waiting[]`, the names in
+the question, and the room launching forced (`room X launched` in the lobby's
+log). **The scripted host was the trap**: it has no reason to push the room's
+page, so the first version of the case failed with the room refusing and no
+question ever coming, and `--net-lobby-force-launch` has to push the page the
+way a player is standing on it.
+
+In passing: `netlobbytest.sh`'s rules check `Mod.Akimbo 1 -> 0` had been red
+since `6fb988022` turned the Akimbo default on - the host's seeded `pd.ini`
+value equalled the stock value, and `netRulesRoomBegin()` logs only a
+*change*, so the line never appeared and `netRulesReadKey` failing and the
+value matching looked identical from the log. Its seed is `Akimbo=2` now,
+against the stock 1. Its neighbour grep had to become `Mod\.StartArmed\b`:
+`Mod.StartArmedAkimbo` is a room rule of its own, which does belong in the
+match, and the check is about the host's *own* settings not leaking.
+
 ## `netlantest`'s broadcast case is red on this box (2026-11-12, not a build change)
 
-`tools/ci/netlantest.sh` runs four cases. LAN (found by loopback), Direct
+`tools/ci/netlantest.sh` runs five cases (the `force` case above came later).
+LAN (found by loopback), Direct
 Connect and the password case pass; **the `broadcast` case, found by the IPv4
 broadcast alone with no loopback query, fails at the first check** - the joiner
 never sees the announce, so everything after it falls, and "found by the

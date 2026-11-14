@@ -21,8 +21,11 @@ MP Setup File Format
 	# setups
 	# block size is MPSETUP_BLOCKSIZE_V1 for version 1, MPSETUP_BLOCKSIZE_V2
 	# for version 2 (which stores MAX_BOTS simulants instead of
-	# MAX_BOTS_CONFIG) and MPSETUP_BLOCKSIZE for version 3 (which adds each
-	# simulant's stat sliders)
+	# MAX_BOTS_CONFIG), MPSETUP_BLOCKSIZE_V3 for versions 3 (each simulant's
+	# stat sliders) and 4 (the curated random weapon list one bit per row
+	# instead of in a u64, so the rows past the 64th - GoldenEye's guns and a
+	# ROM hack's - survive a save), and MPSETUP_BLOCKSIZE for version 5 (which
+	# names, for each of the six weapon slots, the random group it draws from)
 	[setup_1{blocksize}]
 	...
 	[setup_n{blocksize}]
@@ -365,8 +368,12 @@ static struct menudialogdef g_ImportOverrideDialog = {
  */
 static size_t mpsetupBlockSize(u8 version)
 {
-	if (version >= MPSETUP_VERSION_SIMSTATS) {
+	if (version >= MPSETUP_VERSION_SLOTGROUPS) {
 		return MPSETUP_BLOCKSIZE;
+	}
+
+	if (version >= MPSETUP_VERSION_SIMSTATS) {
+		return MPSETUP_BLOCKSIZE_V3;
 	}
 
 	return version >= MPSETUP_VERSION_EXTENDEDSIMS ? MPSETUP_BLOCKSIZE_V2 : MPSETUP_BLOCKSIZE_V1;
@@ -521,8 +528,11 @@ static void mpsetupReencodeBlocks(struct mpsetupfile *setupfile, u8 toversion, s
  */
 static u8 mpsetupLiveVersion(void)
 {
-	if (mpNeedsSimStats()) {
-		return MPSETUP_VERSION_SIMSTATS;
+	// A curated list that deselected anything past the 64th row cannot be held
+	// by the u64 the older versions write (mpNeedsWideRandomFilters), and a slot
+	// the player made random is not in the older formats at all (mpNeedsSlotGroups)
+	if (mpNeedsSimStats() || mpNeedsWideRandomFilters() || mpNeedsSlotGroups()) {
+		return MPSETUP_VERSION_LATEST;
 	}
 
 	return mpNeedsExtendedSims() ? MPSETUP_VERSION_EXTENDEDSIMS : MPSETUP_VERSION_BASE;

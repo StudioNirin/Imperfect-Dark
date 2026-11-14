@@ -5334,6 +5334,130 @@ struct menudialogdef g_NetKickMenuDialog = {
 	MENUDIALOGTYPE_DANGER, (uintptr_t)"Kick", s_KickItems, NULL, MENUDIALOGFLAG_LITERAL_TEXT, NULL,
 };
 
+/**
+ * "Launch anyway?": the host's answer to a launch the room refused.
+ *
+ * Both room kinds already take a forced launch - pdlobbyd's act_launch and a
+ * LAN room's netLanHostLaunch() skip the ready check on force, and both start
+ * the same countdown - and the room's page has only ever asked for the other
+ * kind. What is asked here is the host's own decision to launch while somebody
+ * has not ticked Ready, in the room's words rather than this client's guess
+ * (lobbyForceLaunchAsk).
+ */
+static char s_ForceLaunchText[220] = "";
+
+static char *menutextForceLaunch(struct menuitem *item)
+{
+	return s_ForceLaunchText;
+}
+
+static MenuItemHandlerResult handlerForceLaunch(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_SET) {
+		if (netLobbyLaunchState() == 0) {
+			netLobbyLaunch(1);
+		} else {
+			// the room moved on while the question was up - counting down or
+			// launched already - and a second ask would be a second launch
+			sysLogPrintf(LOG_NOTE, "lobby: Launch anyway? answered after the room left open: nothing asked");
+		}
+	}
+
+	return 0;
+}
+
+static struct menuitem s_ForceLaunchItems[] = {
+	// not LITERAL_TEXT: the words are the room's, and menuResolveText() calls
+	// what the slot holds (languages.md, and TEAMROW above)
+	{ MENUITEMTYPE_LABEL, 0, MENUITEMFLAG_LESSLEFTPADDING | MENUITEMFLAG_SMALLFONT, (uintptr_t)&menutextForceLaunch, 0, NULL },
+	{ MENUITEMTYPE_SELECTABLE, 0, MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SELECTABLE_CLOSESDIALOG, (uintptr_t)"Yes\n", 0, handlerForceLaunch },
+	{ MENUITEMTYPE_SELECTABLE, 0, MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SELECTABLE_CLOSESDIALOG, (uintptr_t)"No\n", 0, NULL },
+	{ MENUITEMTYPE_END },
+};
+
+static struct menudialogdef s_ForceLaunchMenuDialog = {
+	MENUDIALOGTYPE_DEFAULT,
+	(uintptr_t)"Launch anyway?",
+	s_ForceLaunchItems,
+	NULL,
+	MENUDIALOGFLAG_LITERAL_TEXT,
+	NULL,
+};
+
+/**
+ * --net-test-force-launch (tools/ci/netlantest.sh force case): the host's side
+ * of a launch the room refused.
+ *
+ * The page is the feature, so the test waits for it and answers it with the Yes
+ * row's own handler, the way simTestTick drives the Simulants chain; the
+ * joiner sits unready throughout (netlobby.c's --net-lobby-no-ready) and the
+ * gate reads the logs for the match the host launched into. It stays running
+ * after its verdict - the point is the match, not just the dialog.
+ */
+static void forceTestTick(void)
+{
+	static s32 step = -1;
+	static u64 at = 0;
+	const u64 now = sysGetMicroseconds() / 1000;
+	union handlerdata data;
+
+	if (step < 0) {
+		step = sysArgCheck("--net-test-force-launch") ? 0 : 99;
+		at = now;
+	}
+
+	if (step == 99) {
+		return;
+	}
+
+	switch (step) {
+	case 0:
+		if (!isCurrent(&s_ForceLaunchMenuDialog)) {
+			if (now - at > 25000) {
+				sysLogPrintf(LOG_ERROR, "lobby force test: FAIL the room never asked about forcing the launch");
+				fflush(stdout);
+				exit(1);
+			}
+
+			return;
+		}
+
+		sysLogPrintf(LOG_NOTE, "lobby force test: ok   the room asked the host: %s", s_ForceLaunchText);
+		step = 1;
+		at = now;
+		break;
+
+	case 1:
+		// the page's own slide: a push or a pop landing on it is dropped
+		if (now - at < 800) {
+			return;
+		}
+
+		memset(&data, 0, sizeof(data));
+		handlerForceLaunch(MENUOP_SET, NULL, &data);
+		menuPopDialog();
+		sysLogPrintf(LOG_NOTE, "lobby force test: ok   answered Yes");
+		step = 2;
+		at = now;
+		break;
+
+	case 2:
+		if (netLobbyLaunchState() == 1) {
+			sysLogPrintf(LOG_NOTE, "lobby force test: ok   the room is counting down with a member not ready");
+			step = 99;
+			return;
+		}
+
+		if (now - at > 6000) {
+			sysLogPrintf(LOG_ERROR, "lobby force test: FAIL the room is not counting down after the Yes (state %d)",
+					netLobbyLaunchState());
+			fflush(stdout);
+			exit(1);
+		}
+		break;
+	}
+}
+
 // The host's SETTINGS: the same setup pages, then the room hears them.
 // The pages write the setup itself, so however this page closes (Apply,
 // Back, the back button) a changed setup goes to the room: the match is
@@ -5357,6 +5481,16 @@ static u32 settingsExtra(void)
 	h = (h ^ g_PlayerConfigsArray[0].handicap) * 16777619u;
 	h = (h ^ g_Vars.mphilltime) * 16777619u;
 	h = (h ^ netRulesSyncHash()) * 16777619u;
+
+	// The curated random weapon list. It is neither a config key (so
+	// netRulesSyncHash cannot see it) nor part of g_MpSetup (so the memcmp in
+	// dialogRoomSettings cannot see it), yet the room's Weapons page edits it and
+	// RULES carries it - so without this a host ticking a gun off in a live room
+	// changed what the room plays by without anything noticing that the room
+	// changed, and no RULES went out to say so.
+	for (s32 i = 0; i < NUM_MPWEAPONS; i++) {
+		h = (h ^ g_MpWeaponSetRandomFilters[i]) * 16777619u;
+	}
 
 	return h;
 }
@@ -6449,6 +6583,57 @@ static s32 lobbyNameEntryUp(void)
 	return 0;
 }
 
+// The room's page anywhere in the stack: its Chat or Room Settings opened over
+// it still stands on it, and the question belongs to the room rather than to
+// the page on top (lobbyNameEntryUp scans the stack for the same reason)
+static s32 lobbyRoomPageUp(void)
+{
+	const struct menu *menu = &g_Menus[g_MpPlayerNum];
+	s32 i;
+	s32 j;
+
+	for (i = 0; i < menu->depth && i < ARRAYCOUNT(menu->layers); i++) {
+		for (j = 0; j < menu->layers[i].numsiblings && j < ARRAYCOUNT(menu->layers[i].siblings); j++) {
+			if (menu->layers[i].siblings[j] && menu->layers[i].siblings[j]->definition == &g_NetRoomMenuDialog) {
+				return 1;
+			}
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * A launch the room refused for want of ready players: ask the host, once.
+ *
+ * Asked from the frame and not from the button, because the refusal is the
+ * room's answer and arrives when the room gives it - for an online room, on the
+ * action thread a round trip later (netlobby.c, JOB_ACTION). Asking the client's
+ * own copy of who is ticked would ask without the room having said no.
+ */
+static void lobbyForceLaunchAsk(void)
+{
+	char why[220];
+
+	if (!netLobbyIsHost() || !netLobbyInRoom() || netLobbyLaunchState() != 0) {
+		return;
+	}
+
+	if (isCurrent(&s_ForceLaunchMenuDialog) || !lobbyRoomPageUp()) {
+		return;
+	}
+
+	// spent by the asking: an answer the host never saw is not asked twice over,
+	// and the next Launch clears what the room refused before it
+	if (!netLobbyLaunchRefused(why, sizeof(why))) {
+		return;
+	}
+
+	snprintf(s_ForceLaunchText, sizeof(s_ForceLaunchText), "%s\n", why);
+	sysLogPrintf(LOG_NOTE, "lobby: the room refused the launch; asking about forcing it: %s", why);
+	menuPushDialog(&s_ForceLaunchMenuDialog);
+}
+
 // Once per loop (netPump): the client's way back from the Perfect Menu
 void netLobbyMenuFrame(void)
 {
@@ -6457,6 +6642,8 @@ void netLobbyMenuFrame(void)
 	onlineTestTick();
 	modePagesTestTick();
 	simTestTick();
+	forceTestTick();
+	lobbyForceLaunchAsk();
 
 	// The online profile (netprofile.c) is left as Name Entry closes; a
 	// campaign room's host plays its menus with Name Entry gone from them,

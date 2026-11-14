@@ -14,6 +14,7 @@
 #include "game/mplayer/scenarios.h"
 #include "game/challenge.h"
 #include "game/lang.h"
+#include "langpack.h"
 #include "game/mplayer/mplayer.h"
 #include "game/options.h"
 #include "bss.h"
@@ -38,10 +39,12 @@
 #include "input.h"
 #include "mpsetups.h"
 #include "mpweaponsets.h"
+#include "mpweaponfilters.h"
 
 // defined in the Combat Simulator (mplayer.c), as netrules.c reaches it
 extern s32 g_MpWeaponSetNum;
 #include "game/modoptions.h"
+#include "game/bondgun.h"
 
 struct menuitem g_MpCharacterMenuItems[];
 struct menudialogdef g_MpAddSimulantMenuDialog;
@@ -631,14 +634,40 @@ MenuItemHandlerResult menuhandlerMpControlStyle(s32 operation, struct menuitem *
 	return 0;
 }
 
+/**
+ * One of the arena's six weapon slots.
+ *
+ * The rows it offers are the game's - every row of the weapon table a player has
+ * earned - and below them, in this fork, the random weapon groups they saved
+ * (mpweaponfilters.c). Picking one of those makes the slot a random one: the page
+ * says "RX: Automatics" and the arena gets a gun drawn from that group at the start
+ * of each match (mpRollRandomWeaponSlots, mplayer.c). A dropdown's closed row shows
+ * the text of the option it is on, so the slot's row needs nothing of its own to
+ * carry the name.
+ *
+ * The group rows are asked for by the store's count, not by the weapon table's:
+ * with no groups saved the list is exactly the game's, which is what every CI gate
+ * runs with.
+ */
 MenuItemHandlerResult menuhandlerMpWeaponSlot(s32 operation, struct menuitem *item, union handlerdata *data)
 {
+	s32 numguns = mpGetNumWeaponOptions();
+	s32 numoptions = numguns;
+
+#ifndef PLATFORM_N64
+	numoptions += mpWeaponFiltersNum();
+#endif
+
 	switch (operation) {
 	case MENUOP_GETOPTIONCOUNT:
-		data->dropdown.value = mpGetNumWeaponOptions();
+		data->dropdown.value = numoptions;
 		break;
 	case MENUOP_GETOPTIONTEXT:
 #ifndef PLATFORM_N64
+		if (data->dropdown.value >= numguns) {
+			return (uintptr_t) mpWeaponFiltersShown(data->dropdown.value - numguns);
+		}
+
 		// a GoldenEye conversion's gun marked among Perfect Dark's (geguns.c)
 		return (uintptr_t) gexPlusMenuTagged(mpGetWeaponLabel(data->dropdown.value), gegunsMenuTagAtOption(data->dropdown.value));
 #else
@@ -654,9 +683,27 @@ MenuItemHandlerResult menuhandlerMpWeaponSlot(s32 operation, struct menuitem *it
 			g_MpWeaponSetNum = WEAPONSET_CUSTOM;
 		}
 
+#ifndef PLATFORM_N64
+		if (data->dropdown.value >= numguns) {
+			mpSetWeaponSlotRandom(item->param3, data->dropdown.value - numguns);
+			break;
+		}
+#endif
+
 		mpSetWeaponSlot(item->param3, data->dropdown.value);
 		break;
 	case MENUOP_GETSELECTEDINDEX:
+#ifndef PLATFORM_N64
+		{
+			s32 group = mpGetWeaponSlotGroup(item->param3);
+
+			if (group >= 0) {
+				data->dropdown.value = numguns + group;
+				break;
+			}
+		}
+#endif
+
 		data->dropdown.value = mpGetWeaponSlot(item->param3);
 	}
 
@@ -665,6 +712,16 @@ MenuItemHandlerResult menuhandlerMpWeaponSlot(s32 operation, struct menuitem *it
 
 char *mpMenuTextWeaponNameForSlot(struct menuitem *item)
 {
+#ifndef PLATFORM_N64
+	// A random slot says so wherever its gun would have been named, so the row that
+	// is not the dropdown cannot quietly show the gun that happens to stand in for it
+	s32 group = mpGetWeaponSlotGroup(item->param);
+
+	if (group >= 0) {
+		return (char *) mpWeaponFiltersShown(group);
+	}
+#endif
+
 	return mpGetWeaponLabel(mpGetWeaponSlot(item->param));
 }
 
@@ -1584,88 +1641,123 @@ struct menudialogdef g_MpSaveSetupExistsMenuDialog = {
 };
 
 #ifndef PLATFORM_N64
+/**
+ * The four selections the game ships with, as rules rather than as buttons.
+ *
+ * They were the last four rows of the checkbox list - Select Dark, Select
+ * Classic, Select All, Select None - which meant four rows that set the whole
+ * list and then vanished, and no way to keep what was left. The Random Weapons
+ * page puts them in the same dropdown as the groups a player saves (below), so
+ * one row picks the selection and the list has one meaning; these are what each
+ * of them selects, spelled once.
+ *
+ * Dark is Perfect Dark's own rows, its Shield and its "Disabled" placeholder.
+ * It used to end in a bare `i >= MPWEAPON_SHIELD`, written when Disabled was the
+ * table's last row: that reaches on through GoldenEye's guns and the cheat guns,
+ * so a rule called Dark switched on the guns it is named for not being (the
+ * rows were invisible to the list at the time, which is how it survived).
+ */
+#define MPRANDOMGROUP_BUILTINS 4
+
+static const char *const s_RandomGroupBuiltInLabels[] = {
+	"Dark",
+	"Classic",
+	"All",
+	"None",
+};
+
+static bool mpRandomGroupBuiltInBits(s32 which, s32 row)
+{
+	switch (which) {
+	case 0:
+		return (row >= MPWEAPON_NONE && row <= MPWEAPON_XRAYSCANNER)
+				|| row == MPWEAPON_CLOAKINGDEVICE
+				|| row == MPWEAPON_COMBATBOOST
+				|| (row >= MPWEAPON_SHIELD && row < MPWEAPON_GE_FIRST);
+	case 1:
+		return row >= MPWEAPON_PP9I && row <= MPWEAPON_RCP45;
+	case 2:
+		return true;
+	case 3:
+		return false;
+	}
+
+	return false;
+}
+
+static void mpRandomGroupBuiltInApply(s32 which)
+{
+	for (s32 i = 0; i < ARRAYCOUNT(g_MpWeapons); i++) {
+		g_MpWeaponSetRandomFilters[i] = mpRandomGroupBuiltInBits(which, i) ? 1 : 0;
+	}
+}
+
+// The dropdown's rows are the built-ins, then the player's groups; this is what
+// no group is in use reads as - the list was edited by hand
+#define MPRANDOMGROUP_MANUAL (-1)
+
+static s32 s_RandomGroup = MPRANDOMGROUP_MANUAL;
+
+/**
+ * Which row of the dropdown the curated list as it stands is.
+ *
+ * Asked when the page opens, so that a group applied before a restart is said to
+ * be in use: the list itself comes back from the saved setup (mplayer.c) and
+ * nothing remembers that a group was what wrote it. A hand-edited list matches
+ * nothing and reads as manual, which is the truth rather than a lost pick.
+ */
+static s32 mpRandomGroupInUse(void)
+{
+	s32 saved = mpWeaponFiltersMatching();
+
+	if (saved >= 0) {
+		return MPRANDOMGROUP_BUILTINS + saved;
+	}
+
+	for (s32 which = 0; which < MPRANDOMGROUP_BUILTINS; which++) {
+		bool same = true;
+
+		for (s32 i = 0; i < ARRAYCOUNT(g_MpWeapons) && same; i++) {
+			same = (g_MpWeaponSetRandomFilters[i] != 0) == mpRandomGroupBuiltInBits(which, i);
+		}
+
+		if (same) {
+			return which;
+		}
+	}
+
+	return MPRANDOMGROUP_MANUAL;
+}
+
 MenuItemHandlerResult mpSelectRandomWeaponListHandler(s32 operation, struct menuitem *item, union handlerdata *data)
 {
-	static const char *labels[] = {
-		"Select Dark",
-		"Select Classic",
-		"Select All",
-		"Select None",
-	};
-
 	switch (operation) {
 	case MENUOP_GETOPTIONCOUNT:
-		data->list.value = mpGetNumWeaponOptions() + 4;
+		data->list.value = mpGetNumWeaponOptions();
 		break;
 	case MENUOP_GETOPTIONTEXT:
-		{
-			s32 numweapons = mpGetNumWeaponOptions();
-
-			if (data->list.value < numweapons) {
-				return (uintptr_t) gexPlusMenuTagged(mpGetWeaponLabel(data->list.value), gegunsMenuTagAtOption(data->list.value));
-			} else {
-				return (intptr_t)labels[data->list.value - numweapons];
-			}
-		}
+		return (uintptr_t) gexPlusMenuTagged(mpGetWeaponLabel(data->list.value), gegunsMenuTagAtOption(data->list.value));
 	case MENUOP_SET:
 		{
-			s32 numweapons = mpGetNumWeaponOptions();
 			s32 mpweaponnum = data->list.value;
 			s32 optionindex = mpweaponnum;
 			s32 i;
 
-			if (data->list.value < numweapons) {
-				if (data->list.unk04 == 0) {
-					for (i = 0; i <= mpweaponnum; i++) {
-						if (challengeIsFeatureUnlocked(g_MpWeapons[i].unlockfeature) == 0) {
-							mpweaponnum++;
-						}
-
-						optionindex = mpweaponnum;
+			if (data->list.unk04 == 0) {
+				for (i = 0; i <= mpweaponnum; i++) {
+					if (challengeIsFeatureUnlocked(g_MpWeapons[i].unlockfeature) == 0) {
+						mpweaponnum++;
 					}
 
-					g_MpWeaponSetRandomFilters[optionindex] = 1 - g_MpWeaponSetRandomFilters[optionindex];
+					optionindex = mpweaponnum;
 				}
-			} else {
-				s32 index = data->list.value - numweapons;
 
-				switch (index) {
-				case 0:
-					// Select Dark
-					for (i = 0; i < ARRAYCOUNT(g_MpWeapons); i++) {
-						if ((i >= MPWEAPON_NONE && i <= MPWEAPON_XRAYSCANNER)
-								|| i == MPWEAPON_CLOAKINGDEVICE
-								|| i == MPWEAPON_COMBATBOOST
-								|| i >= MPWEAPON_SHIELD) {
-							g_MpWeaponSetRandomFilters[i] = 1;
-						} else {
-							g_MpWeaponSetRandomFilters[i] = 0;
-						}
-					}
-					break;
-				case 1:
-					// Select Classic
-					for (i = 0; i < ARRAYCOUNT(g_MpWeapons); i++) {
-						if (i >= MPWEAPON_PP9I && i <= MPWEAPON_RCP45) {
-							g_MpWeaponSetRandomFilters[i] = 1;
-						} else {
-							g_MpWeaponSetRandomFilters[i] = 0;
-						}
-					}
-					break;
-				case 2:
-					// Select All
-					for (i = 0; i < ARRAYCOUNT(g_MpWeapons); i++) {
-						g_MpWeaponSetRandomFilters[i] = 1;
-					}
-					break;
-				case 3:
-					// Select None
-					for (i = 0; i < ARRAYCOUNT(g_MpWeapons); i++) {
-						g_MpWeaponSetRandomFilters[i] = 0;
-					}
-					break;
-				}
+				g_MpWeaponSetRandomFilters[optionindex] = 1 - g_MpWeaponSetRandomFilters[optionindex];
+
+				// A box ticked by hand is no longer whatever group was picked, and
+				// the dropdown has to stop saying it is (mpRandomGroupInUse is what
+				// the page reads again the next time it opens)
+				s_RandomGroup = MPRANDOMGROUP_MANUAL;
 			}
 		}
 		break;
@@ -1719,18 +1811,1253 @@ struct menudialogdef g_MpSelectRandomWeaponsMenuDialog = {
 	NULL,
 };
 
+/**
+ * The Random Weapons page: the curated list, and the groups it can be kept as.
+ *
+ * Reached from the Combat Simulator's weapons page, from the same page in an
+ * online room (netlobbymenu.c pushes this very dialog: handlerSetupWeapons) and
+ * from Mods: Player next to Start Armed, because the list now decides what Start
+ * Armed's Random hands out as well as what the "Random" set puts in the arena
+ * (mpGetSpawnWeapon). One list, three doors, so the page has to make sense
+ * standing on its own rather than as six rows of somebody's setup page.
+ *
+ * It is one level deeper than the row that opens it on purpose. The old shape
+ * was a checkbox list with four buttons underneath it that set the whole list and
+ * threw the result away; a selection a player built by hand could only be
+ * rebuilt by hand. Buttons that set the list and a list that shows the buttons
+ * cannot both live in one page without the list lying about what is in use, so
+ * the buttons became the dropdown's rows and the page between says which one the
+ * boxes currently spell (mpRandomGroupInUse).
+ */
+
+// Declared here because the page's self test runs above its own row's definition
+MenuItemHandlerResult menuhandlerMpSelectRandomWeapons(s32 operation, struct menuitem *item, union handlerdata *data);
+MenuItemHandlerResult menuhandlerMpStartArmed(s32 operation, struct menuitem *item, union handlerdata *data);
+MenuItemHandlerResult menuhandlerMpAkimbo(s32 operation, struct menuitem *item, union handlerdata *data);
+MenuItemHandlerResult menuhandlerMpAkimboStart(s32 operation, struct menuitem *item, union handlerdata *data);
+
+// The pages below, declared here because their rows are written above them
+extern struct menudialogdef g_MpSaveRandomGroupNameMenuDialog;
+extern struct menudialogdef g_MpRemoveRandomGroupMenuDialog;
+extern struct menudialogdef g_MpRandomWeaponsMenuDialog;
+static MenuItemHandlerResult menuhandlerMpRandomGunsRow(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_SET) {
+		menuPushDialog(&g_MpSelectRandomWeaponsMenuDialog);
+	}
+
+	return 0;
+}
+
+/**
+ * The group dropdown: Manual, the four the game ships with, then the player's.
+ *
+ * Manual is a row because a dropdown cannot show "nothing" - and it is the
+ * honest answer more often than it sounds: a list with a box ticked by hand is
+ * not any of the named selections, and picking Manual changes nothing, which is
+ * what "leave my boxes alone" has to mean from a dropdown.
+ *
+ * Display index is s_RandomGroup + 1, so the manual answer is the first row and
+ * the arithmetic does not need a case of its own.
+ */
+static MenuItemHandlerResult menuhandlerMpRandomGroup(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GETOPTIONCOUNT:
+		data->dropdown.value = 1 + MPRANDOMGROUP_BUILTINS + mpWeaponFiltersNum();
+		break;
+	case MENUOP_GETOPTIONTEXT:
+		if (data->dropdown.value == 0) {
+			return (uintptr_t) "Manual";
+		}
+
+		if (data->dropdown.value <= MPRANDOMGROUP_BUILTINS) {
+			return (uintptr_t) s_RandomGroupBuiltInLabels[data->dropdown.value - 1];
+		}
+
+		return (uintptr_t) mpWeaponFiltersShown(data->dropdown.value - 1 - MPRANDOMGROUP_BUILTINS);
+	case MENUOP_GETSELECTEDINDEX:
+		data->dropdown.value = s_RandomGroup != MPRANDOMGROUP_MANUAL ? s_RandomGroup + 1 : 0;
+		break;
+	case MENUOP_SET:
+		s_RandomGroup = (s32) data->dropdown.value - 1;
+
+		if (s_RandomGroup >= 0 && s_RandomGroup < MPRANDOMGROUP_BUILTINS) {
+			mpRandomGroupBuiltInApply(s_RandomGroup);
+		} else if (s_RandomGroup >= MPRANDOMGROUP_BUILTINS) {
+			s32 stored = s_RandomGroup - MPRANDOMGROUP_BUILTINS;
+
+			if (mpWeaponFiltersApply(stored) == 0) {
+				// The group named guns this machine's table does not have, so the
+				// list it wrote is empty - which Start Armed takes literally
+				sysLogPrintf(LOG_NOTE, "menu: the random weapon group %d selected nothing here", stored);
+			}
+		}
+
+		break;
+	}
+
+	return 0;
+}
+
+// What the player typed for the group, kept out of the row so an overwrite that
+// went nowhere leaves their word in the field (the set name page does this:
+// weapon-sets.md)
+static char s_GroupNameDraft[MPSETUP_MAXNAME + 1];
+
+static MenuItemHandlerResult menuhandlerMpSaveRandomGroupRow(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_SET) {
+		const struct mpweaponfilterentry *entry = NULL;
+
+		// Prefilled when a saved group is the one in use: leave the word as it
+		// stands and this writes that group again, change it and both are kept.
+		// A hand-edited list starts blank.
+		if (s_RandomGroup >= MPRANDOMGROUP_BUILTINS) {
+			entry = mpWeaponFiltersGet(s_RandomGroup - MPRANDOMGROUP_BUILTINS);
+		}
+
+		snprintf(s_GroupNameDraft, sizeof(s_GroupNameDraft), "%s", entry != NULL ? entry->name : "");
+
+		// On top of the page that opened this one, never in its place: a keyboard
+		// row cannot close the dialog it sits in, and closing the page under the
+		// player is what the set name page used to do (setup.c, weapon-sets.md)
+		menuPushDialog(&g_MpSaveRandomGroupNameMenuDialog);
+	}
+
+	return 0;
+}
+
+/**
+ * The group name page's keyboard row.
+ *
+ * Only ever given MENUOP_SETTEXT - menuitem.c sends that from OK and from Start
+ * and never sends MENUOP_SET to a keyboard row - and nothing here may pop the
+ * page, because a pop from that operation takes the menu's frame down under
+ * itself. So the page cannot ask about an overwrite and cannot close itself when
+ * it has saved: it states the rule in the label under the keyboard and stays up.
+ * All of that is what the weapon set's name page learned the hard way
+ * (weapon-sets.md); this is the same page for the same reasons, with a different
+ * store behind it.
+ */
+MenuItemHandlerResult menuhandlerMpSaveRandomGroupName(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GETTEXT:
+		snprintf(data->keyboard.string, MPSETUP_MAXNAME + 1, "%s", s_GroupNameDraft);
+		break;
+	case MENUOP_SETTEXT:
+		{
+			s32 found;
+
+			snprintf(s_GroupNameDraft, sizeof(s_GroupNameDraft), "%s", data->keyboard.string);
+			found = mpWeaponFiltersFind(s_GroupNameDraft);
+
+			// The same line the set page has, for the same reason: reading the
+			// screen got this wrong twice, so the run says what it read
+			sysLogPrintf(LOG_NOTE, "menu: group name decision: typed `%s` found %d, groups %d, in use %d",
+					s_GroupNameDraft, found, mpWeaponFiltersNum(), s_RandomGroup);
+
+			if (s_GroupNameDraft[0] == '\0') {
+				sysLogPrintf(LOG_NOTE, "menu: a random weapon group saved nothing");
+			} else if (found >= 0) {
+				mpWeaponFiltersUpdate(found);
+				s_RandomGroup = MPRANDOMGROUP_BUILTINS + found;
+			} else if (mpWeaponFiltersSave(s_GroupNameDraft) >= 0) {
+				s_RandomGroup = MPRANDOMGROUP_BUILTINS + mpWeaponFiltersNum() - 1;
+			} else {
+				sysLogPrintf(LOG_NOTE, "menu: a random weapon group named `%s` saved nothing", s_GroupNameDraft);
+			}
+		}
+		break;
+	}
+
+	return 0;
+}
+
+struct menuitem g_MpSaveRandomGroupNameMenuItems[] = {
+	{
+		MENUITEMTYPE_LABEL,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_LESSLEFTPADDING,
+		(uintptr_t)"Enter the group name:\n",
+		0,
+		NULL,
+	},
+	{
+		MENUITEMTYPE_KEYBOARD,
+		MPSETUP_MAXNAME,
+		0,
+		0,
+		1,
+		menuhandlerMpSaveRandomGroupName,
+	},
+	{
+		MENUITEMTYPE_LABEL,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SMALLFONT | MENUITEMFLAG_LESSLEFTPADDING,
+		(uintptr_t)"Reusing a group's name\noverwrites that group.\n",
+		0,
+		NULL,
+	},
+	{ MENUITEMTYPE_END },
+};
+
+struct menudialogdef g_MpSaveRandomGroupNameMenuDialog = {
+	MENUDIALOGTYPE_DEFAULT,
+	(uintptr_t)"Random Group Name",
+	g_MpSaveRandomGroupNameMenuItems,
+	NULL,
+	MENUDIALOGFLAG_LITERAL_TEXT,
+	NULL,
+};
+
+// Which group the Yes below is to delete: the row that asks knows, the row that
+// answers is three rows away from it
+static s32 s_GroupToDelete = MPRANDOMGROUP_MANUAL;
+
+/**
+ * The Yes of the delete confirm.
+ *
+ * A confirm is possible from here and was not from the name page: this is pushed
+ * from a SELECTABLE row's MENUOP_SET, which can change the dialog stack, and the
+ * texture pack delete has been doing exactly this since (optionsmenu.c). What
+ * broke before was a keyboard row popping the page it sits in, which cannot work
+ * in either direction.
+ */
+static MenuItemHandlerResult menuhandlerMpRemoveRandomGroupConfirm(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_SET) {
+		const s32 deleted = s_GroupToDelete;
+
+		if (mpWeaponFiltersDelete(deleted)) {
+			sysLogPrintf(LOG_NOTE, "menu: the random weapon group %d was deleted", deleted);
+
+			/**
+			 * Every group above the one deleted moved down a row in the list, and a weapon
+			 * slot that draws from a group holds its place in that list: so they are
+			 * renumbered here, or a slot aiming at group 3 starts aiming at what group 4
+			 * became. The slots that named the group itself keep the gun it last rolled and
+			 * stop claiming it - a slot cannot draw from a list that is gone, and the arena
+			 * is better off holding a gun it can name. Nothing saved is at risk: a setup and
+			 * a saved set both hold the group's name, for exactly this reason (mplayer.c,
+			 * mpweaponsets.c).
+			 */
+			for (s32 slot = 0; slot < NUM_MPWEAPONSLOTS; slot++) {
+				const s32 marker = mpGetWeaponSlotGroup(slot);
+
+				if (marker == deleted) {
+					mpSetWeaponSlotGroup(slot, -1);
+				} else if (marker > deleted) {
+					mpSetWeaponSlotGroup(slot, marker - 1);
+				}
+			}
+
+			// The list on screen stays as it was: a group going should not
+			// silently re-arm anybody, and the boxes still show what they showed
+			s_RandomGroup = MPRANDOMGROUP_MANUAL;
+		} else {
+			sysLogPrintf(LOG_NOTE, "menu: the random weapon group %d was not there to delete", deleted);
+		}
+
+		s_GroupToDelete = MPRANDOMGROUP_MANUAL;
+	}
+
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerMpRemoveRandomGroupRow(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_CHECKDISABLED:
+		// Nothing in use is one of the player's: the built-ins are the game's and
+		// a hand-edited list is nobody's
+		return s_RandomGroup < MPRANDOMGROUP_BUILTINS;
+	case MENUOP_SET:
+		s_GroupToDelete = s_RandomGroup - MPRANDOMGROUP_BUILTINS;
+		menuPushDialog(&g_MpRemoveRandomGroupMenuDialog);
+		break;
+	}
+
+	return 0;
+}
+
+static char s_RemoveGroupAsk[MPSETUP_MAXNAME + 32];
+
+// The label that names what is about to be deleted. A text function, which is
+// what param2 is without MENUITEMFLAG_LITERAL_TEXT - and it has to be one, since
+// the group's name is not known when the table was written (optionsmenu.c says
+// what happens when the flag is set on a function pointer: the menu is handed
+// machine code to draw)
+static char *menutextRemoveRandomGroup(struct menuitem *item)
+{
+	const struct mpweaponfilterentry *entry = mpWeaponFiltersGet(s_GroupToDelete);
+
+	snprintf(s_RemoveGroupAsk, sizeof(s_RemoveGroupAsk), "Delete the group %s?\n",
+			entry != NULL ? entry->name : "(gone)");
+
+	return s_RemoveGroupAsk;
+}
+
+struct menuitem g_MpRemoveRandomGroupMenuItems[] = {
+	{
+		MENUITEMTYPE_LABEL,
+		0,
+		MENUITEMFLAG_LESSLEFTPADDING,
+		(uintptr_t) menutextRemoveRandomGroup,
+		0,
+		NULL,
+	},
+	{
+		MENUITEMTYPE_LABEL,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_LESSLEFTPADDING,
+		(uintptr_t)"The guns it selects stay selected.\n",
+		0,
+		NULL,
+	},
+	{
+		MENUITEMTYPE_SEPARATOR,
+		0,
+		0,
+		0,
+		0,
+		NULL,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG | MENUITEMFLAG_SELECTABLE_CENTRE,
+		L_OPTIONS_385, // "No"
+		0,
+		NULL,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG | MENUITEMFLAG_SELECTABLE_CENTRE,
+		L_OPTIONS_386, // "Yes"
+		0,
+		menuhandlerMpRemoveRandomGroupConfirm,
+	},
+	{ MENUITEMTYPE_END },
+};
+
+struct menudialogdef g_MpRemoveRandomGroupMenuDialog = {
+	MENUDIALOGTYPE_DANGER,
+	(uintptr_t)"Delete Random Group",
+	g_MpRemoveRandomGroupMenuItems,
+	NULL,
+	MENUDIALOGFLAG_LITERAL_TEXT,
+	NULL,
+};
+
+/**
+ * The page itself.
+ *
+ * The group in use is re-read when it opens, which is the only moment the list
+ * can be matched against the groups: it may have arrived from a saved setup, or
+ * from a host's RULES, or from a checkbox pressed last week and left.
+ */
+static MenuDialogHandlerResult menudialogMpRandomWeapons(s32 operation, struct menudialogdef *dialogdef, union handlerdata *data)
+{
+	if (operation == MENUOP_OPEN) {
+		s_RandomGroup = mpRandomGroupInUse();
+	}
+
+	return 0;
+}
+
+struct menuitem g_MpRandomWeaponsMenuItems[] = {
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Select guns\n",
+		0,
+		menuhandlerMpRandomGunsRow,
+	},
+	{
+		MENUITEMTYPE_DROPDOWN,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Group\n",
+		0,
+		menuhandlerMpRandomGroup,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Save group\n",
+		0,
+		menuhandlerMpSaveRandomGroupRow,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Remove group\n",
+		0,
+		menuhandlerMpRemoveRandomGroupRow,
+	},
+	{ MENUITEMTYPE_END },
+};
+
+struct menudialogdef g_MpRandomWeaponsMenuDialog = {
+	MENUDIALOGTYPE_DEFAULT,
+	(uintptr_t)"Random Weapons",
+	g_MpRandomWeaponsMenuItems,
+	menudialogMpRandomWeapons,
+	MENUDIALOGFLAG_LITERAL_TEXT,
+	NULL,
+};
+
+/**
+ * What the Random Weapons page has to get right, run once at startup under
+ * --test-randomgroups (mpweaponfilters.c holds the store's half, mplayer.c the
+ * roll's).
+ *
+ * Driven through the handlers rather than the screen, and only with the
+ * operations the menu really sends them: MENUOP_SETTEXT on the keyboard row and
+ * never MENUOP_SET (setup.c's own lesson, weapon-sets.md), and no row that would
+ * push a dialog - the menu is not up here to receive one. The rows that push are
+ * covered by their other half instead: the confirm's Yes is called directly, with
+ * the stash the asking row would have left in it.
+ */
+void mpRandomGroupMenuSelfTest(void)
+{
+	union handlerdata d;
+	struct menuitem item;
+	char typed[MPSETUP_MAXNAME + 1];
+	s32 checks = 0;
+	s32 failed = 0;
+	s32 stored;
+	s32 i;
+	u8 save[NUM_MPWEAPONS];
+
+	memset(&item, 0, sizeof(item));
+
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		save[i] = g_MpWeaponSetRandomFilters[i];
+	}
+
+	// 1. The dropdown's rows are the built-ins, and they differ
+	memset(&d, 0, sizeof(d));
+	d.dropdown.value = 2; // 0 is Manual, so this is Classic
+	menuhandlerMpRandomGroup(MENUOP_SET, NULL, &d);
+
+	{
+		bool classic = true;
+
+		for (i = 0; i < ARRAYCOUNT(g_MpWeapons); i++) {
+			classic = classic && (g_MpWeaponSetRandomFilters[i] != 0) == (i >= MPWEAPON_PP9I && i <= MPWEAPON_RCP45);
+		}
+
+		checks++;
+		if (classic) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   the dropdown's Classic row selects Classic");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL the dropdown's Classic row selected something else");
+			failed++;
+		}
+	}
+
+	memset(&d, 0, sizeof(d));
+	d.dropdown.value = 1; // Dark
+	menuhandlerMpRandomGroup(MENUOP_SET, NULL, &d);
+
+	{
+		bool dark = true;
+		bool noGe = true;
+
+		for (i = 0; i < ARRAYCOUNT(g_MpWeapons); i++) {
+			dark = dark && (g_MpWeaponSetRandomFilters[i] != 0) == mpRandomGroupBuiltInBits(0, i);
+
+			if (i >= MPWEAPON_GE_FIRST && g_MpWeaponSetRandomFilters[i]) {
+				noGe = false;
+			}
+		}
+
+		checks++;
+		if (dark) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   Dark and Classic are different selections");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL Dark did not select what the rule says");
+			failed++;
+		}
+
+		// The preset's old tail ran on through GoldenEye's rows; a group called
+		// Dark must not switch them on (setup.c's comment says why it did)
+		checks++;
+		if (noGe) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   Dark selects no GoldenEye row");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL Dark selected a GoldenEye row");
+			failed++;
+		}
+	}
+
+	// 2. What the dropdown says, row by row
+	memset(&d, 0, sizeof(d));
+	d.dropdown.value = 0;
+
+	checks++;
+	if (strcmp((char *) (uintptr_t) menuhandlerMpRandomGroup(MENUOP_GETOPTIONTEXT, NULL, &d), "Manual") == 0) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: ok   the dropdown's first row is Manual");
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL the dropdown's first row is not Manual");
+		failed++;
+	}
+
+	// 3. Saving what is on screen, through the keyboard row's own operation.
+	// keyboard.string is the buffer the menu owns and the row writes back into on
+	// MENUOP_GETTEXT, so the test lends it one of its own rather than pointing it
+	// at a literal
+	snprintf(typed, sizeof(typed), "%s", "Test Guns");
+	memset(&d, 0, sizeof(d));
+	d.keyboard.string = typed;
+	menuhandlerMpSaveRandomGroupName(MENUOP_SETTEXT, &item, &d);
+
+	stored = mpWeaponFiltersFind("Test Guns");
+
+	checks++;
+	if (stored >= 0) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: ok   the name page saves the list as a group");
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL the name page saved no group");
+		failed++;
+	}
+
+	if (stored >= 0) {
+		memset(&d, 0, sizeof(d));
+		d.dropdown.value = 1 + MPRANDOMGROUP_BUILTINS + stored;
+		menuhandlerMpRandomGroup(MENUOP_SET, NULL, &d);
+
+		{
+			const char *shown = (const char *) (uintptr_t) menuhandlerMpRandomGroup(MENUOP_GETOPTIONTEXT, NULL, &d);
+
+			checks++;
+			if (shown != NULL && strcmp(shown, "RX: Test Guns") == 0) {
+				sysLogPrintf(LOG_NOTE, "randomgroups test: ok   the page marks a saved group as RX:");
+			} else {
+				sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL the page shows the group as `%s`",
+						shown != NULL ? shown : "(null)");
+				failed++;
+			}
+		}
+
+		// 4. Remove: dead for the game's own selections, live for the player's
+		memset(&d, 0, sizeof(d));
+		d.dropdown.value = 1;
+		menuhandlerMpRandomGroup(MENUOP_SET, NULL, &d);
+
+		memset(&d, 0, sizeof(d));
+
+		checks++;
+		if (menuhandlerMpRemoveRandomGroupRow(MENUOP_CHECKDISABLED, NULL, &d) != 0) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   Remove is dead while a built-in is in use");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL Remove is live while a built-in is in use");
+			failed++;
+		}
+
+		memset(&d, 0, sizeof(d));
+		d.dropdown.value = 1 + MPRANDOMGROUP_BUILTINS + stored;
+		menuhandlerMpRandomGroup(MENUOP_SET, NULL, &d);
+
+		memset(&d, 0, sizeof(d));
+
+		checks++;
+		if (menuhandlerMpRemoveRandomGroupRow(MENUOP_CHECKDISABLED, NULL, &d) == 0) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   Remove is live while the player's own is in use");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL Remove is dead while the player's own is in use");
+			failed++;
+		}
+
+		// 5. The confirm's Yes deletes the group the asking row stashed - and the
+		// list the player was looking at stays as it was
+		s_GroupToDelete = stored;
+		memset(&d, 0, sizeof(d));
+		menuhandlerMpRemoveRandomGroupConfirm(MENUOP_SET, NULL, &d);
+
+		checks++;
+		if (mpWeaponFiltersFind("Test Guns") < 0) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   the confirm's Yes deletes that group");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL the confirm's Yes left the group saved");
+			failed++;
+		}
+	}
+
+	// 6. A box ticked by hand is not a group any more
+	memset(&d, 0, sizeof(d));
+	d.dropdown.value = 3; // All: every row, so the one below has something to take off
+	menuhandlerMpRandomGroup(MENUOP_SET, NULL, &d);
+
+	memset(&d, 0, sizeof(d));
+	d.list.value = 0;
+	d.list.unk04 = 0;
+	mpSelectRandomWeaponListHandler(MENUOP_SET, NULL, &d);
+
+	{
+		memset(&d, 0, sizeof(d));
+		d.dropdown.value = 0;
+		menuhandlerMpRandomGroup(MENUOP_GETSELECTEDINDEX, NULL, &d);
+
+		checks++;
+		if (d.dropdown.value == 0) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   ticking a box leaves no group in use");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL ticking a box left group %d in use", (s32) d.dropdown.value);
+			failed++;
+		}
+	}
+
+	/**
+	 * 7. A weapon slot's own dropdown: the groups are rows under the guns, picking one
+	 * makes the slot random, and the closed row names it.
+	 *
+	 * The dropdown shows the text of the option it is sitting on, so the last check is
+	 * the one that says what the player sees: a slot that got a group out of the list
+	 * must read back as that group's row, or the row would name a gun the arena is not
+	 * holding.
+	 */
+	{
+		s32 slotkeep[NUM_MPWEAPONSLOTS];
+		s32 numguns = mpGetNumWeaponOptions();
+		s32 low;
+		s32 high;
+
+		for (i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+			slotkeep[i] = g_MpSetup.weapons[i];
+		}
+
+		memset(&d, 0, sizeof(d));
+		d.dropdown.value = 3; // All, so the group below has something to hold
+		menuhandlerMpRandomGroup(MENUOP_SET, NULL, &d);
+
+		if (mpWeaponFiltersFind("Slot Page") < 0) {
+			mpWeaponFiltersSave("Slot Page");
+		}
+
+		memset(&item, 0, sizeof(item));
+		item.param3 = 0;
+		memset(&d, 0, sizeof(d));
+		menuhandlerMpWeaponSlot(MENUOP_GETOPTIONCOUNT, &item, &d);
+
+		checks++;
+		if (d.dropdown.value == numguns + mpWeaponFiltersNum() && mpWeaponFiltersNum() > 0) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a weapon slot offers its group below its guns (%d guns, %d groups)",
+					numguns, mpWeaponFiltersNum());
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a weapon slot offered %d rows, not %d guns plus %d groups",
+					d.dropdown.value, numguns, mpWeaponFiltersNum());
+			failed++;
+		}
+
+		{
+			const s32 group = mpWeaponFiltersFind("Slot Page");
+			const char *text;
+
+			memset(&d, 0, sizeof(d));
+			d.dropdown.value = numguns + group;
+			text = (const char *) (uintptr_t) menuhandlerMpWeaponSlot(MENUOP_GETOPTIONTEXT, &item, &d);
+
+			checks++;
+			if (text != NULL && text[0] == 'R' && text[1] == 'X' && text[2] == ':') {
+				sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a group is marked in a weapon slot's list: %s", text);
+			} else {
+				sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a group's row in a weapon slot's list reads `%s`",
+						text != NULL ? text : "(nothing)");
+				failed++;
+			}
+
+			memset(&d, 0, sizeof(d));
+			d.dropdown.value = numguns + group;
+			menuhandlerMpWeaponSlot(MENUOP_SET, &item, &d);
+
+			memset(&d, 0, sizeof(d));
+			menuhandlerMpWeaponSlot(MENUOP_GETSELECTEDINDEX, &item, &d);
+
+			checks++;
+			if (mpGetWeaponSlotGroup(0) == group && d.dropdown.value == numguns + group
+					&& g_MpSetup.weapons[0] < NUM_MPWEAPONS) {
+				sysLogPrintf(LOG_NOTE, "randomgroups test: ok   picking a group makes the slot random and the row names it");
+			} else {
+				sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL picking a group left marker %d, the row on %d, the slot on row %d",
+						mpGetWeaponSlotGroup(0), d.dropdown.value, g_MpSetup.weapons[0]);
+				failed++;
+			}
+
+			// A gun picked after that is a plain slot again
+			memset(&d, 0, sizeof(d));
+			d.dropdown.value = 0;
+			menuhandlerMpWeaponSlot(MENUOP_SET, &item, &d);
+
+			checks++;
+			if (mpGetWeaponSlotGroup(0) == -1) {
+				sysLogPrintf(LOG_NOTE, "randomgroups test: ok   picking a gun after a group leaves the slot plain");
+			} else {
+				sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL picking a gun after a group left the slot claiming one");
+				failed++;
+			}
+		}
+
+		/**
+		 * 8. Deleting a group renumbers the slots that were drawing from the ones above
+		 * it, and retires the one that named the group itself. The saved files hold
+		 * names, so they are safe; these markers are the only place the numbers live.
+		 */
+		for (i = 0; i < NUM_MPWEAPONS; i++) {
+			g_MpWeaponSetRandomFilters[i] = i % 3; // two selections that differ
+		}
+
+		if (mpWeaponFiltersFind("Renumber low") < 0) {
+			mpWeaponFiltersSave("Renumber low");
+		}
+
+		g_MpWeaponSetRandomFilters[0] = 0;
+
+		if (mpWeaponFiltersFind("Renumber high") < 0) {
+			mpWeaponFiltersSave("Renumber high");
+		}
+
+		low = mpWeaponFiltersFind("Renumber low");
+		high = mpWeaponFiltersFind("Renumber high");
+		mpSetWeaponSlotRandom(1, high);
+
+		s_GroupToDelete = low;
+		memset(&d, 0, sizeof(d));
+		menuhandlerMpRemoveRandomGroupConfirm(MENUOP_SET, NULL, &d);
+
+		checks++;
+		if (high > low && mpGetWeaponSlotGroup(1) == mpWeaponFiltersFind("Renumber high")) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   deleting a group moves the slots that drew from those above it");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL deleting a group left a slot on %d, where its group is now %d",
+					mpGetWeaponSlotGroup(1), mpWeaponFiltersFind("Renumber high"));
+			failed++;
+		}
+
+		mpSetWeaponSlotRandom(1, mpWeaponFiltersFind("Renumber high"));
+
+		s_GroupToDelete = mpWeaponFiltersFind("Renumber high");
+		memset(&d, 0, sizeof(d));
+		menuhandlerMpRemoveRandomGroupConfirm(MENUOP_SET, NULL, &d);
+
+		checks++;
+		if (mpGetWeaponSlotGroup(1) == -1 && g_MpSetup.weapons[1] < NUM_MPWEAPONS) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   deleting the group a slot draws from leaves it a plain gun");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL deleting the group a slot drew from left it on marker %d",
+					mpGetWeaponSlotGroup(1));
+			failed++;
+		}
+
+		mpWeaponFiltersDelete(mpWeaponFiltersFind("Renumber low"));
+		mpWeaponFiltersDelete(mpWeaponFiltersFind("Slot Page"));
+		mpClearWeaponSlotGroups();
+
+		for (i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+			g_MpSetup.weapons[i] = (u8) slotkeep[i];
+		}
+	}
+
+	/**
+	 * When the row is on the page at all.
+	 *
+	 * Either reader of the list brings it out. The weapons page carries the Start
+	 * Armed row as well as the six slots (menuhandlerMpStartArmed), and that roll
+	 * reads this same list (mpGetSpawnWeapon), so a player who set it to Random can
+	 * see what it will draw from without leaving the page to find out - which the
+	 * row used to hide, being written when the list only fed the arena's six slots.
+	 */
+	{
+		s32 setkeep = g_MpWeaponSetNum;
+		s32 armedkeep = g_ModOptions.spawnweapon;
+		bool hiddenNeither;
+		bool hiddenArmed;
+		bool hiddenSet;
+
+		memset(&d, 0, sizeof(d));
+
+		g_MpWeaponSetNum = WEAPONSET_CUSTOM;
+		g_ModOptions.spawnweapon = SPAWNWEAPON_OFF;
+		hiddenNeither = menuhandlerMpSelectRandomWeapons(MENUOP_CHECKHIDDEN, &item, &d) != 0;
+
+		g_MpWeaponSetNum = WEAPONSET_CUSTOM;
+		g_ModOptions.spawnweapon = SPAWNWEAPON_RANDOM;
+		hiddenArmed = menuhandlerMpSelectRandomWeapons(MENUOP_CHECKHIDDEN, &item, &d) != 0;
+
+		g_MpWeaponSetNum = WEAPONSET_RANDOM;
+		g_ModOptions.spawnweapon = SPAWNWEAPON_OFF;
+		hiddenSet = menuhandlerMpSelectRandomWeapons(MENUOP_CHECKHIDDEN, &item, &d) != 0;
+
+		g_MpWeaponSetNum = setkeep;
+		g_ModOptions.spawnweapon = armedkeep;
+
+		checks++;
+		if (!hiddenArmed && !hiddenSet && hiddenNeither) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   the row shows for Start Armed's Random as well as for the Random set");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL the row's visibility: armed %d set %d neither %d (want 0 0 1)",
+					hiddenArmed, hiddenSet, hiddenNeither);
+			failed++;
+		}
+	}
+
+	/**
+	 * The row that opens the page says what the list is (mpMenuTextRandomWeaponGroup).
+	 *
+	 * Named from the list and not from the page's dropdown state, because this is the
+	 * answer a weapons page gives after a restart, with the page never opened. A saved
+	 * group that spells the same selection as a built-in is the honest answer instead
+	 * (mpRandomGroupInUse asks the saved groups first), so each state below starts by
+	 * clearing the store of anything that already matches it.
+	 *
+	 * The expected text is composed the way the row composes it, so a translated build
+	 * is not failed for its own words: what is being checked is which name the row
+	 * picked, which is the only part that is a decision rather than a string.
+	 */
+	{
+		char expect[MPSETUP_MAXNAME + 48];
+		const char *text;
+		s32 group;
+
+		for (i = 0; i < NUM_MPWEAPONS; i++) {
+			g_MpWeaponSetRandomFilters[i] = 1;
+		}
+
+		// Bounded rather than a while on the lookup: a delete that does not take
+		// would otherwise spin here forever
+		for (s32 attempt = 0; attempt < MPWEAPONFILTER_MAXSAVED; attempt++) {
+			if ((group = mpWeaponFiltersMatching()) < 0) {
+				break;
+			}
+
+			if (!mpWeaponFiltersDelete(group)) {
+				break;
+			}
+		}
+
+		snprintf(expect, sizeof(expect), langTr("RX Selection: %s\n"), langTr("All"));
+		text = mpMenuTextRandomWeaponGroup(NULL);
+
+		checks++;
+		if (strcmp(text, expect) == 0) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   the row names the built-in the list spells, All");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL the row said \"%s\", not \"%s\"", text, expect);
+			failed++;
+		}
+
+		// One box off the built-in: no group's, so the row says so
+		g_MpWeaponSetRandomFilters[0] = 0;
+
+		snprintf(expect, sizeof(expect), langTr("RX Selection: %s\n"), langTr("Manual"));
+		text = mpMenuTextRandomWeaponGroup(NULL);
+
+		checks++;
+		if (strcmp(text, expect) == 0) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a hand-edited list reads as Manual on the row");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a hand-edited list read as \"%s\", not \"%s\"", text, expect);
+			failed++;
+		}
+
+		// And a saved group keeps its own name on the row - the "RX: " in front of it
+		// is the store's, and is what says the name is one of these rather than a gun's
+		g_MpWeaponSetRandomFilters[0] = 1;
+		group = mpWeaponFiltersSave("Row test");
+
+		snprintf(expect, sizeof(expect), langTr("RX Selection: %s\n"),
+				group >= 0 ? mpWeaponFiltersShown(group) : "?");
+		text = mpMenuTextRandomWeaponGroup(NULL);
+
+		checks++;
+		if (group >= 0 && strcmp(text, expect) == 0) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   the row names the saved group as RX: Row test");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL the row said \"%s\", not \"%s\" (saved %d)", text, expect, group);
+			failed++;
+		}
+
+		if (group >= 0) {
+			mpWeaponFiltersDelete(group);
+		}
+	}
+
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		g_MpWeaponSetRandomFilters[i] = save[i];
+	}
+
+	s_RandomGroup = mpRandomGroupInUse();
+
+	if (failed == 0) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: all %d page checks as expected", checks);
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: %d of %d page checks as expected: %d FAILED",
+				checks - failed, checks, failed);
+	}
+}
+
+/**
+ * What a Start Armed spawn is handed, and how many of it (--test-startarmed).
+ *
+ * Two settings make the four ways to start armed: Start Armed says which gun -
+ * the first slot's, or a fresh roll each spawn - and Akimbo Start? says whether
+ * it comes twice, so the pair is not baked into the option list. Fiesta is the
+ * option that fills the reserve; either First option starts with the arena's
+ * hand-out and one crate of it, and leaves the rest on the map (the three mines
+ * are the hand-out alone, because doubling them lands on their carrying limit).
+ *
+ * The tick's row hides when Start Armed is Off, and hiding it must not change
+ * its value: a mission's own starting gun is doubled by that same key while the
+ * row is nowhere to be seen (playerSpawnWeapons).
+ *
+ * The ammunition checks are of the rule and not of a table read back. Asked
+ * the lazy way - is the answer within the carrying limit - a helper that just
+ * returned the capacity for every row would pass, which is the same trap
+ * mpRandomSlotSelfTest's numunoffered guard exists for.
+ *
+ * Mods: Player's copy of the tick row (optionsmenu.c) is not driven from here:
+ * it is static in the port's file, and both rows answer the one predicate
+ * modSpawnAkimboRowHidden(), so what is asserted is that predicate.
+ */
+void mpStartArmedSelfTest(void)
+{
+	const s32 armedkeep = g_ModOptions.spawnweapon;
+	const s32 akimbokeep = g_ModOptions.akimbo;
+	const s32 startkeep = g_ModOptions.spawnakimbo;
+	struct menuitem item;
+	union handlerdata d;
+	s32 gunrow = -1;
+	s32 checks = 0;
+	s32 failed = 0;
+	s32 i;
+
+	memset(&item, 0, sizeof(item));
+	memset(&d, 0, sizeof(d));
+
+	for (i = 0; i < (s32) ARRAYCOUNT(g_MpWeapons); i++) {
+		if (modCanAkimbo(g_MpWeapons[i].weaponnum)) {
+			gunrow = i;
+			break;
+		}
+	}
+
+	if (gunrow < 0) {
+		sysLogPrintf(LOG_NOTE, "startarmed test: FAIL the weapon table offers no gun that pairs: nothing to test");
+		return;
+	}
+
+	/**
+	 * The row is the page's to show when there is a handed-out gun to pair, and
+	 * the key outlives the row.
+	 */
+	{
+		bool hidden[3];
+		bool live;
+
+		for (i = SPAWNWEAPON_OFF; i <= SPAWNWEAPON_RANDOM; i++) {
+			g_ModOptions.spawnweapon = i;
+			hidden[i] = menuhandlerMpAkimboStart(MENUOP_CHECKHIDDEN, &item, &d) != 0;
+		}
+
+		g_ModOptions.spawnweapon = SPAWNWEAPON_OFF;
+		g_ModOptions.spawnakimbo = 1;
+		live = menuhandlerMpAkimboStart(MENUOP_GET, &item, &d) != 0;
+
+		checks++;
+		if (hidden[SPAWNWEAPON_OFF] && !hidden[SPAWNWEAPON_FIRST] && !hidden[SPAWNWEAPON_RANDOM] && live) {
+			sysLogPrintf(LOG_NOTE, "startarmed test: ok   Akimbo Start? hides only with Start Armed on Off, and keeps its value while hidden");
+		} else {
+			sysLogPrintf(LOG_NOTE, "startarmed test: FAIL the row's visibility: off %d first %d fiesta %d, hidden row's value %d (want 1 0 0 and 1)",
+					hidden[SPAWNWEAPON_OFF], hidden[SPAWNWEAPON_FIRST], hidden[SPAWNWEAPON_RANDOM], live);
+			failed++;
+		}
+	}
+
+	/**
+	 * The decision both spawn sites ask: the Akimbo setting, the player's tick,
+	 * and the gun being one that pairs at all - and Guards alone is not the
+	 * players being akimbo.
+	 */
+	{
+		bool withall;
+		bool akimbooff;
+		bool tickoff;
+		bool guardsonly;
+		bool notagun;
+
+		g_ModOptions.spawnweapon = SPAWNWEAPON_FIRST;
+		g_ModOptions.akimbo = MODAKIMBO_EVERYONE;
+		g_ModOptions.spawnakimbo = 1;
+		withall = modSpawnIsAkimbo(g_MpWeapons[gunrow].weaponnum);
+
+		g_ModOptions.akimbo = MODAKIMBO_OFF;
+		akimbooff = modSpawnIsAkimbo(g_MpWeapons[gunrow].weaponnum);
+
+		g_ModOptions.akimbo = MODAKIMBO_GUARDS;
+		guardsonly = modSpawnIsAkimbo(g_MpWeapons[gunrow].weaponnum);
+
+		g_ModOptions.akimbo = MODAKIMBO_PLAYERSANDSIMS;
+		g_ModOptions.spawnakimbo = 0;
+		tickoff = modSpawnIsAkimbo(g_MpWeapons[gunrow].weaponnum);
+
+		g_ModOptions.spawnakimbo = 1;
+		notagun = modSpawnIsAkimbo(WEAPON_NONE);
+
+		checks++;
+		if (withall && !akimbooff && !tickoff && !guardsonly && !notagun) {
+			sysLogPrintf(LOG_NOTE, "startarmed test: ok   the pair follows Akimbo, the tick and the gun, and Guards alone is not the players");
+		} else {
+			sysLogPrintf(LOG_NOTE, "startarmed test: FAIL the pair: all %d akimbo off %d tick off %d guards only %d not a gun %d (want 1 0 0 0 0)",
+					withall, akimbooff, tickoff, guardsonly, notagun);
+			failed++;
+		}
+	}
+
+	/**
+	 * Four combinations, both halves of them, through the two functions the spawn
+	 * sites call.
+	 */
+	{
+		static const s32 armeds[] = { SPAWNWEAPON_FIRST, SPAWNWEAPON_FIRST, SPAWNWEAPON_RANDOM, SPAWNWEAPON_RANDOM };
+		static const s32 ticks[] = { 0, 1, 0, 1 };
+		s32 wrong = 0;
+
+		g_ModOptions.akimbo = MODAKIMBO_EVERYONE;
+
+		for (i = 0; i < 4; i++) {
+			bool pair;
+			bool maxed;
+
+			g_ModOptions.spawnweapon = armeds[i];
+			g_ModOptions.spawnakimbo = ticks[i];
+
+			pair = modSpawnIsAkimbo(g_MpWeapons[gunrow].weaponnum);
+			maxed = modSpawnWantsMaxAmmo();
+
+			if (pair != (ticks[i] != 0) || maxed != (armeds[i] == SPAWNWEAPON_RANDOM)) {
+				wrong |= (1 << i);
+			}
+		}
+
+		checks++;
+		if (wrong == 0) {
+			sysLogPrintf(LOG_NOTE, "startarmed test: ok   First and Fiesta, ticked and not, give the four pairs and the two reserves asked for");
+		} else {
+			sysLogPrintf(LOG_NOTE, "startarmed test: FAIL combination(s) %d of First/First-akimbo/Fiesta/Fiesta-akimbo", wrong);
+			failed++;
+		}
+	}
+
+	/**
+	 * Every row's own ammunition type, both ways.
+	 */
+	{
+		s32 over = 0;
+		s32 notcapacity = 0;
+		s32 sameside = 0;
+
+		for (i = 0; i < (s32) ARRAYCOUNT(g_MpWeapons); i++) {
+			const s32 type = g_MpWeapons[i].priammotype;
+			const s32 capacity = bgunGetCapacityByAmmotype(type);
+			s32 maxed;
+			s32 shorthanded;
+
+			if (type == 0) {
+				continue;
+			}
+
+			maxed = bgunGetSpawnAmmoQuantity(&g_MpWeapons[i], type, true);
+			shorthanded = bgunGetSpawnAmmoQuantity(&g_MpWeapons[i], type, false);
+
+			if (shorthanded <= 0 || shorthanded > maxed) {
+				over++;
+			}
+
+			if (capacity > 0 && maxed != capacity) {
+				notcapacity++;
+			}
+
+			if (shorthanded != maxed) {
+				sameside++;
+			}
+		}
+
+		checks++;
+		if (over == 0 && notcapacity == 0 && sameside > 0) {
+			sysLogPrintf(LOG_NOTE, "startarmed test: ok   the reserve fills to the capacity and the hand-out sits under it for %d row(s)", sameside);
+		} else {
+			sysLogPrintf(LOG_NOTE, "startarmed test: FAIL the amounts: %d row(s) over or zero, %d not filled to the capacity, %d shorter than the capacity",
+					over, notcapacity, sameside);
+			failed++;
+		}
+	}
+
+	/**
+	 * The mines, by name: five in hand rather than ten, which is the difference
+	 * the two First options are meant to make. Their hand-out is 5 and their
+	 * carrying limit 10, so a doubled mine answers exactly what Fiesta does - and
+	 * the Plastique row's doubling lands on its capacity too, which is why it is
+	 * the mines this check can see rather than the detonator.
+	 */
+	{
+		s32 mines = 0;
+		s32 wrong = 0;
+
+		for (i = 0; i < (s32) ARRAYCOUNT(g_MpWeapons); i++) {
+			const s32 type = g_MpWeapons[i].priammotype;
+
+			if (type != AMMOTYPE_TIMED_MINE && type != AMMOTYPE_PROXY_MINE && type != AMMOTYPE_REMOTE_MINE) {
+				continue;
+			}
+
+			mines++;
+
+			if (bgunGetSpawnAmmoQuantity(&g_MpWeapons[i], type, false) != g_MpWeapons[i].priammoqty) {
+				wrong++;
+			}
+
+			if (bgunGetSpawnAmmoQuantity(&g_MpWeapons[i], type, true) == g_MpWeapons[i].priammoqty) {
+				wrong++;
+			}
+		}
+
+		checks++;
+		if (mines >= 3 && wrong == 0) {
+			sysLogPrintf(LOG_NOTE, "startarmed test: ok   %d mine row(s) start at the hand-out and not the doubled amount", mines);
+		} else {
+			sysLogPrintf(LOG_NOTE, "startarmed test: FAIL the mines: %d row(s), %d wrong",
+					mines, wrong);
+			failed++;
+		}
+	}
+
+	/**
+	 * The two dropdowns' rows, named: a rename that drops one is the kind of
+	 * change nobody notices until the page offers two things it does not do.
+	 */
+	{
+		const char *armed[3] = { "", "", "" };
+		s32 armedcount;
+		s32 akibocount;
+
+		// GETOPTIONCOUNT answers through the union, not the return value, which is
+		// how the menu reads it too; GETOPTIONTEXT answers by return
+		memset(&d, 0, sizeof(d));
+		menuhandlerMpStartArmed(MENUOP_GETOPTIONCOUNT, NULL, &d);
+		armedcount = d.dropdown.value;
+
+		for (i = 0; i < 3 && i < armedcount; i++) {
+			memset(&d, 0, sizeof(d));
+			d.dropdown.value = i;
+			armed[i] = (const char *) (uintptr_t) menuhandlerMpStartArmed(MENUOP_GETOPTIONTEXT, NULL, &d);
+		}
+
+		memset(&d, 0, sizeof(d));
+		menuhandlerMpAkimbo(MENUOP_GETOPTIONCOUNT, NULL, &d);
+		akibocount = d.dropdown.value;
+
+		checks++;
+		if (armedcount == 3 && strcmp(armed[0], "Off") == 0 && strcmp(armed[1], "First") == 0
+				&& strcmp(armed[2], "Fiesta") == 0 && akibocount == 4) {
+			sysLogPrintf(LOG_NOTE, "startarmed test: ok   Start Armed offers Off, First and Fiesta, and Akimbo its four");
+		} else {
+			sysLogPrintf(LOG_NOTE, "startarmed test: FAIL Start Armed offers %d row(s): %s, %s, %s; Akimbo offers %d",
+					armedcount, armed[0], armed[1], armed[2], akibocount);
+			failed++;
+		}
+	}
+
+	g_ModOptions.spawnweapon = armedkeep;
+	g_ModOptions.akimbo = akimbokeep;
+	g_ModOptions.spawnakimbo = startkeep;
+
+	if (failed == 0) {
+		sysLogPrintf(LOG_NOTE, "startarmed test: all %d checks as expected", checks);
+	} else {
+		sysLogPrintf(LOG_NOTE, "startarmed test: %d of %d checks as expected: %d FAILED", checks - failed, checks, failed);
+	}
+}
+
+/**
+ * The row that opens the Random Weapons page, naming what the list is now.
+ *
+ * "RX Selection: All", "RX Selection: RX: Pistols", "RX Selection: Manual" - the
+ * row is on two pages (the weapons page and Mods: Player) and both ask the same
+ * question, so both ask this. Named from the list rather than from the page's own
+ * dropdown state (`s_RandomGroup`), because the row is drawn on pages that never
+ * opened the page it opens: the list is the thing that comes back from the saved
+ * setup, and `mpRandomGroupInUse()` is what reads a group out of it.
+ *
+ * The format is the translatable key (`snprintf(buf, n, langTr("... %s\\n"), name)`,
+ * languages.md), and the built-in names go through `langTr()` with it - but not a
+ * saved group's: that is a name the player typed, and looking it up as a key would
+ * let a translation replace somebody's group name.
+ *
+ * One static buffer, which is enough: the two rows want the same words, and the
+ * menu keeps the pointer a text function hands it rather than a copy.
+ *
+ * `MENUITEMFLAG_LITERAL_TEXT` cannot stay on these rows: with it the menu code
+ * translates `param2` as a string (`menuResolveParam2Text()`), and the label has to
+ * be built here. Without it both the measuring pass and the draw pass call this
+ * through `menuResolveText()` - see `menuhandlerMpSimulantSlot`'s rows for the same
+ * shape, which put a text function in the value slot instead.
+ */
+char *mpMenuTextRandomWeaponGroup(struct menuitem *item)
+{
+	static char s_Buffer[MPSETUP_MAXNAME + 48];
+	s32 group = mpRandomGroupInUse();
+	const char *name;
+
+	if (group == MPRANDOMGROUP_MANUAL) {
+		name = langTr("Manual");
+	} else if (group < MPRANDOMGROUP_BUILTINS) {
+		name = langTr(s_RandomGroupBuiltInLabels[group]);
+	} else {
+		name = mpWeaponFiltersShown(group - MPRANDOMGROUP_BUILTINS);
+	}
+
+	snprintf(s_Buffer, sizeof(s_Buffer), langTr("RX Selection: %s\n"), name);
+
+	return s_Buffer;
+}
+
+/**
+ * The weapons page's row into that page.
+ *
+ * It used to push the checkbox list straight, which is why it only appeared while
+ * a Random set was picked. The row is renamed for what it opens now, and the list
+ * is a row inside it - same hidden rule, because on this page the list is what the
+ * random set draws the arena's six slots from, and that is still the question this
+ * page is standing on.
+ *
+ * It shows for either reader of the list, not just the one this page is about:
+ * Start Armed's Random draws a spawn gun from the same curated list
+ * (mpGetSpawnWeapon), and this page carries that row too - so a player who set
+ * Start Armed to Random here, or in Mods: Player, can see what it will draw from
+ * without walking off the page to find out. The other door, Mods: Player, hides
+ * itself on the other half of that test (optionsmenu.c), which is where a solo or
+ * co-op mission's player reaches the list from.
+ */
 MenuItemHandlerResult menuhandlerMpSelectRandomWeapons(s32 operation, struct menuitem *item, union handlerdata *data)
 {
 	switch (operation) {
 	case MENUOP_CHECKDISABLED:
 	case MENUOP_CHECKHIDDEN:
 		if (g_MpWeaponSetNum == WEAPONSET_RANDOM
-				|| g_MpWeaponSetNum == WEAPONSET_RANDOMFIVE) {
+				|| g_MpWeaponSetNum == WEAPONSET_RANDOMFIVE
+				|| modGetSpawnWeapon() == SPAWNWEAPON_RANDOM) {
 			return false;
 		}
 		return true;
 	case MENUOP_SET:
-		menuPushDialog(&g_MpSelectRandomWeaponsMenuDialog);
+		menuPushDialog(&g_MpRandomWeaponsMenuDialog);
 	}
 
 	return 0;
@@ -1843,7 +3170,10 @@ MenuItemHandlerResult menuhandlerMpGeCheatGuns(s32 operation, struct menuitem *i
  */
 MenuItemHandlerResult menuhandlerMpStartArmed(s32 operation, struct menuitem *item, union handlerdata *data)
 {
-	static const char *opts[] = { "Off", "First Weapon", "Random" };
+	// "Fiesta" rather than "Random": the page reads Random three ways already -
+	// the set, the RX Selection row under it, Auto Random - and this row is the
+	// one that hands out a gun rather than filling the six slots.
+	static const char *opts[] = { "Off", "First", "Fiesta" };
 
 	switch (operation) {
 	case MENUOP_GETOPTIONCOUNT:
@@ -1856,6 +3186,59 @@ MenuItemHandlerResult menuhandlerMpStartArmed(s32 operation, struct menuitem *it
 		break;
 	case MENUOP_GETSELECTEDINDEX:
 		data->dropdown.value = modGetSpawnWeapon();
+		break;
+	}
+
+	return 0;
+}
+
+/**
+ * Akimbo: who is handed two of a gun, and who may hold a pair of what they
+ * pick up.
+ *
+ * It came off the room rules page to sit above Start Armed, the row whose
+ * spawn it changes - the same move Start Armed itself made. Same value, same
+ * key (netrules.c syncs Mod.Akimbo), so nothing on the wire came with it.
+ */
+MenuItemHandlerResult menuhandlerMpAkimbo(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	static const char *opts[] = { "Off", "Everyone", "Players & Sims", "Guards" };
+
+	switch (operation) {
+	case MENUOP_GETOPTIONCOUNT:
+		data->dropdown.value = ARRAYCOUNT(opts);
+		break;
+	case MENUOP_GETOPTIONTEXT:
+		return (uintptr_t) opts[data->dropdown.value];
+	case MENUOP_SET:
+		g_ModOptions.akimbo = data->dropdown.value;
+		break;
+	case MENUOP_GETSELECTEDINDEX:
+		data->dropdown.value = g_ModOptions.akimbo;
+		break;
+	}
+
+	return 0;
+}
+
+/**
+ * Akimbo Start?: whether the gun Start Armed hands out comes as a pair.
+ *
+ * Not the row above it: Mod.Akimbo also decides what a player may dual-wield
+ * off the floor and which simulants and guards are given a pair, so the
+ * spawn cannot be turned back to one gun through it. With Start Armed on Off
+ * there is no handed-out gun to pair, so the row leaves the page - both pages
+ * that carry it ask modSpawnAkimboRowHidden(), which the gate asserts.
+ */
+MenuItemHandlerResult menuhandlerMpAkimboStart(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_CHECKHIDDEN:
+		return modSpawnAkimboRowHidden();
+	case MENUOP_GET:
+		return modGetSpawnAkimbo();
+	case MENUOP_SET:
+		g_ModOptions.spawnakimbo = data->checkbox.value ? 1 : 0;
 		break;
 	}
 
@@ -2091,8 +3474,8 @@ struct menuitem g_MpWeaponsMenuItems[] = {
 	{
 		MENUITEMTYPE_SELECTABLE,
 		0,
-		MENUITEMFLAG_LITERAL_TEXT,
-		(uintptr_t)"Select Weapons\n",
+		0,
+		(uintptr_t)&mpMenuTextRandomWeaponGroup,
 		0,
 		menuhandlerMpSelectRandomWeapons,
 	},
@@ -2108,9 +3491,25 @@ struct menuitem g_MpWeaponsMenuItems[] = {
 		MENUITEMTYPE_DROPDOWN,
 		0,
 		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Akimbo\n",
+		0,
+		menuhandlerMpAkimbo,
+	},
+	{
+		MENUITEMTYPE_DROPDOWN,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
 		(uintptr_t)"Start Armed\n",
 		0,
 		menuhandlerMpStartArmed,
+	},
+	{
+		MENUITEMTYPE_CHECKBOX,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Akimbo Start?\n",
+		0,
+		menuhandlerMpAkimboStart,
 	},
 	{
 		MENUITEMTYPE_CHECKBOX,

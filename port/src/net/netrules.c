@@ -74,6 +74,7 @@ static const struct {
 	{ "Mod.MeleeCombos",             NETKEY_SYNC },
 	{ "Mod.FlinchWhenShot",          NETKEY_SYNC },
 	{ "Mod.StartArmed",              NETKEY_SYNC },
+	{ "Mod.StartArmedAkimbo",        NETKEY_SYNC },
 	{ "Mod.StartArmedFor",           NETKEY_SYNC },
 	{ "Mod.Bodies",                  NETKEY_SYNC },
 	{ "Mod.BodyTime",                NETKEY_SYNC },
@@ -175,7 +176,13 @@ struct netrulesmsg {
 	// protocol 34: the host's own name for that set, when it saved one. The
 	// number means nothing to a client whose list differs (netproto.h)
 	char weaponsetname[MPSETUP_MAXNAME + 1];
-	u64 filters;
+	// The host's curated random weapon list, one byte per row of g_MpWeapons.
+	// This was a u64, which could not say anything about the rows past the 64th:
+	// GoldenEye's guns 16 to 24, a ROM hack's own pistols and the cheat guns, all
+	// of which this fork's table has (NUM_MPWEAPONS). Nothing on a client read
+	// them while the arena's six slots arrived as slots, and Start Armed's Random
+	// now does (mpGetSpawnWeapon), which is what made the shortfall matter.
+	u8 filters[NUM_MPWEAPONS];
 	u8 simslots[MAX_BOTS];
 	struct netrulessim sims[MAX_BOTS];
 	u8 difficulties[MAX_BOTS][MAX_LOCAL_PLAYERS];
@@ -989,7 +996,6 @@ s32 netRulesGeCharsMissing(char *rows, s32 size, s32 *bodies)
 void netRulesWrite(struct netbuf *b, u32 matchid)
 {
 	struct savebuffer sb;
-	u64 filters = 0;
 	s32 nsims = 0;
 	s32 i;
 	s32 j;
@@ -1027,11 +1033,9 @@ void netRulesWrite(struct netbuf *b, u32 matchid)
 	// list's business
 	netWriteStr(b, mpWeaponSetsNamedFor(g_MpWeaponSetNum), MPSETUP_MAXNAME);
 
-	for (i = 0; i < NUM_MPWEAPONS && i < 64; i++) {
-		filters |= g_MpWeaponSetRandomFilters[i] ? (1ULL << i) : 0;
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		netBufWriteU8(b, g_MpWeaponSetRandomFilters[i] ? 1 : 0);
 	}
-
-	netWriteU64(b, filters);
 
 	for (i = 0; i < MAX_BOTS; i++) {
 		netBufWriteU8(b, g_MpSimSlots[i]);
@@ -1189,7 +1193,9 @@ s32 netRulesRead(struct netbuf *b)
 	s_NetRules.weaponsetnum = netBufReadS32(b);
 	netBufReadString(b, s_NetRules.weaponsetname, sizeof(s_NetRules.weaponsetname));
 	netTextPrintable(s_NetRules.weaponsetname, 1); // the font trusts this string
-	s_NetRules.filters = netReadU64(b);
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		s_NetRules.filters[i] = netBufReadU8(b) ? 1 : 0;
+	}
 
 	for (i = 0; i < MAX_BOTS; i++) {
 		s_NetRules.simslots[i] = netBufReadU8(b) ? 1 : 0;
@@ -1522,9 +1528,20 @@ static void netRulesPut(const struct netrulesmsg *rules, s32 coop)
 	netRulesApplyCheatGuns(rules->keys, rules->nkeys, "the host's, for the match");
 	netRulesApplyCsHackGuns(rules->keys, rules->nkeys, "the host's, for the match");
 
+	/*
+	 * The host's six guns, concrete: it rolled its own random slots before sending
+	 * these (mpRollRandomWeaponSlots), and a peer that rolled its own would put a
+	 * different gun in the same slot. So any random slot this machine had is not
+	 * part of this match - retired here rather than left for mpReset() to notice
+	 * that the row stopped holding what its group rolled, which it would do, but by
+	 * then a host migration in this window would roll the local group rather than
+	 * keep the host's choice.
+	 */
 	for (i = 0; i < NUM_MPWEAPONSLOTS; i++) {
 		g_MpSetup.weapons[i] = rules->weapons[i];
 	}
+
+	mpClearWeaponSlotGroups();
 
 	savebufferClear(&sb);
 	savebufferOr(&sb, rules->scenariobits, 32);
@@ -1553,8 +1570,8 @@ static void netRulesPut(const struct netrulesmsg *rules, s32 coop)
 		sysLogPrintf(LOG_NOTE, "net: rules: the host's weapon set is named `%s`", rules->weaponsetname);
 	}
 
-	for (i = 0; i < NUM_MPWEAPONS && i < 64; i++) {
-		g_MpWeaponSetRandomFilters[i] = (rules->filters >> i) & 1;
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		g_MpWeaponSetRandomFilters[i] = rules->filters[i] ? 1 : 0;
 	}
 
 	for (i = 0; i < MAX_BOTS; i++) {

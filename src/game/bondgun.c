@@ -15232,6 +15232,53 @@ s32 bgunGetCapacityByAmmotype(s32 ammotype)
 	return g_AmmoTypes[ammotype].capacity;
 }
 
+/**
+ * How much of one ammo type a Start Armed spawn is handed.
+ *
+ * The two Fiesta options take the whole reserve, as they always have: with a
+ * lobby this size you are not going to find a crate before someone finds you.
+ * The two First options take what the arena's own spot for the gun holds plus
+ * one more of that crate - priammoqty is exactly what setup.c fills a
+ * multiplayer crate with, so the doubling is the crate, and the map keeps
+ * something to go and find.
+ *
+ * The three mines are the hand-out alone, by ammo type rather than the row's
+ * hasweapon flag, which is 0 for the grenade and the NB bomb as well. Their
+ * hand-out is 5 and their carrying limit is 10, so doubling them lands on the
+ * limit: First would hand out exactly what Fiesta does, for the one class of
+ * gun whose arena spot is a crate and nothing else. Plastique stays out of it
+ * - the detonator is not a mine.
+ */
+s32 bgunGetSpawnAmmoQuantity(const struct mpweapon *mpweapon, s32 ammotype, bool maxed)
+{
+	const s32 capacity = bgunGetCapacityByAmmotype(ammotype);
+	s32 quantity;
+
+	if (maxed || capacity <= 0) {
+		return (capacity > 0) ? capacity : 1;
+	}
+
+	if (ammotype != mpweapon->priammotype && ammotype != mpweapon->secammotype) {
+		// The row carries no such ammo type, so the caller paired it by hand -
+		// as both spawn sites do for the Combat Boost pill and AMMOTYPE_BOOST,
+		// a row with no ammo of its own. There is no hand-out to scale there.
+		return capacity;
+	}
+
+	quantity = (ammotype == mpweapon->priammotype) ? mpweapon->priammoqty : mpweapon->secammoqty;
+
+	if (ammotype != AMMOTYPE_TIMED_MINE && ammotype != AMMOTYPE_PROXY_MINE
+			&& ammotype != AMMOTYPE_REMOTE_MINE) {
+		quantity *= 2;
+	}
+
+	if (quantity <= 0) {
+		quantity = 1;
+	}
+
+	return (quantity < capacity) ? quantity : capacity;
+}
+
 bool bgunAmmotypeAllowsUnlimitedAmmo(u32 ammotype)
 {
 	switch (ammotype) {

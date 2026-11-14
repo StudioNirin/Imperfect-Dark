@@ -45,6 +45,7 @@ struct modoptions g_ModOptions = {
 	false,                    // melee
 	false,                    // flinch
 	SPAWNWEAPON_OFF,          // spawnweapon
+	1,                        // spawnakimbo: a pair, so an Akimbo install spawns what it always did
 	MODWHO_EVERYONE,          // spawnweaponwho
 	THIRDPERSON_CAMDIST,      // camdist
 	THIRDPERSON_CAMCLEARANCE, // camclearance
@@ -269,6 +270,56 @@ bool modCanChrSpawnArmed(void)
 {
 	return modGetSpawnWeapon() != SPAWNWEAPON_OFF
 		&& g_ModOptions.spawnweaponwho == MODWHO_EVERYONE;
+}
+
+/**
+ * Akimbo Start?: whether the gun Start Armed hands out comes as a pair.
+ *
+ * The one place this is not the Akimbo setting itself: that also decides who
+ * may dual-wield what they pick up, and which simulants and guards are given
+ * a pair (MODAKIMBO_EVERYONE, _PLAYERSANDSIMS, _GUARDS), so turning the spawn
+ * back to one gun cannot go through it.
+ */
+bool modGetSpawnAkimbo(void)
+{
+	return g_ModOptions.spawnakimbo != 0;
+}
+
+/**
+ * Whether the row is the page's to show: with nothing handed out there is no
+ * spawn to make a pair of, so the row hides rather than sits there greyed.
+ *
+ * Named for the gate to assert, because both pages ask the same question.
+ */
+bool modSpawnAkimboRowHidden(void)
+{
+	return modGetSpawnWeapon() == SPAWNWEAPON_OFF;
+}
+
+/**
+ * The one answer both spawn sites want: may this gun be handed out twice.
+ *
+ * The Akimbo setting, the player's own tick, and the gun being one that pairs
+ * at all - three terms the two sites each used to spell out by hand, and the
+ * mission path spelled two of them.
+ */
+bool modSpawnIsAkimbo(s32 weaponnum)
+{
+	return modIsAkimboForPlayers() && modGetSpawnAkimbo() && modCanAkimbo(weaponnum);
+}
+
+/**
+ * Whether a Start Armed spawn is handed the whole reserve of its ammunition.
+ *
+ * Fiesta is the option that starts you armed to the teeth; either First
+ * option starts with the arena's hand-out and one crate of it, and leaves the
+ * rest on the map to be found (bgunGetSpawnAmmoQuantity has the amounts). The
+ * rule is asked by both spawn sites, the player's and the simulants', so it
+ * lives with the other spawn rules rather than twice in the sites.
+ */
+bool modSpawnWantsMaxAmmo(void)
+{
+	return modGetSpawnWeapon() == SPAWNWEAPON_RANDOM;
 }
 
 /**

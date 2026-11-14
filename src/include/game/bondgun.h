@@ -183,6 +183,7 @@ s32 bgunGetReservedAmmoCount(s32 type);
 s32 bgunGetAmmoCount(s32 ammotype);
 s32 bgunGetCapacityByAmmotype(s32 ammotype);
 bool bgunAmmotypeAllowsUnlimitedAmmo(u32 ammotype);
+s32 bgunGetSpawnAmmoQuantity(const struct mpweapon *mpweapon, s32 ammotype, bool maxed);
 void bgunGiveMaxAmmo(bool force);
 u32 bgunGetAmmoTypeForWeapon(u32 weaponnum, u32 func);
 s32 bgunGetAmmoQtyForWeapon(u32 weaponnum, u32 func);

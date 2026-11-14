@@ -217,7 +217,15 @@
 //    it, netcoop.c); the local player's SNAP block uses its free bytes
 //    203-207 for the rocket it flies (u8 rocket, u8 0, u16 rocketid, u16
 //    rocketgen: a client's Slayer fly-by-wire camera)
-#define NET_PROTOCOL_VERSION 34
+// 35 (the whole curated random weapon list): RULES' randomfilters becomes
+//    u8 randomfilters[NUM_MPWEAPONS] rather than a u64. The u64 could not carry
+//    the rows past the 64th - GoldenEye's guns 16 to 24, a ROM hack's own
+//    pistols, the cheat guns - so a client kept its own bits there. Invisible
+//    while nothing on a client read the list (it takes the host's six arena
+//    slots as slots), and Start Armed's Random reads it on every peer now, where
+//    a different candidate list means a different spawn gun and a different
+//    number of rng draws in a match that must agree with itself (weapon-sets.md)
+#define NET_PROTOCOL_VERSION 35
 
 #define NETMSG_CONNECT    1
 #define NETMSG_ACCEPT     2
@@ -437,7 +445,9 @@
  *   s32     weaponsetnum          g_MpWeaponSetNum
  *   str(17) weaponsetname         (protocol 34) the host's own name for it,
  *                                 "" when it is one of the game's sets
- *   u64     randomfilters         g_MpWeaponSetRandomFilters, one bit each
+ *   u8      randomfilters[N]      (protocol 35: N = NUM_MPWEAPONS, was a u64
+ *                                 holding only the first 64 rows) the host's
+ *                                 curated random weapon list, one byte each
  *   u8      simslots[80]          g_MpSimSlots
  *   u8      nsims                 sims that follow (slots with simslots[i])
  *     u8 index, u8 type, u8 difficulty, u8 mpheadnum, u8 mpbodynum,

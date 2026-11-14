@@ -192,6 +192,12 @@ static s32 s_NumRooms = 0;
 static struct netlobbyroom s_Room;
 static s32 s_CreateMaxHumans = 0; // the size this machine made its room with
 static char s_MainMessage[200] = "";
+// The host's launch refused for want of ready players, and the room's words
+// for it. Kept apart from the message line on purpose: that one is cleared by
+// the page that shows it, and this is a question still waiting to be asked
+// (netlobbymenu.c, Launch anyway?)
+static s32 s_LaunchRefused = 0;
+static char s_LaunchRefusedText[200] = "";
 static u32 s_SeenRoomsSeq = 0;
 static u32 s_SeenRoomSeq = 0;
 static u32 s_SeenEnteredSeq = 0;
@@ -254,6 +260,7 @@ static SDL_SpinLock s_ContentLock;
 static void lobbyComputeContent(void);
 static void lobbyLeaveForNew(void);
 static void lobbyStopSession(void);
+static void lobbyLaunchRefused(const char *text); // defined with the message line
 
 // --net-lobby-script host|join: the lobby test (tools/ci/netlobbytest.sh)
 #define SCRIPT_NONE 0
@@ -1219,9 +1226,15 @@ static void lobbyRunJob(struct lobbyjob *job)
 		} else {
 			lobbyReplyError(status, reply, obj, objok, err, msg, sizeof(msg));
 
-			// launch refused while some are not ready: name them
+			// launch refused while some are not ready: name them. The `waiting`
+			// array is what says so - it is in that refusal and no other, so no
+			// words are matched to find it (pdlobbyd.py, act_launch)
+			s32 notready = 0;
+
 			if (objok && jsonGet(obj, "waiting", &v)) {
 				s32 len = strlen(msg);
+
+				notready = 1;
 
 				for (i = 0; i < 4 && jsonAt(v, i, &el) && len < (s32)sizeof(msg) - 24; i++) {
 					char who[NETLOBBY_MAXUSER + 1];
@@ -1233,6 +1246,11 @@ static void lobbyRunJob(struct lobbyjob *job)
 
 			sysLogPrintf(LOG_WARNING, "lobby: %s refused (%d): %s", job->path, status, msg);
 			lobbySetMessage(msg);
+
+			// with the names on it now, so the page can ask about forcing it
+			if (notready) {
+				lobbyLaunchRefused(msg);
+			}
 		}
 
 		SDL_LockMutex(s_Lock);
@@ -1968,6 +1986,67 @@ void netLobbyClearMessage(void)
 void netLobbySetMessage(const char *text)
 {
 	snprintf(s_MainMessage, sizeof(s_MainMessage), "%s", text ? text : "");
+}
+
+/**
+ * The room refused the host's launch because somebody has not ticked Ready.
+ *
+ * Both room kinds say so in their own way - pdlobbyd with a 409 whose `waiting`
+ * array is the machine-readable half of it, a LAN room with netLanHostLaunch()
+ * answering NETLANLAUNCH_NOTREADY - and both land here, because the page that
+ * asks about forcing it asks once, from the room's answer, and not from this
+ * client's copy of who looks ready.
+ *
+ * Written from the action thread for an online room, so the words cross on the
+ * same mutex the message line crosses on.
+ */
+static void lobbyLaunchRefused(const char *text)
+{
+#ifdef PD_GHOST_NET
+	SDL_LockMutex(s_Lock);
+#endif
+	snprintf(s_LaunchRefusedText, sizeof(s_LaunchRefusedText), "%s", text ? text : "Not everyone is ready.");
+	s_LaunchRefused = 1;
+#ifdef PD_GHOST_NET
+	SDL_UnlockMutex(s_Lock);
+#endif
+}
+
+/**
+ * The pending refusal, if any, and it is spent by the asking: a question the
+ * host has already answered, or launched past, does not come back.
+ */
+s32 netLobbyLaunchRefused(char *out, s32 size)
+{
+	s32 pending;
+
+#ifdef PD_GHOST_NET
+	SDL_LockMutex(s_Lock);
+#endif
+	pending = s_LaunchRefused;
+
+	if (pending) {
+		snprintf(out, size, "%s", s_LaunchRefusedText);
+		s_LaunchRefused = 0;
+	}
+
+#ifdef PD_GHOST_NET
+	SDL_UnlockMutex(s_Lock);
+#endif
+
+	return pending;
+}
+
+void netLobbyLaunchRefusedClear(void)
+{
+#ifdef PD_GHOST_NET
+	SDL_LockMutex(s_Lock);
+#endif
+	s_LaunchRefused = 0;
+	s_LaunchRefusedText[0] = '\0';
+#ifdef PD_GHOST_NET
+	SDL_UnlockMutex(s_Lock);
+#endif
 }
 
 /**
@@ -2775,8 +2854,17 @@ static void lobbyLocalAction(const char *what, const char *body)
 	} else if (strcmp(what, "launch") == 0) {
 		if (jsonGetInt(o, "cancel", 0)) {
 			netLanHostCancelLaunch();
-		} else if (netLanHostLaunch(jsonGetInt(o, "force", 0) != 0, why, sizeof(why)) != 0) {
-			snprintf(s_MainMessage, sizeof(s_MainMessage), "%s", why);
+		} else {
+			const s32 refused = netLanHostLaunch(jsonGetInt(o, "force", 0) != 0, why, sizeof(why));
+
+			if (refused != 0) {
+				sysLogPrintf(LOG_WARNING, "lobby: the room refused the launch: %s", why);
+				snprintf(s_MainMessage, sizeof(s_MainMessage), "%s", why);
+
+				if (refused == NETLANLAUNCH_NOTREADY) {
+					lobbyLaunchRefused(why);
+				}
+			}
 		}
 	} else if (strcmp(what, "reopen") == 0 || strcmp(what, "relaunch") == 0) {
 		netLanHostReopen();
@@ -2968,6 +3056,10 @@ void netLobbyKick(const char *user)
 
 void netLobbyLaunch(s32 force)
 {
+	// A new ask spends the old refusal: the host either pressed Launch again or
+	// answered the question, and a question from the launch before this one
+	// would be asking about a room that has moved on
+	netLobbyLaunchRefusedClear();
 	sysLogPrintf(LOG_NOTE, "lobby: LAUNCH%s", force ? " (forced)" : "");
 	lobbyAction("launch", force ? "{\"force\":true}" : "{}");
 }
@@ -2988,6 +3080,7 @@ void netLobbyLeave(void)
 	}
 
 	sysLogPrintf(LOG_NOTE, "lobby: leaving room %s", s_Room.sum.id[0] ? s_Room.sum.id : "(new)");
+	netLobbyLaunchRefusedClear();
 
 	s_CreateMaxHumans = 0;
 	netCoopCampaignEnd();
@@ -4876,6 +4969,25 @@ static void lobbyScriptTick(void)
 					break;
 				}
 
+				// --net-lobby-force-launch (netlantest.sh's force case): launch
+				// while the member has not ticked Ready, which the room refuses.
+				// What the page then asks is answered by --net-test-force-launch
+				// (netlobbymenu.c), which drives the Yes row: this side only presses
+				// the button a host presses.
+				if (sysArgCheck("--net-lobby-force-launch")) {
+					if (s_Room.nmembers < 2) {
+						break;
+					}
+
+					// the page the question is asked on: the script's host has no
+					// reason to have it up otherwise, and a host that has left the
+					// room's page is not being asked mid-chat about another page
+					netLobbyMenuPushRoom();
+					netLobbyLaunch(0);
+					lobbyScriptStep(2, "host: a member is not ready; LAUNCH, and let the room refuse it");
+					break;
+				}
+
 				{
 					s32 nready = 0;
 
@@ -5113,6 +5225,13 @@ static void lobbyScriptTick(void)
 					}
 
 					lobbyScriptStep(3, "join: spectating; waiting for the launch");
+					break;
+				}
+
+				// --net-lobby-no-ready: left unticked, for the host forced to
+				// launch over it (netlantest.sh's force case)
+				if (sysArgCheck("--net-lobby-no-ready")) {
+					lobbyScriptStep(3, "join: in the room, NOT ready on purpose; waiting for the launch");
 					break;
 				}
 

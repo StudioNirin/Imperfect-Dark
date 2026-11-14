@@ -1284,7 +1284,8 @@ static void playerSpawnWeapons(void)
 
 	if (spawnweapon >= 0) {
 		struct mpweapon *mpweapon = &g_MpWeapons[spawnweapon];
-		bool akimbo = modIsAkimboForPlayers() && modCanAkimbo(mpweapon->weaponnum);
+		bool akimbo = modSpawnIsAkimbo(mpweapon->weaponnum);
+		const bool spawnmaxed = modSpawnWantsMaxAmmo();
 
 		invGiveSingleWeapon(mpweapon->weaponnum);
 
@@ -1295,14 +1296,7 @@ static void playerSpawnWeapons(void)
 		}
 		const s32 ammotype = (spawnweapon == MPWEAPON_COMBATBOOST) ? AMMOTYPE_BOOST : mpweapon->priammotype;
 		if (ammotype) {
-			// Full capacity for the ammo type, not the weapon's pickup
-			// quantity: with a lobby this size you are not going to find
-			// a crate before someone finds you.
-			s32 startammo = bgunGetCapacityByAmmotype(ammotype);
-			if (startammo <= 0) {
-				startammo = 1;
-			}
-			bgunSetAmmoQuantity(ammotype, startammo);
+			bgunSetAmmoQuantity(ammotype, bgunGetSpawnAmmoQuantity(mpweapon, ammotype, spawnmaxed));
 		}
 		{
 			s32 leftweaponnum = akimbo ? mpweapon->weaponnum : WEAPON_NONE;
@@ -1325,13 +1319,8 @@ static void playerSpawnWeapons(void)
 						invGiveSingleWeapon(mpweapon2->weaponnum);
 
 						if (ammotype2) {
-							s32 startammo2 = bgunGetCapacityByAmmotype(ammotype2);
-
-							if (startammo2 <= 0) {
-								startammo2 = 1;
-							}
-
-							bgunSetAmmoQuantity(ammotype2, startammo2);
+							bgunSetAmmoQuantity(ammotype2,
+									bgunGetSpawnAmmoQuantity(mpweapon2, ammotype2, spawnmaxed));
 						}
 
 						leftweaponnum = mpweapon2->weaponnum;
@@ -1355,9 +1344,15 @@ static void playerSpawnWeapons(void)
 		// own inventory item beside the single, as with a pickup. The
 		// mission's ammunition is not topped up: two Falcons empty
 		// its clips twice as fast, which is the trade.
+		// Akimbo Start? speaks here too - one of the two First options
+		// means one gun, and a mission's starting kit is the same claim
+		// on a pair as an arena's is. With Start Armed on Off the row is
+		// hidden on the pages that carry it, and this is the setting's
+		// remaining reach: the mission's own gun.
 		if (!g_Vars.normmplayerisrunning
 				&& leftweaponnum <= WEAPON_NONE
 				&& modIsAkimboForPlayers()
+				&& modGetSpawnAkimbo()
 				&& modCanAkimbo(g_DefaultWeapons[HAND_RIGHT])) {
 			invGiveDoubleWeapon(g_DefaultWeapons[HAND_RIGHT], g_DefaultWeapons[HAND_RIGHT]);
 			leftweaponnum = g_DefaultWeapons[HAND_RIGHT];

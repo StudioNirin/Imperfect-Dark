@@ -18,7 +18,9 @@
 #include "game/modspectate.h"
 #include "game/stagetable.h"
 #include "game/mplayer/mplayer.h"
+#include "game/mplayer/setup.h"
 #include "mpweaponsets.h"
+#include "mpweaponfilters.h"
 #include "bss.h"
 #include "data.h"
 
@@ -94,6 +96,8 @@ s32 g_PosePlay = false; // --test-anim-play: play each animation and shoot it fr
 s32 g_PosePush = 0; // --test-anim-push FWD|BACK|LEFT|RIGHT: shove the body along while the animation plays
 s32 g_TestDodge = false; // --test-dodge: the crouch double tap put through every direction (lvTestDodgeTick)
 s32 g_TestMpWeaponSets = false; // --test-mpweaponsets: the saved weapon sets' store (mpWeaponSetsSelfTest)
+s32 g_TestRandomGroups = false; // --test-randomgroups: the random weapon groups' store and the roll they steer (mpweaponfilters.c, mplayer.c)
+s32 g_TestStartArmed = false; // --test-startarmed: what a Start Armed spawn is handed, and how many of it (mpStartArmedSelfTest)
 s32 g_TestSprint = false; // --test-sprint: a sprint, a trigger inside it, and a switch (lvTestSprintTick)
 s32 g_TestBindFamilies = false; // --test-bindfamilies: which of a command's four bindings is whose (inputBindsSelfTest)
 s32 g_NumPoseAnims = 0;
@@ -327,15 +331,48 @@ int main(int argc, const char **argv)
 	// other --test flags below, because the store reads its file at startup and
 	// the test's scratch file has to be the one it finds
 	g_TestMpWeaponSets = sysArgCheck("--test-mpweaponsets");
+	g_TestRandomGroups = sysArgCheck("--test-randomgroups");
 
 	if (g_TestMpWeaponSets) {
 		mpWeaponSetsTestFile();
 	}
 
+	if (g_TestRandomGroups) {
+		mpWeaponFiltersTestFile();
+	}
+
 	mpWeaponSetsInit();
+	mpWeaponFiltersInit();
 
 	if (g_TestMpWeaponSets) {
 		mpWeaponSetsSelfTest();
+	}
+
+	if (g_TestRandomGroups) {
+		// The five halves of one feature: the store, the roll the list steers, the
+		// weapon slots that draw from a group, the setup file that carries them, and
+		// the page that edits it. Each prints its own verdict and the gate counts them
+		// all (tools/ci/randomgroupstest.sh)
+		mpWeaponFiltersSelfTest();
+		mpRandomRollSelfTest();
+		mpRandomSlotSelfTest();
+		mpRandomSetupFileSelfTest();
+		mpRandomGroupMenuSelfTest();
+
+		// Clear the scratch file again, after all three: the store's own test
+		// removes it on the way out, but the page's test then saves a group and
+		// deletes it, which writes the file back. The gate says what a run that
+		// leaves it behind looks like (tools/ci/randomgroupstest.sh)
+		mpWeaponFiltersTestFile();
+	}
+
+	// The Start Armed row's own decisions: one gun or two, and how much of its
+	// ammunition (setup.c). Read here for the same reason as the tests above -
+	// the weapon table's unlock state is what it reads.
+	g_TestStartArmed = sysArgCheck("--test-startarmed");
+
+	if (g_TestStartArmed) {
+		mpStartArmedSelfTest();
 	}
 
 	// Read with the flag above and not with the --test flags further down: this
@@ -603,6 +640,7 @@ PD_CONSTRUCTOR static void gameConfigInit(void)
 	configRegisterInt("Mod.MeleeCombos", &g_ModOptions.melee, 0, 1);
 	configRegisterInt("Mod.FlinchWhenShot", &g_ModOptions.flinch, 0, 1);
 	configRegisterInt("Mod.StartArmed", &g_ModOptions.spawnweapon, SPAWNWEAPON_OFF, SPAWNWEAPON_RANDOM);
+	configRegisterInt("Mod.StartArmedAkimbo", &g_ModOptions.spawnakimbo, 0, 1);
 	configRegisterInt("Mod.StartArmedFor", &g_ModOptions.spawnweaponwho, MODWHO_EVERYONE, MODWHO_PLAYERSONLY);
 	configRegisterFloat("Mod.ThirdPersonDistance", &g_ModOptions.camdist, 60.f, 600.f);
 	configRegisterFloat("Mod.ThirdPersonClearance", &g_ModOptions.camclearance, 0.f, 120.f);

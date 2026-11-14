@@ -5426,7 +5426,14 @@ enum weaponnum {
 #define MPSETUP_BLOCKSIZE_V2 (96 + (MAX_BOTS * 25 + 7) / 8)
 
 // Version 3 adds BOTSTAT_BITS for each of a simulant's stats.
-#define MPSETUP_BLOCKSIZE (MPSETUP_BLOCKSIZE_V2 + (MAX_BOTS * BOTSTAT_COUNT * BOTSTAT_BITS + 7) / 8)
+#define MPSETUP_BLOCKSIZE_V3 (MPSETUP_BLOCKSIZE_V2 + (MAX_BOTS * BOTSTAT_COUNT * BOTSTAT_BITS + 7) / 8)
+
+// Version 5 adds, for each of the six weapon slots, the name of the random group it
+// draws from. There was not room for that in what version 4 wrote - the block is not
+// as generous as its 96-byte base looks - so the size grew with the format, and
+// --test-randomgroups prints how much of it a version 5 setup actually uses
+// (mpsetupfileSaveWad, mplayer.c).
+#define MPSETUP_BLOCKSIZE (MPSETUP_BLOCKSIZE_V3 + NUM_MPWEAPONSLOTS * (MPSETUP_MAXNAME + 1))
 
 // Base file format: MAX_BOTS_CONFIG simulants, readable by unmodified builds.
 #define MPSETUP_VERSION_BASE 1
@@ -5439,8 +5446,23 @@ enum weaponnum {
 // everything version 2 writes. Only used when a simulant has a stat moved.
 #define MPSETUP_VERSION_SIMSTATS 3
 
+// File format version that stores the curated random weapon list as one bit per
+// row of g_MpWeapons rather than in a u64. The fork's table is wider than 64
+// rows (NUM_MPWEAPONS), so a u64 silently dropped the GoldenEye rows, the hack
+// pistols and the cheat guns off the end of a saved setup (mplayer.c).
+#define MPSETUP_VERSION_RANDOMFILTERS 4
+
+// File format version that stores which of the six weapon slots the player made
+// random: the group each one draws from, by name (mplayer.c). Appended after the
+// stat sliders, and written only when a setup has such a slot, so a file that has
+// none is byte for byte what version 4 wrote. It needs no larger block - there is
+// room to spare over what version 4 writes - and --test-randomgroups says how much
+// of the block a version 5 setup uses, beside the LOG_ERROR guard at the end of
+// mpsetupfileSaveWad() that says when it has stopped being true.
+#define MPSETUP_VERSION_SLOTGROUPS 5
+
 // The newest format, which loses nothing of a live setup.
-#define MPSETUP_VERSION_LATEST MPSETUP_VERSION_SIMSTATS
+#define MPSETUP_VERSION_LATEST MPSETUP_VERSION_SLOTGROUPS
 
 #endif
 

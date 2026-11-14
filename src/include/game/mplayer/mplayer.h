@@ -28,9 +28,26 @@ s32 func0f188bcc(void);
 bool mpCanSpawnWithWeapon(const struct mpweapon *mpweapon);
 s32 mpGetSpawnWeapon(void);
 bool mpWeaponRowSuitsStage(const struct mpweapon *mpweapon);
+bool mpNeedsWideRandomFilters(void);
+void mpRandomRollSelfTest(void);
+void mpRandomSetupFileSelfTest(void);
+// A weapon slot the player made random: which of their groups it rolls from, and
+// the gun it holds for this match. Beside g_MpSetup.weapons[], never inside it
+// (mplayer.c has the reason, and mpGetMpWeaponByLocation has its clamped word).
+void mpSetWeaponSlotGroup(s32 slot, s32 group);
+void mpSetWeaponSlotRandom(s32 slot, s32 group);
+s32 mpGetWeaponSlotGroup(s32 slot);
+void mpClearWeaponSlotGroups(void);
+void mpRollRandomWeaponSlots(void);
+void mpReconcileRandomWeaponSlots(void);
+bool mpNeedsSlotGroups(void);
+void mpRandomSlotSelfTest(void);
 s32 mpGetNumWeaponOptions(void);
 char *mpGetWeaponLabel(s32 weaponnum);
 void mpSetWeaponSlot(s32 slot, s32 mpweaponnum);
+// The same slot by row rather than by the nth gun the page offers: the counting
+// of the rows around it is what went wrong once (mpGetDisabledWeaponRow)
+void mpSetWeaponSlotRow(s32 slot, s32 row);
 s32 mpGetWeaponSlot(s32 slot);
 struct mpweapon *mpGetMpWeaponByLocation(s32 locationindex);
 s32 mpCountWeaponSetThing(s32 weaponsetindex);

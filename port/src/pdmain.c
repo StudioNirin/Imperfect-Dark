@@ -612,6 +612,9 @@ void mainLoop(void)
 						g_MpSetup.weapons[i] = (v >= 0 && v < NUM_MPWEAPONS) ? (u8)v : MPWEAPON_NONE;
 						weapons = (*end == ',') ? end + 1 : end;
 					}
+
+					// Named by number, so named as guns: no slot of this one's is random
+					mpClearWeaponSlotGroups();
 				}
 
 				if ((weaponset >= 0 || weapons) && mpsims > 0) {

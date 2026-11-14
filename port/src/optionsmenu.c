@@ -3194,6 +3194,9 @@ enum {
 	MODENHANCE_EXTRA_GUARDSALERTED,
 	MODENHANCE_EXTRA_AKIMBO,
 	MODENHANCE_EXTRA_MISSIONRESPAWN,
+	// Appended, so an older saved note is short by exactly this one field and
+	// the read path can append its default rather than drop the note.
+	MODENHANCE_EXTRA_SPAWNWEAPONAKIMBO,
 	MODENHANCE_EXTRA_COUNT
 };
 
@@ -3235,6 +3238,7 @@ static void modEnhancementsCapture(struct modpreset *preset, s32 *extra)
 	extra[MODENHANCE_EXTRA_GUARDSALERTED] = g_ModOptions.guardsalerted;
 	extra[MODENHANCE_EXTRA_AKIMBO] = g_ModOptions.akimbo;
 	extra[MODENHANCE_EXTRA_MISSIONRESPAWN] = g_ModOptions.missionrespawn;
+	extra[MODENHANCE_EXTRA_SPAWNWEAPONAKIMBO] = g_ModOptions.spawnakimbo;
 }
 
 s32 modEnhancementsAreOn(void)
@@ -3301,6 +3305,13 @@ void modEnhancementsSetOn(s32 on)
 			count++;
 		}
 
+		// And one from before Akimbo Start?, whose extra sits last: its default
+		// appended, not the note dropped. Last, so a note predating the kill
+		// feed passes the clause above first and this one after.
+		if (version == MODENHANCE_SAVED_VERSION && count == (s32)ARRAYCOUNT(values) - 1) {
+			values[count++] = 1; // spawnakimbo: the pair, as every spawn was
+		}
+
 		// A note this build cannot read (a different field count) is dropped
 		// rather than half applied: the settings stay Vanilla.
 		if (version != MODENHANCE_SAVED_VERSION || count != (s32)ARRAYCOUNT(values)) {
@@ -3324,6 +3335,7 @@ void modEnhancementsSetOn(s32 on)
 		g_ModOptions.guardsalerted = extra[MODENHANCE_EXTRA_GUARDSALERTED];
 		g_ModOptions.akimbo = extra[MODENHANCE_EXTRA_AKIMBO];
 		g_ModOptions.missionrespawn = extra[MODENHANCE_EXTRA_MISSIONRESPAWN];
+		g_ModOptions.spawnakimbo = extra[MODENHANCE_EXTRA_SPAWNWEAPONAKIMBO];
 	}
 
 	sysLogPrintf(LOG_NOTE, "enhancements: %s", on ? "on (settings restored)" : "off (Vanilla)");
@@ -3842,6 +3854,27 @@ static MenuItemHandlerResult menuhandlerModAkimbo(s32 operation, struct menuitem
 }
 
 /**
+ * Akimbo Start?: whether the gun Start Armed hands out comes as a pair.
+ *
+ * The row under the one it changes, on both pages that carry Start Armed; the
+ * page's own answer is modSpawnAkimboRowHidden().
+ */
+static MenuItemHandlerResult menuhandlerModAkimboStart(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_CHECKHIDDEN:
+		return modSpawnAkimboRowHidden();
+	case MENUOP_GET:
+		return modGetSpawnAkimbo();
+	case MENUOP_SET:
+		g_ModOptions.spawnakimbo = data->checkbox.value ? 1 : 0;
+		break;
+	}
+
+	return 0;
+}
+
+/**
  * Akimbo Triggers: a trigger per hand on a controller. Turning it on or off
  * rewrites the three controller binds it needs, there and then.
  */
@@ -4310,7 +4343,8 @@ static MenuItemHandlerResult menuhandlerModSimBrain(s32 operation, struct menuit
 
 static MenuItemHandlerResult menuhandlerModStartArmed(s32 operation, struct menuitem *item, union handlerdata *data)
 {
-	static const char *opts[] = { "Off", "First Weapon", "Random" };
+	// As the Weapons page's copy of this row: see menuhandlerMpStartArmed
+	static const char *opts[] = { "Off", "First", "Fiesta" };
 
 	switch (operation) {
 	case MENUOP_GETOPTIONCOUNT:
@@ -4323,6 +4357,40 @@ static MenuItemHandlerResult menuhandlerModStartArmed(s32 operation, struct menu
 		break;
 	case MENUOP_GETSELECTEDINDEX:
 		data->dropdown.value = modGetSpawnWeapon();
+	}
+
+	return 0;
+}
+
+/**
+ * The Mods: Player row into the Combat Simulator's Random Weapons page.
+ *
+ * Start Armed's Random draws from the curated random weapon list as well as the
+ * "Random" set draws the arena's slots (mpGetSpawnWeapon), and this page is the
+ * only place that list is edited. It used to sit on the Combat Simulator's
+ * weapons page alone - which every player of a solo or co-op mission, where the
+ * roll adds a gun to the mission's kit, would have had to walk into the
+ * multiplayer menu to reach. One list, one page, three doors: here, the Combat
+ * Simulator's weapons page, and the same page in an online room.
+ *
+ * The dialog is the Combat Simulator's, reached the way the lobby reaches it
+ * (netlobbymenu.c's handlerSetupWeapons). It hides itself when Start Armed is not
+ * on Random, since there is nothing here to set until it is.
+ *
+ * The row says what the list is ("RX Selection: RX: Pistols"), which is the same
+ * answer the Combat Simulator's row gives - one list, so one name for it.
+ */
+extern struct menudialogdef g_MpRandomWeaponsMenuDialog;
+extern char *mpMenuTextRandomWeaponGroup(struct menuitem *item);
+
+static MenuItemHandlerResult menuhandlerModRandomWeapons(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_CHECKHIDDEN:
+		return modGetSpawnWeapon() != SPAWNWEAPON_RANDOM;
+	case MENUOP_SET:
+		menuPushDialog(&g_MpRandomWeaponsMenuDialog);
+		break;
 	}
 
 	return 0;
@@ -5607,9 +5675,25 @@ struct menuitem g_ExtendedDabsModPlayerMenuItems[] = {
 		MENUITEMTYPE_DROPDOWN,
 		0,
 		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Akimbo",
+		0,
+		menuhandlerModAkimbo,
+	},
+	{
+		MENUITEMTYPE_DROPDOWN,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
 		(uintptr_t)"Start Armed",
 		0,
 		menuhandlerModStartArmed,
+	},
+	{
+		MENUITEMTYPE_CHECKBOX,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Akimbo Start?",
+		0,
+		menuhandlerModAkimboStart,
 	},
 	{
 		MENUITEMTYPE_DROPDOWN,
@@ -5620,12 +5704,12 @@ struct menuitem g_ExtendedDabsModPlayerMenuItems[] = {
 		menuhandlerModStartArmedFor,
 	},
 	{
-		MENUITEMTYPE_DROPDOWN,
+		MENUITEMTYPE_SELECTABLE,
 		0,
-		MENUITEMFLAG_LITERAL_TEXT,
-		(uintptr_t)"Akimbo",
 		0,
-		menuhandlerModAkimbo,
+		(uintptr_t)&mpMenuTextRandomWeaponGroup,
+		0,
+		menuhandlerModRandomWeapons,
 	},
 	{
 		MENUITEMTYPE_CHECKBOX,
@@ -8594,7 +8678,9 @@ static struct menuitem g_NetRoomRulesMenuItems[] = {
 	ROOMRULE(MENUITEMTYPE_DROPDOWN, "Simulant AI", menuhandlerRoomSimBrain),
 	ROOMRULE_SEPARATOR,
 	ROOMRULE(MENUITEMTYPE_DROPDOWN, "Start Armed For", menuhandlerModStartArmedFor),
-	ROOMRULE(MENUITEMTYPE_DROPDOWN, "Akimbo", menuhandlerModAkimbo),
+	// Akimbo's row went to the Weapons page, above the Start Armed row it
+	// changes - the room's Weapons page is the Combat Simulator's own, so the
+	// host gets it there in a room as well as offline.
 	ROOMRULE_SEPARATOR,
 	ROOMRULE(MENUITEMTYPE_DROPDOWN, "Bodies", menuhandlerModBodies),
 	ROOMRULE(MENUITEMTYPE_DROPDOWN, "Body Time", menuhandlerModBodyTime),

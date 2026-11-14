@@ -9,6 +9,8 @@ The entry CLAUDE.md carried for this, verbatim; the code is the long form.
 
 - **The five defaults that moved on 2026-11-11, and what a default can reach** — [settings.md](CLAUDE-notes/settings.md): `PLAYER_EXT_CFG_DEFAULT` (`src/game/mplayer/mplayer.c`) is the one macro behind all four `Game.PlayerN.CrosshairHealth` rows, so a per-player default is one edit; `Game.Language` is looked up **by code** among the packs this build embedded and falls back to English (US) with a log line, so its default is `"en-GB"` and never an index - and it is one setting for the whole game, however per-player the page it sits on looks; `Mod.AkimboTriggers` **rewrites the pad's binds** (`inputApplyAkimboTriggers()`: Fire off the right trigger onto Left Shoulder, the D-pad becoming the two fire-mode buttons), which is why it belongs to a fresh install and not to a migration; the Settings Preset dropdown now reads **Custom** on a fresh install, because every preset forces akimbo off and `menuhandlerModPresetMatches()` insists on it; and `Mod.SettingsRevision` was deliberately **not** bumped, so the way to hand an existing install one of these is to delete that one key's line from its pd.ini rather than the file - the binds, `[Net] Name=` and `DirectRecent=`, all of `[Video]` and `Mod.XblaPackage=` live in that file too
 
+- **A new `g_ModOptions` field, and the string that holds them all (2026-11-14)** — the section of that name: `Mod.StartArmedAkimbo` defaults **on**, because the pair is what an Akimbo install already handed out and a default that changes what a player sees mid-match is a different decision from a fresh install's defaults; and the enhancements blob (`MODENHANCE_EXTRA_*`, `MODENHANCE_SAVED_VERSION`) grows a field by appending it to the enum and chaining a second "one field short" clause in the read path, so no saved note is dropped - which matters because a dropped note leaves the settings at Vanilla.
+
 ## A setting that is on online and off offline (Mod.KillFeed, 2026-10-12)
 
 The kill feed (`port/src/killfeed.c`) was wanted on in online matches by default and, by the rule above, off offline
@@ -91,6 +93,49 @@ by default therefore matches no preset, and the dropdown says Custom. That is th
 honest answer rather than a bug: the config genuinely is not any preset's set. A
 preset chosen still switches akimbo back off, which is the preset doing its job.
 
+
+## A new `g_ModOptions` field, and the string that holds them all (2026-11-14)
+
+Start Armed's pair became its own setting, `Mod.StartArmedAkimbo`
+(`weapon-sets.md`, *Start Armed, one gun or two*). Two things about it are
+settings decisions rather than feature work.
+
+**Its default is on, which is against the fork's rule.** A fresh pd.ini is stock
+Perfect Dark with the fixes on and the additions off, and Akimbo itself is on for
+a fresh install (the 2026-11-11 list below) - so the pair is what an install
+without a line for this key already did, and a default of off would have reached
+into existing players' matches and handed them one gun instead of two. The rule
+is about what a *new* install plays like; this key is not an addition the player
+has to discover, it is a decision they already made by turning Akimbo on. The
+`g_ModOptions` initialiser in `src/game/modoptions.c` is positional, so the new
+line goes where the field is in the struct, not at the end.
+
+**The enhancements blob is a second store nobody thinks of.** `port/src/optionsmenu.c`
+saves the player's Mods settings as one string when enhancements are turned off
+(everything goes Vanilla) and restores them when turned on. Its shape: every s32
+of `struct modpreset` from `jumpheight` on, then the `MODENHANCE_EXTRA_*` fields,
+as a versioned comma list. The read path drops a note whose version or field count
+it does not recognise - *"saved settings unreadable ... left as they are"* - which
+means a player's whole Mods page falls back to Vanilla, so adding a field is the
+whole risk and it is not in the field's own code:
+
+- Append the new member to the enum, **before `_COUNT` and last**. The extras sit
+  at the end of `values[]`, so an old note is short by exactly that one field and
+  the fix is one appended default rather than a `memmove`.
+- Then chain a clause after the kill feed's, both asking
+  `count == ARRAYCOUNT(values) - 1`: the kill-feed clause inserts its field and
+  bumps `count`, so a note that predates both passes the first and then the
+  second. `MODENHANCE_SAVED_VERSION` stays **2** - the version means "the shape
+  of the list", and the clauses exist precisely to absorb shape changes without
+  paying for them in lost settings.
+- Do **not** grow `struct modpreset` instead. `MODENHANCE_PRESET_FIELDS` is
+  arithmetic on that struct, so every field count in every saved note moves, the
+  insert lands in the middle, and the migration has to know where each field went.
+
+A default reaches only a pd.ini with no line for it (the rule the 2026-11-11
+section spells out), so `Mod.SettingsRevision` was not bumped: nobody's existing
+file has the key, so everybody without one gets the default, and nobody with one
+is overruled.
 
 ## Imperfect Settings (added 2026-11-12)
 

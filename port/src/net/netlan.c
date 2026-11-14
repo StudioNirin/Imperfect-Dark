@@ -768,7 +768,8 @@ void netLanHostKick(const char *user)
 /**
  * Launch: everyone not watching is ready (or forced), then the countdown;
  * at its end the room is launched (netLanTick) and the host starts the
- * match. 0, or -1 with why.
+ * match. 0, -1 with why, or NETLANLAUNCH_NOTREADY with why: that one is not
+ * the last word, because the host can launch over it (the room's page asks).
  */
 s32 netLanHostLaunch(s32 force, char *why, s32 whysize)
 {
@@ -801,7 +802,7 @@ s32 netLanHostLaunch(s32 force, char *why, s32 whysize)
 		}
 
 		if (n) {
-			return -1;
+			return NETLANLAUNCH_NOTREADY;
 		}
 	}
 

@@ -365,6 +365,7 @@ struct modoptions {
 	s32 melee;       // the punch and kick combo
 	s32 flinch;      // the body twitching where a shot landed
 	s32 spawnweapon; // SPAWNWEAPON_*: what everyone spawns holding in an arena
+	s32 spawnakimbo; // 0/1: whether that gun comes as a pair - Akimbo Start?
 	s32 spawnweaponwho; // MODWHO_*: whether simulants spawn armed too
 	f32 camdist;     // third person camera, units behind the eye
 	f32 camclearance;// how far short of a wall it stops
@@ -439,6 +440,10 @@ bool modIsMeleeComboEnabled(void);
 bool modIsFlinchEnabled(void);
 s32 modGetSpawnWeapon(void);
 bool modCanChrSpawnArmed(void);
+bool modGetSpawnAkimbo(void);
+bool modSpawnAkimboRowHidden(void);
+bool modSpawnIsAkimbo(s32 weaponnum);
+bool modSpawnWantsMaxAmmo(void);
 s32 modGetBodiesKept(void);
 s32 modGetBodyTime(void);
 s32 modGetBodiesDrawn(void);

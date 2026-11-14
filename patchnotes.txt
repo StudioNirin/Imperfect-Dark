@@ -40,6 +40,26 @@
 #
 # mod-base 69
 
+notes 89 2026-11-14
+Online: a host who launches before everyone is ready is asked rather than refused. Launch used to do nothing but say Not everyone is ready. Waiting for: names - a player who had not ticked Ready left the host pressing a button that refused. Now the room's page asks Launch anyway?, and Yes starts the same five second countdown with that player still not ready, who is in the match like everyone else. It asks only when the room refuses, so a room where everyone is ready goes straight in, and the players who are ready see no difference. Online rooms and LAN rooms both.
+
+notes 88 2026-11-14
+Start Armed: the options are Off, First and Fiesta now, with a new Akimbo Start? tick under the row. First hands you the gun in your first slot, Fiesta a different one every spawn, and unticking Akimbo Start? gives you one of them instead of a pair - so Akimbo can stay on for the guns you pick up off the floor without arming you twice. On the Weapons page, and on Mods: Player.
+Start Armed: the two First options no longer fill your reserve. You start with what the arena's spot for that gun holds plus one crate of it, and the rest is left on the map to find; Fiesta keeps the full reserve as it always did. Mines start at the five they hand out rather than the ten you can carry.
+Missions: with Akimbo Start? unticked a mission starts you with one of its gun instead of two, so the one tick answers one gun or two everywhere.
+Akimbo has moved off Room Rules to the Weapons page, above the Start Armed row it decides.
+Random 5 weapon set: the sixth slot is Disabled again. It was being set to the last entry in the gun list, which on GoldenEye maps is GoldenEye's Remote Mine - so the arena stocked a mine crate where the slot said there would be nothing.
+
+notes 87 2026-11-14
+Weapon slots: a slot on the Weapons page can be one of your random weapon groups now. Pick the group under the guns in the slot's list and the row reads RX: Automatics, and the gun it gives you is drawn at the start of each match - the slot that has had the PP7 for a hundred matches can hand you the Falcon next. Saved setups and saved weapon sets keep the slot as the group, by name, so a set keeps its random slots across a restart and after a group is renamed.
+Multiplayer: the host draws for every random slot before the arena is built and the six guns travel in the match's rules, so everyone stocks the floor with the same weapons. Choosing one of the game's own weapon sets gives those six rows back to the set, as it always did.
+The row that opens the random weapon groups now says what you have selected - RX Selection: All, RX Selection: RX: Pistols - on the Weapons page and on Mods: Player, so you can see which group is in use without opening the page. On the Weapons page it also shows up when Start Armed is set to Random, which reads that same list.
+
+notes 86 2026-11-14
+Random weapon groups: the four buttons under the weapon list - Select Dark, Select Classic, Select All, Select None - are a Group dropdown now, and the groups you save sit under them. Pick a group and the list becomes it; tick a box yourself and it reads Manual. Save group keeps what is on screen under a name you type, in mpweaponfilters.bin, and Remove asks first. A group stores the guns themselves, not the list's row numbers, so one made with a mod mounted still means those guns with another loaded. The page is on the Weapons page - the same page in a room and in the Combat Simulator - and on Mods: Player under Start Armed.
+Start Armed: Random draws from that list now, so a curated list decides what a spawn hands out as well as what the Random set puts in the arena; a list with nothing selected arms nobody, which is what selecting none of them says.
+Two old holes closed while wiring it: the list kept only the first 64 rows of the weapon table, in a saved setup and in a hosted match, so rows past that - GoldenEye's guns from the 16th on, a ROM hack's pistols, the cheat guns - came back switched on after a restart and were the client's own rather than the host's online. Netplay protocol 35, so a match needs everyone on the same build. And Select Dark no longer selects GoldenEye's guns, which it has been quietly doing since they were added to the table.
+
 notes 85 2026-11-13
 Saving a custom weapon set now overwrites by name, and the name page says so under the keyboard, in small text: "Reusing a set's name overwrites that set." Only your own sets are reachable that way - the store holds nothing else - so naming one Pistols is fine, it just shows as CX: Pistols beside the game's own. The Yes/No rows that sat uselessly on that page are gone.
 notes 84 2026-11-13

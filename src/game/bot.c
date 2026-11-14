@@ -503,20 +503,18 @@ void botSpawn(struct chrdata *chr, u8 respawning)
 			struct mpweapon *mpweapon = &g_MpWeapons[spawnweapon];
 			botinvGiveSingleWeapon(chr, mpweapon->weaponnum);
 
-			if (modIsAkimboForPlayers() && modCanAkimbo(mpweapon->weaponnum)) {
+			if (modSpawnIsAkimbo(mpweapon->weaponnum)) {
 				// Turns the single item into a dual, which is how a simulant
 				// holds two; botinvSwitchToWeapon() fills the left hand from it
 				botinvGiveDualWeapon(chr, mpweapon->weaponnum);
 			}
 			const s32 ammotype = (spawnweapon == MPWEAPON_COMBATBOOST) ? AMMOTYPE_BOOST : mpweapon->priammotype;
 			if (ammotype) {
-				// botactGiveAmmoByType() clamps to this same capacity, so this
-				// fills the bot up rather than overshooting.
-				s32 startammo = bgunGetCapacityByAmmotype(ammotype);
-				if (startammo <= 0) {
-					startammo = 1;
-				}
-				botactGiveAmmoByType(aibot, ammotype, startammo);
+				// The same hand-out the player is given, capacity included:
+				// botactGiveAmmoByType() clamps to that capacity, so this fills
+				// the bot up rather than overshooting.
+				botactGiveAmmoByType(aibot, ammotype,
+						bgunGetSpawnAmmoQuantity(mpweapon, ammotype, modSpawnWantsMaxAmmo()));
 			}
 			botinvSwitchToWeapon(chr, mpweapon->weaponnum, FUNC_PRIMARY);
 		}

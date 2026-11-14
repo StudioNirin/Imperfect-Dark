@@ -10,6 +10,7 @@
 #include "fs.h"
 #include "system.h"
 #include "mpweaponsets.h"
+#include "mpweaponfilters.h"
 
 /*
  * The weapon sets a player made themselves on the Combat Simulator's weapons
@@ -30,6 +31,12 @@
  * different gun on a machine with another mod loaded; save the weapon number
  * and it means the same gun there and here, and comes back through the same
  * lookup a stock set does.
+ *
+ * A slot the player made random (mpweaponfilters.c) is the same problem one level
+ * up, and is solved the same way: the set stores the group's *name*, and mplayer.c
+ * resolves it when the set is picked. It keeps the gun as well - the name may refer
+ * to a group that was deleted, or one a mod made and that mod is not mounted now -
+ * so such a set plays the gun it last held, once said, instead of losing the slot.
  */
 
 #define MPWEAPONSET_FILENAME "mpweaponsets"
@@ -100,6 +107,57 @@ bool mpWeaponSetsOwns(s32 listindex)
 	return s_First >= 0 && at >= 0 && at < s_Num;
 }
 
+// Case-insensitive equality, spelled out rather than strcasecmp: the same
+// source builds against mingw, where the header that declares it has moved.
+// Used for a set's name and for the random group a slot names, which are the two
+// strings of this file a player types.
+static bool mpWeaponSetsNameEqual(const char *a, const char *b)
+{
+	while (*a != '\0' && *b != '\0') {
+		char ca = (*a >= 'A' && *a <= 'Z') ? *a + ('a' - 'A') : *a;
+		char cb = (*b >= 'A' && *b <= 'Z') ? *b + ('a' - 'A') : *b;
+
+		if (ca != cb) {
+			return false;
+		}
+
+		a++;
+		b++;
+	}
+
+	return *a == '\0' && *b == '\0';
+}
+
+/**
+ * One set's six slots, taken from the page: the guns, and the group any slot the
+ * player made random draws from.
+ *
+ * The group comes from the live setup rather than from an argument, for the same
+ * reason the six guns do: optionslots is g_MpSetup.weapons, and "the page as it
+ * stands" is what Save Set means. The group is kept by name, and the gun beside it
+ * stays: a set must still mean something when the name refers to a group that was
+ * deleted, or to one a mod made and that mod is not mounted now.
+ */
+static void mpWeaponSetsTakeSlots(struct mpweaponsetentry *entry, const u8 *optionslots)
+{
+	for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+		const struct mpweaponfilterentry *from;
+		const s32 option = optionslots[i];
+		const s32 group = mpGetWeaponSlotGroup(i);
+
+		entry->slots[i] = (option >= 0 && option < NUM_MPWEAPONS)
+			? g_MpWeapons[option].weaponnum : WEAPON_NONE;
+
+		entry->groups[i][0] = '\0';
+
+		from = group >= 0 ? mpWeaponFiltersGet(group) : NULL;
+
+		if (from != NULL) {
+			snprintf(entry->groups[i], sizeof(entry->groups[i]), "%s", from->name);
+		}
+	}
+}
+
 static s32 mpWeaponSetsWriteFile(void)
 {
 	const char *filename = fsFullPath(mpWeaponSetsPath());
@@ -126,11 +184,14 @@ static s32 mpWeaponSetsWriteFile(void)
 	for (s32 i = 0; i < num; i++) {
 		written += fwrite(s_Sets[i].name, sizeof(s_Sets[i].name), 1, f);
 		written += fwrite(s_Sets[i].slots, sizeof(s_Sets[i].slots), 1, f);
+		written += fwrite(s_Sets[i].groups, sizeof(s_Sets[i].groups), 1, f);
 	}
 
-	if (written != 2 + 2 * num) {
+	// One fwrite per field of a set, so the count that says "all of it" is a
+	// count of fwrites and not of bytes
+	if (written != 2 + 3 * num) {
 		sysLogPrintf(LOG_ERROR, "mpweaponsets: wrote %d of the %d blocks of %d saved sets",
-				written, 2 + 2 * num, num);
+				written, 2 + 3 * num, num);
 	}
 
 	fsFileFree(f);
@@ -164,9 +225,12 @@ void mpWeaponSetsLoad(void)
 		return;
 	}
 
-	// Nothing older exists yet, so an unknown version is a file from a newer
-	// build: read nothing rather than write half of it back next time
-	if (version != MPWEAPONSET_VERSION) {
+	// A version ahead of this build is a file from a newer one: read nothing rather
+	// than write half of it back next time. Older versions are read - there is only
+	// one, the six guns before a set could hold a random slot - because those files
+	// are in players' save folders already, and losing sight of their sets over a
+	// field they never wrote is not what a version bump is for.
+	if (version > MPWEAPONSET_VERSION) {
 		sysLogPrintf(LOG_NOTE, "mpweaponsets: %s is version %d, this build writes %d: none read",
 				mpWeaponSetsPath(), version, MPWEAPONSET_VERSION);
 		fsFileFree(f);
@@ -183,8 +247,22 @@ void mpWeaponSetsLoad(void)
 			break;
 		}
 
+		memset(s_Sets[i].groups, 0, sizeof(s_Sets[i].groups));
+
+		if (version >= MPWEAPONSET_VERSION_GROUPS) {
+			if (fread(s_Sets[i].groups, sizeof(s_Sets[i].groups), 1, f) != 1) {
+				break;
+			}
+		}
+
 		s_Sets[i].name[MPSETUP_MAXNAME] = '\0';
 		s_Num++;
+	}
+
+	for (s32 i = 0; i < MPWEAPONSET_MAXSAVED; i++) {
+		for (s32 slot = 0; slot < NUM_MPWEAPONSLOTS; slot++) {
+			s_Sets[i].groups[slot][MPSETUP_MAXNAME] = '\0';
+		}
 	}
 
 	fsFileFree(f);
@@ -225,13 +303,7 @@ s32 mpWeaponSetsSave(const char *name, const u8 *optionslots)
 
 	snprintf(entry->name, sizeof(entry->name), "%s", name);
 
-	// the page's rows are option indices; the set keeps their guns
-	for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
-		s32 option = optionslots[i];
-
-		entry->slots[i] = (option >= 0 && option < NUM_MPWEAPONS)
-			? g_MpWeapons[option].weaponnum : WEAPON_NONE;
-	}
+	mpWeaponSetsTakeSlots(entry, optionslots);
 
 	s_Num++;
 
@@ -704,6 +776,89 @@ void mpWeaponSetsSelfTest(void)
 
 			mpWeaponSetsTestCheck("the list owns the set and no empty row",
 					mpWeaponSetsOwns(first + 1) && !mpWeaponSetsOwns(first + MPWEAPONSET_MAXSAVED - 1));
+
+			/**
+			 * A set that holds a slot the player made random: it keeps the group's name,
+			 * it is not dirty because of the gun a group happened to roll, and when the
+			 * group is gone the set still plays the gun it stored.
+			 *
+			 * The group store is moved to its own scratch file for the duration - this
+			 * half has to make a group to name, and a run of --test-mpweaponsets has no
+			 * business writing a player's groups. Reading groups is safe either way, so
+			 * the apply below can resolve names against whatever is in memory.
+			 */
+			{
+				const s32 setnumkeep = g_MpWeaponSetNum;
+				u8 slotskeep[NUM_MPWEAPONSLOTS];
+				u8 filterskeep[NUM_MPWEAPONS];
+				s32 group;
+				s32 set;
+				s32 held;
+
+				for (s32 j = 0; j < NUM_MPWEAPONSLOTS; j++) {
+					slotskeep[j] = g_MpSetup.weapons[j];
+				}
+
+				for (s32 j = 0; j < NUM_MPWEAPONS; j++) {
+					filterskeep[j] = g_MpWeaponSetRandomFilters[j];
+					g_MpWeaponSetRandomFilters[j] = 1;
+				}
+
+				mpWeaponFiltersTestFile();
+				group = mpWeaponFiltersSave("Set test group");
+				mpSetWeaponSlotRandom(0, group);
+				held = g_MpSetup.weapons[0];
+				set = mpWeaponSetsSave("Set test", g_MpSetup.weapons);
+
+				mpWeaponSetsTestCheck("a set keeps a random slot by the group's name",
+						set >= 0 && group >= 0
+						&& mpWeaponSetsNameEqual(mpWeaponSetsGroupFor(first + set, 0), "Set test group")
+						&& mpWeaponSetsGroupFor(first + set, 1)[0] == '\0');
+
+				mpWeaponSetsLoad();
+
+				mpWeaponSetsTestCheck("and that survives the file",
+						mpWeaponSetsNameEqual(mpWeaponSetsGroupFor(first + set, 0), "Set test group")
+						&& mpWeaponSetsGet(set) != NULL
+						&& mpWeaponSetsGet(set)->slots[0] == g_MpWeapons[held].weaponnum);
+
+				// The gun a group rolled is not a change the player made: another row, and
+				// still the same group in the slot
+				g_MpSetup.weapons[0] = (u8) ((held + 1) % NUM_MPWEAPONS);
+
+				mpWeaponSetsTestCheck("a random slot is not dirty over the gun it rolled",
+						mpGetWeaponSlotGroup(0) == group && !mpWeaponSetsIsDirty(first + set));
+
+				mpSetWeaponSlot(0, 1);
+
+				mpWeaponSetsTestCheck("and is dirty once the player makes it a plain gun",
+						mpGetWeaponSlotGroup(0) == -1 && mpWeaponSetsIsDirty(first + set));
+
+				// The group is deleted: the name no longer resolves, and the set plays the
+				// gun it stored beside the name rather than losing the slot
+				mpWeaponFiltersDelete(group);
+				g_MpWeaponSetNum = first + set;
+				mpApplyWeaponSet();
+
+				mpWeaponSetsTestCheck("a set naming a group that is gone plays the gun it stored",
+						mpGetWeaponSlotGroup(0) == -1
+						&& mpWeaponSetsGet(set) != NULL
+						&& g_MpWeapons[g_MpSetup.weapons[0]].weaponnum == mpWeaponSetsGet(set)->slots[0]);
+
+				mpWeaponSetsDelete(set);
+				mpClearWeaponSlotGroups();
+				g_MpWeaponSetNum = setnumkeep;
+
+				for (s32 j = 0; j < NUM_MPWEAPONSLOTS; j++) {
+					g_MpSetup.weapons[j] = slotskeep[j];
+				}
+
+				for (s32 j = 0; j < NUM_MPWEAPONS; j++) {
+					g_MpWeaponSetRandomFilters[j] = filterskeep[j];
+				}
+
+				mpWeaponFiltersTestFile();
+			}
 		}
 
 		remove(fsFullPath(s_Path));
@@ -763,8 +918,32 @@ bool mpWeaponSetsIsDirty(s32 listindex)
 
 	for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
 		s32 option = g_MpSetup.weapons[i];
+		s32 group = mpGetWeaponSlotGroup(i);
+		const struct mpweaponfilterentry *from = group >= 0 ? mpWeaponFiltersGet(group) : NULL;
 		u8 gun = (option >= 0 && option < NUM_MPWEAPONS)
 			? g_MpWeapons[option].weaponnum : WEAPON_NONE;
+
+		/*
+		 * A slot that is random on both sides is compared by the group it names and not
+		 * by the gun standing in it: which gun a group rolled is nothing the player
+		 * chose, so a set that says "draw one every match" would otherwise read dirty or
+		 * clean on the luck of the last roll - and Save Set's greyed-out state is that
+		 * comparison's only consumer.
+		 *
+		 * Random on one side and not the other is a change either way, because the slot
+		 * stopped or started being a draw.
+		 */
+		if ((from != NULL) != (entry->groups[i][0] != '\0')) {
+			return true;
+		}
+
+		if (from != NULL) {
+			if (!mpWeaponSetsNameEqual(from->name, entry->groups[i])) {
+				return true;
+			}
+
+			continue;
+		}
 
 		if (gun != entry->slots[i]) {
 			return true;
@@ -772,6 +951,17 @@ bool mpWeaponSetsIsDirty(s32 listindex)
 	}
 
 	return false;
+}
+
+const char *mpWeaponSetsGroupFor(s32 listindex, s32 slot)
+{
+	const s32 at = listindex - s_First;
+
+	if (s_First < 0 || at < 0 || at >= s_Num || slot < 0 || slot >= NUM_MPWEAPONSLOTS) {
+		return "";
+	}
+
+	return s_Sets[at].groups[slot];
 }
 
 /**
@@ -793,12 +983,7 @@ bool mpWeaponSetsUpdate(s32 index, const u8 *optionslots)
 
 	entry = &s_Sets[index];
 
-	for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
-		s32 option = optionslots[i];
-
-		entry->slots[i] = (option >= 0 && option < NUM_MPWEAPONS)
-			? g_MpWeapons[option].weaponnum : WEAPON_NONE;
-	}
+	mpWeaponSetsTakeSlots(entry, optionslots);
 
 	if (mpWeaponSetsWriteFile() < 0) {
 		return false;
@@ -826,25 +1011,6 @@ const char *mpWeaponSetsNamedFor(s32 listindex)
 	}
 
 	return s_Sets[at].name;
-}
-
-// Case-insensitive equality, spelled out rather than strcasecmp: the same
-// source builds against mingw, where the header that declares it has moved
-static bool mpWeaponSetsNameEqual(const char *a, const char *b)
-{
-	while (*a != '\0' && *b != '\0') {
-		char ca = (*a >= 'A' && *a <= 'Z') ? *a + ('a' - 'A') : *a;
-		char cb = (*b >= 'A' && *b <= 'Z') ? *b + ('a' - 'A') : *b;
-
-		if (ca != cb) {
-			return false;
-		}
-
-		a++;
-		b++;
-	}
-
-	return *a == '\0' && *b == '\0';
 }
 
 /**

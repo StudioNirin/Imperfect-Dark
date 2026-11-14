@@ -8,6 +8,29 @@ sets lead that list and what "the first entry" stopped meaning; why the six
 weapon slots are locked and what unlocks them; where the online room's Weapons
 page actually lives; what the wire carries and what it does not carry yet.
 
+Random weapon groups: the four preset buttons as rules, and the bug that hid in
+one of them; why a saved group keeps gun names rather than row numbers too; why
+the page is a level deeper than the row that opens it; what Start Armed's Random
+reads now, and the two 64-bit places that were quietly dropping the fork's rows
+past the 64th.
+
+A weapon slot holding a random group: why the marker cannot live in
+`g_MpSetup.weapons[]`; who re-applies the weapon set behind the game's back, and
+what that did to the first version of this; why a match is rolled exactly once and a client never
+draws; what the saved setup file and the saved set each had to grow to hold (5 and
+2), and the fact that the two halves of a setup block are one hand on the same bit
+stream.
+
+Start Armed, one gun or two: why the pair is its own setting rather than
+`Mod.Akimbo`; why keeping the values 0/1/2 is what made the rename free; the
+ammount rule and the mines' exception to it, and the hidden tick that still
+doubles a mission's gun; that a dropdown popup is a text loop and cannot hold a
+widget, and that row measurement re-runs every frame, so the note above it about
+rows never appearing was wrong; why Random Five's sixth slot came to be a
+GoldenEye Remote Mine, and why the check for it had to unlock a row to mean
+anything; how the enhancements blob grows a field without dropping a player's
+settings.
+
 ## A saved set keeps its guns, not the page's rows
 
 `g_MpSetup.weapons[]`, the six slots the weapons page shows, are **option
@@ -97,6 +120,18 @@ client plays the host's guns whatever it calls them. Two things remain:
 Rooms already refuse a joiner on `NETREFUSE_PROTOCOL` and `NETREFUSE_BUILD`, so
 appending a field to a message cannot split a room that could otherwise have
 formed; `NET_PROTOCOL_VERSION` still goes up with it.
+
+Both of those are fixed (protocol 34 was the name, protocol 35 the filters):
+`weaponsetname` travels, and nothing on a client renders it because the room's
+Settings page belongs to the owner alone. `randomfilters` is now one byte per row
+of `g_MpWeapons` rather than a u64 - see *The two 64-bit holes* below.
+
+A fourth thing the wire does not carry, and does not need to: a group's **name**.
+The filter array travels and the group is a thing only the page shows, so a
+client receiving the host's list has nothing to label it with - the same rule as
+"no field without a receiver", which is why the saved-group names are not on the
+wire at all. A live room's own change detection is a different matter, and was
+broken: see *A live room has to notice the list changed*.
 
 ## What the page shows
 
@@ -244,13 +279,15 @@ first so the cursor lands on it.
 Both shapes are gone; the page now states the rule instead of asking. Recorded
 because three rounds went into it and the reasons are not visible in the code.
 
-**A row cannot appear inside an already-laid-out page.** `MENUOP_CHECKHIDDEN` is
-consulted in `src/game/menu.c`'s row measurement, where a hidden row is measured to
-`*width = 0; *height = 0`. That is done when the dialog is laid out, so three rows
-hidden at open never get a size back when a collision is detected later - the flag
-was set correctly, nothing drew, nothing wrote, and the player saw a silent failure.
-Pages that do reveal rows do so after the player activates a row, which re-lays-out;
-a keyboard commit does not.
+**A row cannot appear inside an already-laid-out page.** *(This diagnosis is
+wrong; the failure it explains was real. See the correction under* Start Armed,
+one gun or two *below: the measurement this rests on re-runs every frame.)*
+`MENUOP_CHECKHIDDEN` is consulted in `src/game/menu.c`'s row measurement, where a
+hidden row is measured to `*width = 0; *height = 0`. That is done when the dialog
+is laid out, so three rows hidden at open never get a size back when a collision
+is detected later - the flag was set correctly, nothing drew, nothing wrote, and
+the player saw a silent failure. Pages that do reveal rows do so after the player
+activates a row, which re-lays-out; a keyboard commit does not.
 
 **A keyboard row cannot change the dialog stack in either direction.** Popping its
 own dialog from `MENUOP_SETTEXT` or `MENUOP_SET` crashes in `menuUpdateCurFrame`;
@@ -276,3 +313,356 @@ two-row shape (Save Set / Save Set As) the owner rejected for failing silently w
 a taken name was typed into Save As. Either the ask comes before the typing, or the
 page says what the typing does. It cannot come after.
 
+
+## Random weapon groups, and the curated list (2026-11-14)
+
+`g_MpWeaponSetRandomFilters[]` - one byte per row of `g_MpWeapons` - is the list
+the `Random` weapon set draws the arena's six slots from (`mpSetRandomWeapons()`),
+and since 2026-11-14 also the list Start Armed's `Random` draws from
+(`mpGetSpawnWeapon()`). One list, two readers, edited on one page.
+
+- **The four presets were rules, not buttons.** "Select Dark / Classic / All /
+  None" were the last four rows of the checkbox list, each writing the whole
+  array and vanishing - a selection a player built by hand could only be rebuilt
+  by hand. They are `mpRandomGroupBuiltInBits()` (`setup.c`) now, four rows of the
+  new page's `Group` dropdown alongside the player's saved groups, so the dropdown
+  and the checkboxes describe one thing.
+- **Dark was selecting GoldenEye's guns.** Its rule ended in `i >=
+  MPWEAPON_SHIELD`, written when `MPWEAPON_DISABLED` was the table's last row; the
+  fork's table runs on through `MPWEAPON_GE_FIRST` to row 80, so "Dark" switched on
+  every GoldenEye row including the cheat guns. Invisible for years because those
+  rows are `MPFEATURE_NEVER` and so absent from `mpGetNumWeaponOptions()` - the
+  checkbox list never showed a row it had just selected. Any rule written as
+  "everything from X up" against this table should ask what has been appended.
+- **A saved group keeps gun names, for the same reason a saved set does.** The
+  store (`port/src/mpweaponfilters.c`, `$S/mpweaponfilters.bin`) serialises the
+  selection as the `weaponnum`s it selects and expands back by looking each one up
+  in `g_MpWeapons[]`, because a mod's import rewrites those rows from the top
+  (`moddata.c`) - see *A saved set keeps its guns* above. `--test-randomgroups`
+  proves it by shifting every row's weapon number along one (a bijection, which is
+  the shape of an import) and checking the group still selects the same guns and
+  not the rows it was saved from.
+- **The page is a level deeper than the row that opens it, on purpose.** Buttons
+  that set the list and a checkbox list that shows it cannot share a page without
+  the list lying about what is in use, so the row opens a page (Select guns /
+  Group / Save group / Remove group) and the page re-derives the group in use on
+  `MENUOP_OPEN` (`mpRandomGroupInUse()`: saved groups first, then the built-ins,
+  else `Manual`). `Manual` is a real row because a dropdown cannot display
+  "nothing", and picking it changes nothing - which is what "leave my boxes alone"
+  has to mean. A hand-ticked box sets it immediately.
+- **Three doors, one page.** `g_MpRandomWeaponsMenuDialog` is pushed from the
+  Combat Simulator's weapons page, from an online room's (they are the same
+  dialog: `handlerSetupWeapons` pushes `g_MpWeaponsMenuDialog`, netlobbymenu.c -
+  so the room needs no row of its own), and from Mods: Player under Start Armed,
+  because that page is where a solo or co-op player sets the roll that adds a gun
+  to a mission's kit and they should not have to enter the multiplayer menu to
+  reach the list. It carries no `MENUDIALOGFLAG_MPLOCKABLE`: the popup it replaced
+  does not either, and `menu.c` blocks flagged dialogs for a locked-out player.
+  The two doors' rows do not hide on the same test, and should not: the weapons
+  page's comes out for **either** reader of the list - the random set, or Start Armed
+  being on Random, because that page carries the Start Armed row too and the roll
+  reads the same list (`mpGetSpawnWeapon`) - while the Mods: Player row comes out for
+  Start Armed alone. A row on a page hides on what that page is standing on.
+- **The row that opens it says what the list is.** `RX Selection: All`,
+  `RX Selection: RX: Pistols`, `RX Selection: Manual` - from
+  `mpMenuTextRandomWeaponGroup()`, on both rows that open the page. Named from the
+  list (`mpRandomGroupInUse()`) and not from the page's own dropdown state, because
+  the row is drawn on pages whose player never opened the page, and after a restart,
+  when only the list comes back; and a saved group is asked before the built-ins, so
+  a group that happens to spell `All` is named as itself. Getting there cost a menu
+  fact: the rows were `MENUITEMFLAG_LITERAL_TEXT`, and **a literal row can hold no
+  text function** - see `languages.md`, same list as `param2`'s lookup.
+- **Nothing selected means nothing handed out.** `mpGetSpawnWeapon()` intersects
+  the curated list with `mpCanRollSpawnWeapon()` - so the list can only narrow the
+  roll, never widen it past `MPFEATURE_NEVER` or a stage's own set of guns - and a
+  zero-candidate list returns -1 *before* the roll. That ordering is load bearing:
+  the empty answer consumes no rng, so a peer that drew anyway would take a
+  different number of draws from the stage's stream (netplay.md, the split stream).
+  `--test-randomgroups` asserts both halves, including that `g_RngSeed` is
+  untouched - the trick player.c already uses to keep one roll off the stream.
+
+### The two 64-bit holes, and why they were invisible
+
+`NUM_MPWEAPONS` is 81 in this fork (`constants.h`: the GoldenEye rows, a ROM hack's
+pistols, the cheat guns). Two places carried the list in a `u64`:
+
+- **the wire** - `RULES`' `randomfilters`, written, read and applied with
+  `i < NUM_MPWEAPONS && i < 64`, so rows 64-80 were never sent and a client kept
+  its own bits there;
+- **the saved setup** - `pack/unpackWeaponSetRandomFilters()` (`mplayer.c`), so
+  those rows came back as the boot default (all on) after a restart, silently
+  undoing anything a player had switched off.
+
+Neither showed, because nothing on a client *read* the array: the client writes the
+host's six arena slots straight through (`netrules.c`) and never re-runs
+`mpApplyWeaponSet()`. Give it a reader inside the sim - which `mpGetSpawnWeapon()`
+is, called from `playerSpawn()` and `bot.c` on every peer - and both become a
+mismatch in what peers spawn holding *and* in how many draws they take. So:
+
+- `RULES` now sends `u8 randomfilters[NUM_MPWEAPONS]` (protocol 35).
+- The setup file grew to `MPSETUP_VERSION_RANDOMFILTERS` (4), which writes one bit
+  per row. The older versions are still written when they lose nothing, decided by
+  `mpNeedsWideRandomFilters()` alongside `mpNeedsSimStats()` in
+  `mpsetupLiveVersion()` - the oldest format that loses nothing of the live setup.
+  Reading a version < 4 sets rows 64+ to selected, since that is the only state
+  such a file could describe, and doing it explicitly is what keeps a decoded block
+  equal to a live setup for the re-encode walk in `mpsetups.c`.
+- `mpsetupfileSaveWad()` ends with a check that the block's bits fit
+  `MPSETUP_BLOCKSIZE`, and says so at `LOG_ERROR` if not. `savebufferOr()` writes
+  wherever `bitpos` points, so a format that outgrows its block was silent.
+
+### A live room has to notice the list changed
+
+`dialogRoomSettings` (`netlobbymenu.c`) re-sends the room's settings on close only
+if its snapshot differs: `g_MpSetup`, the bots, co-op, and `settingsExtra()`. The
+filter array is in none of those - not a config key, so not in
+`netRulesSyncHash()`, and not in `g_MpSetup`. A host who unticked a gun in Room
+Setup > Weapons > Random Weapons had changed what `RULES` would carry without
+anything deciding the room had changed, so no `netLobbySendSettings()` and no new
+`RULES`. Invisible while nothing on a client read the array; a real difference now.
+`settingsExtra()` hashes `g_MpWeaponSetRandomFilters` for that reason.
+
+The general shape to keep: **the room's change detection is a snapshot
+comparison**, so any new editable thing that is not a config key and not in
+`g_MpSetup` has to be added to that hash or the room will not send it.
+
+### A confirm is fine from a selectable row
+
+The delete confirm on the group page is a `MENUDIALOGTYPE_DANGER` dialog with two
+`MENUITEMFLAG_SELECTABLE_CLOSESDIALOG | ..._CENTRE` rows, "No" with a NULL handler
+and "Yes" with the one that deletes, pushed from the Remove row's `MENUOP_SET`. The
+model is the texture pack delete (`optionsmenu.c`). What cannot pop a dialog is a
+*keyboard* row - it is only ever given `MENUOP_SETTEXT` (the name-page sections
+above) - and that is the failure the earlier attempts at a confirm hit. The index to
+delete is stashed in a static when the asking row pushes, because the Yes handler is
+a dialog away from anything that knows which group was in use.
+
+## A weapon slot holding a random group (2026-11-14)
+
+A slot on the weapons page can name a saved group instead of a gun: the dropdown
+offers the groups below the guns, the row reads `RX: Automatics`, and the gun the
+arena gets is drawn from that group at the start of each match
+(`mpRollRandomWeaponSlots()`, `mplayer.c`). The rules this took to find:
+
+- **The marker cannot live in `g_MpSetup.weapons[]`.** Those six bytes are read as
+  row numbers of `g_MpWeapons[]` by about fifteen places, several of them
+  decompiled and none of them bounds-checked (`botinv.c`, `activemenu.c`,
+  `modalarm.c`, `mpGetMpWeaponByLocation()`), so any sentinel value put in the
+  array is an out-of-bounds read waiting for the one path that forgot to
+  translate. The marker is a separate `static s8 s_MpWeaponSlotGroup[]` beside it,
+  `-1` for an ordinary slot, and the worst a missed roll can now do is leave a slot
+  holding a gun the page does not claim. `mpGetMpWeaponByLocation()` clamps and
+  says so at `LOG_ERROR`, as the last line of that defence rather than the first.
+- **Initialized by hand.** `= { -1, -1, -1, -1, -1, -1 }`, because a bss zero means
+  group 0 in all six - the shape this fork keeps meeting, where 0 is a real answer
+  rather than "nothing yet".
+- **Something has to remember what the roll chose.** The marker outlives the match
+  (the row should still read `RX: Automatics` afterwards), so
+  `s_MpWeaponSlotRolled[]` records what each random slot was rolled to, and
+  `mpReconcileRandomWeaponSlots()` - called from `mpReset()`, so on every way into
+  a stage - retires any marker whose slot stopped holding its own roll. **It never
+  re-rolls, and that is the load-bearing part**: a host that re-drew at stage entry
+  would move what its clients were given at the match's start, and the two sides
+  would stock an arena's floor from different guns, which the stage hash calls a
+  mismatch. A match is rolled once, in `mpStartMatch()` before
+  `netHostMatchStarting()` writes `RULES`; `RULES` already carries the six slots per
+  match, so no new message and no protocol bump. **A client never draws** - its
+  candidate list is its own unlock state, and a draw it took alone would put it out
+  of step with the stage's stream - and retires all of its markers, on the theory
+  that the guns it carries are the host's whatever its own file said. `netRulesApply()`
+  clears them at the `RULES` handover rather than waiting for `mpReset()` to notice,
+  because a host migration inside that window would otherwise roll the local group
+  instead of keeping the host's choice.
+- **The game re-applies the weapon set behind your back, at the end of every setup
+  load.** `mpsetupfileLoadWad()` finishes with `challengeForceUnlockBotFeatures()` -
+  which is `challengeDetermineUnlockedFeatures()` - which calls `func0f1895e8()`, and
+  that calls `mpApplyWeaponSet()` whenever `g_MpWeaponSetNum < MP_NUM_WEAPONSETS`.
+  So loading a saved setup whose set is one of the game's rewrites all six slots from
+  the set, after the decode put the file's values (and markers) in. That is what the
+  first version of this lost the round-trip check to: the file gave slot 2 back
+  honestly and the load's own set re-application replaced it with the set's gun while
+  the marker went on claiming the group. Two consequences written down:
+  `mpApplyWeaponSet()`'s deriving path clears the markers *unconditionally* (not only
+  for a player's own set, which is how it was first), then puts back the ones a saved
+  set was saved with; and a random slot is a thing a **Custom** setup or a saved set
+  has, never a set of the game's - which the page already enforces
+  (`mpWeaponSlotsEditable()`), and which `--test-randomgroups` now asserts both ways.
+  The hunt for it is a gdb watchpoint on `g_MpSetup.weapons[2]` from a breakpoint on
+  `challengeForceUnlockBotFeatures()`, which named the writer in one hit after an
+  afternoon of reading the load path sideways.
+- **The two halves of a setup block are one hand on one bit stream.** The v5 group
+  names are written after the stat sliders and were first read *before* them. Nothing
+  failed: the decode read somebody else's fields, and the symptom was one slot of six
+  coming back as 1 instead of 0. Any format change here has to be written and read in
+  the same order and checked by a round-trip that puts a value in the new field, not
+  by a check that the old fields still decode (they do, when the shift is after them).
+  `MPSETUP_BLOCKSIZE` grew again for it (`MPSETUP_BLOCKSIZE_V3` is what 3 and 4 used,
+  the macro itself is version 5's) - a v5 block needs 5651 of its 6032 bits, which
+  `--test-randomgroups` prints, and `mpsetupfileSaveWad()`'s overflow check from the
+  section above is what catches the next one.
+- **Saved setups and saved sets name the group, never its number.** Both files are
+  saved apart from `mpweaponfilters.bin`, and deleting a group shifts every number
+  above it down, so a stored `3` would quietly start naming another group - the
+  mistake this file records as *the first entry* elsewhere. A name that does not
+  resolve leaves the slot plain and playing the concrete gun the group last rolled,
+  which is why the saved set (`mpweaponsets.bin`, version 2) stores the six guns as
+  before *and* a name per slot: the gun is the fallback, the name is the intent.
+  `--test-mpweaponsets` grew the checks for that; deleting a group also renumbers the
+  live markers and clears the one that named it (`setup.c`).
+- **A slot's roll rule is not Start Armed's.** `mpCanRollWeaponSlot()` is not
+  `mpCanRollSpawnWeapon()`: the spawn rule demands a *gun*, so it would drop the
+  Shield and the gadgets an arena's slots do hold (a slot naming the Shield becomes a
+  `shieldobj`; `mpApplyConfig()` clears the Shield slots when the feature is not
+  earned). The slot rule is the dropdown's own: never `WEAPON_DISABLED`, never
+  `MPFEATURE_NEVER`, and the stage's set. And it is asked always, not behind
+  `normmplayerisrunning` as the spawn roll has it - at `mpStartMatch()` that flag
+  still describes the previous stage, since `mpReset()` sets it on the next
+  `mainLoop()` iteration.
+- **Auto Random wins, on purpose.** `MPOPTION_AUTORANDOMWEAPON_START` writes the six
+  slots through `mpSetWeaponSlot()`, which clears the marker, so a match that takes
+  the slots for itself takes the random ones too. That was the agreed behaviour; a
+  slot made random is the player's pick for the *slot*, not a reservation against a
+  rule they switched on.
+- **A closed dropdown shows its option's text**, so `RX: ...` on the row itself comes
+  from `MENUOP_GETSELECTEDINDEX` returning `numguns + group`, and everywhere else the
+  gun would have been named needs the same answer (`mpMenuTextWeaponNameForSlot()`)
+  or a row beside the dropdown quietly shows the gun standing in for the group.
+
+### What the gate does and does not see
+
+`tools/ci/randomgroupstest.sh` runs `--test-randomgroups` and needs all five
+verdicts (it counts them, so a half that never ran cannot pass silently): the store
+(`mpWeaponFiltersSelfTest`), the roll (`mpRandomRollSelfTest`), the slots
+(`mpRandomSlotSelfTest`), the saved setup (`mpRandomSetupFileSelfTest`) and the page
+(`mpRandomGroupMenuSelfTest`, driving `MENUOP_SETTEXT` and never `MENUOP_SET` on a
+keyboard row, and no row that would push a dialog while no menu is up). The roll and
+slot halves live in `mplayer.c` because `mpCanRollSpawnWeapon()` and the slot markers
+are private there. Measured 3s, so a 180s budget is generous. It cannot see the
+layout: the new page's rows, and the two rows added to the weapons pages, are the
+sort of thing only a screen shows - the same limit `weapon-sets.md` records for the
+bind pages.
+
+## Start Armed, one gun or two, and how much of it (2026-11-14)
+
+Start Armed had two options and one of them meant three things at once: *Random*
+was a fresh gun each spawn, a pair of guns when Akimbo allowed it, and a full
+reserve of both. Four ways to start armed came out of that as **two settings**:
+`Mod.StartArmed` (Off / First / Fiesta, values 0 1 2 unchanged) and
+`Mod.StartArmedAkimbo` (Akimbo Start?, default **on**). Notes that cost time:
+
+**The pair could not stay inside `Mod.Akimbo`.** That setting decides who is
+*handed* two of a gun and who may *hold* two of what they picked up, and which
+simulants and guards (`MODAKIMBO_EVERYONE / _PLAYERSANDSIMS / _GUARDS`), so
+"one gun at the spawn, Akimbo still on for the rest of the match" is not
+reachable through it. `modGetSpawnAkimbo()` is the spawn's own switch, and
+`modSpawnIsAkimbo(weaponnum)` is the three-term answer - Akimbo for players, the
+tick, and the gun pairing at all - because both spawn sites used to spell those
+terms out (`playerSpawnWeapons()`, `botSpawnChr()`'s armed branch) and the
+mission branch spelled two of them. Same reason `modSpawnWantsMaxAmmo()` exists
+rather than `== SPAWNWEAPON_RANDOM` written at each site: the sites are three
+(player, the mixed second hand, the simulants) and the rule is a player's
+decision, not a detail of each.
+
+**Keeping the values 0/1/2 is the whole reason this was small.** `mpGetSpawnWeapon()`
+still means "row of slot 0, or roll the curated list", so the roll, the RX
+Selection row's visibility, `modCanChrSpawnArmed()`, the saved setups, the presets'
+`== OFF` test and `netrules.c` all went untouched by the rename of *Random* to
+*Fiesta*. **Mines are the exception to the ammunition rule, by ammo type.** The
+two First options hand out `min(capacity, 2 * priammoqty)` - `priammoqty` being
+exactly what `setup.c:1306` fills a multiplayer crate with, so "the hand-out plus
+one crate" is the doubling, and the map keeps the rest - and Fiesta keeps the
+whole reserve. The three mine types are the hand-out alone, 5 of a carrying limit
+of 10: doubling them lands on the limit, so First would hand out precisely what
+Fiesta does, and a mine's arena spot is a crate and nothing else, so they are the
+class where the difference is most visible. Keyed off `AMMOTYPE_TIMED_MINE /
+_PROXY_MINE / _REMOTE_MINE` and **not** off the row's `hasweapon` flag, which is 0
+for the grenade and the NB bomb as well - the detonator's Plastique row (also 5 of
+10) is out of the list and the gate says so. `bgunAmmotypeAllowsUnlimitedAmmo()`
+(Chicago's remote mines, Air Force One's timed mines) is a *pickup* rule read where
+a crate is collected; a spawn figure must not consult it.
+
+**One means one in a mission too, and that is where a hidden setting is still
+live.** `playerSpawnWeapons()`'s mission branch (`!g_Vars.normmplayerisrunning`)
+doubles the mission's own starting gun on `modIsAkimboForPlayers()`; it asks
+`modGetSpawnAkimbo()` now. With Start Armed on Off the row that edits the key
+**hides** - both pages hide it, `modSpawnAkimboRowHidden()` - so this is the
+setting's remaining reach while it has no visible row. Hiding a row has never
+meant the value stops being read anywhere; this is the one place it nearly did.
+
+**A dropdown's popup cannot hold a widget.** `menuitemDropdownOverlay()`
+(`src/game/menuitem.c:1069`) draws the open list as a text loop over
+`MENUOP_GETOPTIONTEXT` strings and the tick maps a highlighted row to an index ->
+`MENUOP_SET`, which is what closed the "put a tickbox in the popup" idea. A row
+*underneath* is the shape, and it is the shape the fork already uses elsewhere
+(Akimbo Triggers' bind rows).
+
+**Correction to "a row cannot appear inside an already-laid-out page"** (the
+2026-11-13 note above): `dialogCalculateContentSize()` - where `MENUOP_CHECKHIDDEN`
+is consulted - runs **every frame** for a dialog without
+`MENUDIALOGFLAG_DISABLERESIZE` (`src/game/menu.c:5183`), and neither
+`g_MpWeaponsMenuDialog` nor the Mods: Player dialog sets that flag. So a row can
+appear and disappear while the page is open: *Akimbo Start?* reveals itself the
+moment Start Armed moves off Off. The fork's own Akimbo Triggers rows have been
+doing this on Mods: Player all along, which is the evidence the old note should
+have weighed against. The 2026-11-13 failure was real, so if that shape is ever
+revisited, diagnose it again rather than from that note. This section's row is
+asserted by the gate (`MENUOP_CHECKHIDDEN`), not by a screen, so treat the visual
+as unconfirmed until one is looked at.
+
+**`Akimbo` moved off Room Rules to the Weapons page**, above the Start Armed row
+it changes, on both pages that carry Start Armed (the room's Weapons page *is*
+`g_MpWeaponsMenuDialog`, so a room's host gets it there - and `MENUDIALOGFLAG_MPLOCKABLE`
+on that dialog blocks the whole page for a locked-out player (`menu.c:4963`),
+which is why neither the moved row nor Start Armed's needs `MENUITEMFLAG_LOCKABLEMINOR`).
+`g_NetRoomRulesMenuItems` is referenced only by its own definition and its dialog,
+so deleting a row from it moves nothing else.
+
+**Random Five's sixth slot was "the last unlocked row", which is not the Disabled
+row.** `mpApplyWeaponSet()` filled five slots and wrote `mpSetWeaponSlot(i,
+mpGetNumWeaponOptions() - 1)` for the sixth. An *option* index, converted by
+`mpSetWeaponSlot()` walking the rows beneath it - so the answer is whatever row
+last unlocks, and on a GoldenEye stage list that is row `0x49`, **GoldenEye's
+remote mine** (`geguns.c` lists `0x31..0x49` and leaves the hack pistols and cheat
+guns behind), which is exactly what the report said the slot held. The fix names
+the row: `mpGetDisabledWeaponRow()` finds it by `weaponHost(...) == WEAPON_DISABLED`
+- not by `MPWEAPON_DISABLED`, which is where the stock table keeps it and a mod's
+import rewrites the table from its top (`moddata.c`) - and `mpSetWeaponSlotRow()`
+writes a row index where `mpSetWeaponSlot()` wants an option index. That pair is
+the lesson: anything that knows which row it wants should not have to count the
+rows around it to say so. The `#ifdef PLATFORM_N64` arm (`- 2`) is untouched, this
+tree not building N64.
+
+**The gate had to break the rule to test it.** On the test's own table, with
+nothing above it unlocked, "the last unlocked row" *is* the Disabled row, so the
+check would have been a tautology: `mpRandomSlotSelfTest()` unlocks
+`MPWEAPON_GE_FIRST` for the duration and asserts the sixth slot is still the
+Disabled row and the five it fills are not. Reverting the fix by hand turns it into
+`FAIL ... the sixth slot row 73 holding gun 79`, which is `0x49`, the mine. Same
+trick as that half's `numunoffered` guard: a check whose failure and success are
+the same value proves nothing.
+
+**The enhancements blob takes a new field without dropping anyone's settings.**
+`g_ModOptions` reaches a preset through `MODENHANCE_EXTRA_*` (`optionsmenu.c`), and
+the read path drops a note whose field count it does not recognise with *"left as
+they are"* - settings silently Vanilla. Appending the new member to the enum and
+chaining a second `count == ARRAYCOUNT(values) - 1` clause after the kill-feed's
+appends the default, so `MODENHANCE_EXTRA_COUNT` grows, `MODENHANCE_SAVED_VERSION`
+stays 2, and a note predating *both* fields passes the first clause and then the
+second. Appending last also means appending a value rather than `memmove`-ing the
+block. `struct modpreset` was left alone: growing it moves
+`MODENHANCE_PRESET_FIELDS` and every note's field count.
+
+### What the gate does and does not see
+
+`tools/ci/startarmedtest.sh` runs `--test-startarmed`
+(`mpStartArmedSelfTest()`, `src/game/mplayer/setup.c`, living there because the
+rows' handlers are the things under test) and wants all six verdicts: the tick's
+hide predicate and the value surviving the hiding; `modSpawnIsAkimbo()` across
+Akimbo off, tick off, Guards-only, and a location that is not a gun; the four
+combinations; the amounts over the whole table (never above the capacity, the
+capacity when maxed, and **under** it for at least one row, which is what stops a
+helper that just returned the capacity passing); the mine rows at their hand-out;
+and Start Armed's three option strings. Mods: Player's copy of the tick row is
+`static` in `optionsmenu.c`, so what is asserted is the one predicate both rows
+answer. Nothing here sees the layout, the mission branch, or the simulants'
+hands - the same limit as every gate above.

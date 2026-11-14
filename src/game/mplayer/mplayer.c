@@ -1,6 +1,7 @@
 #include <ultra64.h>
 #ifndef PLATFORM_N64
 #include "mpweaponsets.h"
+#include "mpweaponfilters.h"
 #endif
 #include <stddef.h>
 #include "constants.h"
@@ -256,6 +257,35 @@ s32 g_MpWeaponSetNum;
 
 #ifndef PLATFORM_N64
 u8 g_MpWeaponSetRandomFilters[NUM_MPWEAPONS];
+
+/**
+ * Which of the arena's six weapon slots the player made a random one, and which
+ * of their saved groups (mpweaponfilters.c) it rolls from.
+ *
+ * Beside g_MpSetup.weapons[] and never inside it. That array is a real row of
+ * g_MpWeapons per slot for about fifteen readers, several of them decompiled code
+ * that indexes the table with no check at all - botinv.c, activemenu.c,
+ * modalarm.c, mpGetMpWeaponByLocation() below - so a marker in it is an
+ * out-of-bounds read waiting for the one path that forgot to translate. Kept
+ * separate, the worst a missed roll can do is leave a slot holding a gun the page
+ * does not claim. mpGetMpWeaponByLocation() clamps and says so, as the last line
+ * of that defence.
+ *
+ * -1 is an ordinary slot. Initialized by hand, because a bss zero would mean
+ * group 0 in all six - the shape this fork keeps being caught by, where 0 is a
+ * real answer rather than "nothing yet".
+ */
+static s8 s_MpWeaponSlotGroup[NUM_MPWEAPONSLOTS] = { -1, -1, -1, -1, -1, -1 };
+
+/**
+ * What each random slot was rolled to, as it went into g_MpSetup.weapons[].
+ *
+ * The marker outlives the roll - a player should still see "RX: Automatics" on
+ * the page after the match it chose - so something has to tell "this slot holds
+ * the gun its group rolled" from "this slot holds some other gun, and the page is
+ * lying". That is all this is for: see mpReconcileRandomWeaponSlots().
+ */
+static s32 s_MpWeaponSlotRolled[NUM_MPWEAPONSLOTS];
 s32 g_MpWeaponRandomFilterNum;
 #endif
 
@@ -365,6 +395,10 @@ struct mpweapon g_MpWeapons[NUM_MPWEAPONS] = {
 #endif
 };
 
+// Defined below with the slot setters it answers for; the weapon set's self-test
+// above it asks the same question
+static s32 mpGetDisabledWeaponRow(void);
+
 #ifndef PLATFORM_N64
 
 #define PLAYER_EXT_CFG_DEFAULT { \
@@ -465,6 +499,20 @@ void mpStartMatch(void)
 		g_MpSetup.options &= ~(MPOPTION_SLOWMOTION_ON | MPOPTION_SLOWMOTION_SMART);
 	}
 
+#ifndef PLATFORM_N64
+	/*
+	 * The arena's random weapon slots are rolled for this match here, or not at all
+	 * (mpRollRandomWeaponSlots): the gun each one lands on goes out in the RULES
+	 * below and every client stocks its floor from that, so there is nothing for a
+	 * client to decide. It comes after the auto-random re-apply above, which writes
+	 * all six slots and retires any slot made random - the game's own Random set
+	 * over the arena, which is what it has always meant.
+	 */
+	if (!netIsClient()) {
+		mpRollRandomWeaponSlots();
+	}
+#endif
+
 	for (i = 0; i < MAX_PLAYERS; i++) {
 		if (mpIsHumanSlotOn(i)) {
 			numplayers++;
@@ -505,6 +553,12 @@ void mpReset(void)
 	}
 
 	g_Vars.perfectbuddynum = 0;
+
+#ifndef PLATFORM_N64
+	// Every way into a stage passes here, so it is where a random weapon slot that
+	// stopped holding its own roll is retired - see mpReconcileRandomWeaponSlots.
+	mpReconcileRandomWeaponSlots();
+#endif
 
 	if (mpHasSimulants()) {
 		g_Vars.lvmpbotlevel = true;
@@ -1400,6 +1454,194 @@ bool mpWeaponRowSuitsStage(const struct mpweapon *mpweapon)
  * them - a GoldenEye X mission spawned the player holding the KF7 Soviet.
  * A row that is off is not one of "every gun".
  */
+/**
+ * Whether a row of the weapon table can fill a weapon slot made random.
+ *
+ * Not mpCanRollSpawnWeapon(): that one demands a *gun*, so it would drop the
+ * Shield and the gadgets an arena's slots do hold (setup.c turns a slot naming the
+ * Shield into a shieldobj, and mpApplyConfig() clears the Shield slots when the
+ * feature is not earned). The rule wanted is the slot's own dropdown's: exactly
+ * the rows mpGetNumWeaponOptions() counts, which is the unlock test - and
+ * MPFEATURE_NEVER is past the table, so challengeIsFeatureUnlocked() says no to it
+ * (challenge.c) and the row is not offered either. Asked always, and not behind
+ * normmplayerisrunning as Start Armed's roll has it: a slot is only filled for a
+ * match, and when this is asked that flag still describes the previous stage
+ * (mpReset() sets it on the next mainLoop() iteration).
+ */
+static bool mpCanRollWeaponSlot(const struct mpweapon *mpweapon)
+{
+	if (weaponHost(mpweapon->weaponnum) == WEAPON_DISABLED) {
+		return false;
+	}
+
+	if (!challengeIsFeatureUnlocked(mpweapon->unlockfeature)) {
+		return false;
+	}
+
+	return mpWeaponRowSuitsStage(mpweapon);
+}
+
+void mpSetWeaponSlotGroup(s32 slot, s32 group)
+{
+	if (slot < 0 || slot >= NUM_MPWEAPONSLOTS) {
+		return;
+	}
+
+	s_MpWeaponSlotGroup[slot] = (s8) group;
+}
+
+s32 mpGetWeaponSlotGroup(s32 slot)
+{
+	if (slot < 0 || slot >= NUM_MPWEAPONSLOTS) {
+		return -1;
+	}
+
+	return s_MpWeaponSlotGroup[slot];
+}
+
+void mpClearWeaponSlotGroups(void)
+{
+	for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+		s_MpWeaponSlotGroup[i] = -1;
+	}
+}
+
+/**
+ * Make a slot a random one, and put a real gun in it meanwhile.
+ *
+ * The array the arena reads has to hold a gun from the moment the page leaves it:
+ * the roll for a match happens in mpStartMatch, but the row starts claiming the
+ * group at the press, and a stage can be reached from the menu by a path that does
+ * not start a match. So the group's first offered row stands in.
+ *
+ * It is recorded as the slot's own roll deliberately. Without that the check at
+ * mpReset would find the slot holding something the roll did not put there and
+ * retire the marker, and picking a random slot would undo itself the first time a
+ * stage was loaded.
+ */
+void mpSetWeaponSlotRandom(s32 slot, s32 group)
+{
+	s32 rows[NUM_MPWEAPONS];
+	s32 rolled = MPWEAPON_NONE;
+	s32 n;
+
+	if (slot < 0 || slot >= NUM_MPWEAPONSLOTS) {
+		return;
+	}
+
+	mpSetWeaponSlotGroup(slot, group);
+	n = mpWeaponFilterRows(group, rows, ARRAYCOUNT(rows));
+
+	for (s32 i = 0; i < n; i++) {
+		if (mpCanRollWeaponSlot(&g_MpWeapons[rows[i]])) {
+			rolled = rows[i];
+			break;
+		}
+	}
+
+	s_MpWeaponSlotRolled[slot] = rolled;
+	g_MpSetup.weapons[slot] = (u8) rolled;
+}
+
+/**
+ * The gun for each slot the player made random, once per match.
+ *
+ * Called from mpStartMatch() on the host and offline, and nowhere else - which is
+ * the only place it can be called from. RULES is written per match, from
+ * netHostMatchStarting() inside mpStartMatch(), and carries the six slots as they
+ * stand: so a roll made here reaches every client on a field that already exists,
+ * with no message of its own and no client rolling anything. A client never draws
+ * for these slots. Its candidate list would be its own unlock state
+ * (g_ChallengeStats is copied from RULES, so it agrees at the match's start and
+ * can drift after it), and a draw it took alone would put it out of step with the
+ * stage's stream.
+ *
+ * A group with nothing it can offer leaves the slot empty, and says so before any
+ * draw - the rule mpGetSpawnWeapon() holds to for the same reason.
+ */
+void mpRollRandomWeaponSlots(void)
+{
+	for (s32 slot = 0; slot < NUM_MPWEAPONSLOTS; slot++) {
+		s32 rows[NUM_MPWEAPONS];
+		s32 candidates = 0;
+		s32 group = s_MpWeaponSlotGroup[slot];
+		s32 n;
+
+		if (group < 0) {
+			continue;
+		}
+
+		n = mpWeaponFilterRows(group, rows, ARRAYCOUNT(rows));
+
+		for (s32 i = 0; i < n; i++) {
+			if (mpCanRollWeaponSlot(&g_MpWeapons[rows[i]])) {
+				rows[candidates++] = rows[i];
+			}
+		}
+
+		if (candidates == 0) {
+			s_MpWeaponSlotRolled[slot] = MPWEAPON_NONE;
+			g_MpSetup.weapons[slot] = MPWEAPON_NONE;
+			continue;
+		}
+
+		s_MpWeaponSlotRolled[slot] = rows[rngRandom() % candidates];
+		g_MpSetup.weapons[slot] = (u8) s_MpWeaponSlotRolled[slot];
+	}
+}
+
+/**
+ * Retire any random slot that is not holding its own roll.
+ *
+ * Asked at every stage entry, on every peer, because there are ways to reach a
+ * stage that did not pass through the roll: a host taken over mid-match adopts the
+ * previous one's RULES (netRulesAdopt), a room's mod swap re-applies them
+ * (netSessionModSwapped), a rotation or a restart rebuilds a stage the match
+ * already resolved. Each of those leaves the six slots holding somebody else's
+ * numbers while the page goes on claiming a group - not a crash, not even visible
+ * in the arena, only a row describing a gun the match is not playing.
+ *
+ * It never re-rolls, and that is the load-bearing part. A host that re-rolled here
+ * would move what its clients were given at the match's start, and the two sides
+ * would stock an arena's floor from different guns - the stage hash calls that a
+ * mismatch. So a match is rolled once, in mpStartMatch(), and this only retires
+ * the markers that stopped meaning anything. A client, which rolls nothing, retires
+ * all of them: the guns it carries are the host's, whatever its own setup file
+ * said.
+ */
+void mpReconcileRandomWeaponSlots(void)
+{
+	if (g_NetMode != NETMODE_NONE && netIsClient()) {
+		mpClearWeaponSlotGroups();
+		return;
+	}
+
+	for (s32 slot = 0; slot < NUM_MPWEAPONSLOTS; slot++) {
+		if (s_MpWeaponSlotGroup[slot] >= 0 && g_MpSetup.weapons[slot] != s_MpWeaponSlotRolled[slot]) {
+			s_MpWeaponSlotGroup[slot] = -1;
+		}
+	}
+}
+
+/**
+ * Whether a saved setup has to remember any random slot.
+ *
+ * The same question as mpNeedsSimStats() and mpNeedsWideRandomFilters(): the
+ * oldest format that loses nothing of the setup as it stands. Versions to 4 say
+ * nothing about a slot being random, so a file written for one of them keeps the
+ * plain six guns it always meant.
+ */
+bool mpNeedsSlotGroups(void)
+{
+	for (s32 i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+		if (s_MpWeaponSlotGroup[i] >= 0) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static bool mpCanRollSpawnWeapon(const struct mpweapon *mpweapon)
 {
 	if (!modIsWeaponAGun(mpweapon->weaponnum)) {
@@ -1428,6 +1670,18 @@ static bool mpCanRollSpawnWeapon(const struct mpweapon *mpweapon)
  * slots. The arena's slots are what everyone is meant to be fighting over, and
  * with 80 simulants they are gone within seconds of the match starting, so
  * drawing spawn weapons from them would still leave most of the lobby unarmed.
+ *
+ * The roll is of the rows the player kept in the curated random list - the same
+ * list the "Random" weapon set draws the arena's six slots from, which is what
+ * makes it mean something to a player who spent time on it (setup.c's Select
+ * Weapons page, and the Random Weapons page that reaches it from Start Armed).
+ * A row still has to be a gun that suits the stage, so the list can only narrow
+ * the roll, never widen it past what mpCanRollSpawnWeapon() allows. Nothing
+ * selected means nothing handed out: a player who selected none of them meant
+ * it, and this is the one place that says so. Note that the empty case returns
+ * before the roll below, so peers must agree on the list or they consume a
+ * different number of rng draws - which is why RULES carries every row
+ * (netrules.c, protocol 35) rather than the 64 a u64 held.
  *
  * This is rolled per spawn, so it applies at the start of the match and again
  * on every respawn.
@@ -1475,9 +1729,11 @@ s32 mpGetSpawnWeapon(void)
 	}
 
 	// The roll is of the guns: a spawn holding a cloak or a scanner is a
-	// spawn unarmed, which is what Start Armed exists to prevent.
+	// spawn unarmed, which is what Start Armed exists to prevent. The curated
+	// list narrows it further - the rows the player took out of it are not
+	// offered, and a list held empty hands out nothing (count stays 0 below).
 	for (i = 0; i < ARRAYCOUNT(g_MpWeapons); i++) {
-		if (mpCanRollSpawnWeapon(&g_MpWeapons[i])) {
+		if (mpCanRollSpawnWeapon(&g_MpWeapons[i]) && g_MpWeaponSetRandomFilters[i]) {
 			count++;
 		}
 	}
@@ -1491,12 +1747,827 @@ s32 mpGetSpawnWeapon(void)
 	count = rngRandom() % count;
 
 	for (i = 0; i < ARRAYCOUNT(g_MpWeapons); i++) {
-		if (mpCanRollSpawnWeapon(&g_MpWeapons[i]) && count-- == 0) {
+		if (mpCanRollSpawnWeapon(&g_MpWeapons[i]) && g_MpWeaponSetRandomFilters[i] && count-- == 0) {
 			return i;
 		}
 	}
 
 	return -1;
+}
+
+extern u64 g_RngSeed;
+
+/**
+ * What Start Armed's Random has to get right, run once at startup under
+ * --test-randomgroups (mpweaponfilters.c has the store's half).
+ *
+ * It lives here because the roll's candidate test, mpCanRollSpawnWeapon(), is
+ * private to this file, and because the second check is the one the netcode
+ * depends on: a curated list with nothing on it returns before the roll, so it
+ * consumes nothing of the stage's rng (netplay.md: the split stream). A peer who
+ * drew anyway would arm differently from its host and fall out of step with a
+ * match that has to agree with itself.
+ *
+ * g_RngSeed is the stream; player.c borrows the same trick to keep one roll off
+ * it (playerAntiRetryTick). The curated list and the rule are put back after.
+ */
+void mpRandomRollSelfTest(void)
+{
+	u8 save[NUM_MPWEAPONS];
+	s32 candidates[NUM_MPWEAPONS];
+	s32 numcandidates = 0;
+	s32 checks = 0;
+	s32 failed = 0;
+	s32 spawnweaponkeep = g_ModOptions.spawnweapon;
+	s32 i;
+	s32 n;
+
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		save[i] = g_MpWeaponSetRandomFilters[i];
+
+		if (mpCanRollSpawnWeapon(&g_MpWeapons[i])) {
+			candidates[numcandidates++] = i;
+		}
+	}
+
+	g_ModOptions.spawnweapon = SPAWNWEAPON_RANDOM;
+
+	if (numcandidates == 0) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL no gun on this table can be rolled");
+		goto done;
+	}
+
+	// One gun kept, everything else taken out: whatever the roll does, it can
+	// only answer with that one
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		g_MpWeaponSetRandomFilters[i] = 0;
+	}
+
+	g_MpWeaponSetRandomFilters[candidates[0]] = 1;
+
+	for (n = 0; n < 200; n++) {
+		if (mpGetSpawnWeapon() != candidates[0]) {
+			break;
+		}
+	}
+
+	checks++;
+	if (n == 200) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a list of one gun is all the roll draws from");
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a list of one gun rolled row %d of %d, not %d",
+				mpGetSpawnWeapon(), n, candidates[0]);
+		failed++;
+	}
+
+	// Nothing kept: no gun, and no draw from the stage's rng either
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		g_MpWeaponSetRandomFilters[i] = 0;
+	}
+
+	{
+		u64 rngkeep = g_RngSeed;
+
+		checks++;
+		if (mpGetSpawnWeapon() == -1 && g_RngSeed == rngkeep) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a list of none arms nobody and takes no rng");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a list of none answered %d and moved the stream",
+					mpGetSpawnWeapon());
+			failed++;
+		}
+	}
+
+	// Everything back the way the table has it: every answer is a gun the table
+	// offers, which is what the list is only ever allowed to narrow
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		g_MpWeaponSetRandomFilters[i] = 1;
+	}
+
+	{
+		bool ok = true;
+		u64 rngbefore = g_RngSeed;
+
+		for (n = 0; n < 200 && ok; n++) {
+			s32 rolled = mpGetSpawnWeapon();
+
+			ok = rolled >= 0 && rolled < NUM_MPWEAPONS && mpCanRollSpawnWeapon(&g_MpWeapons[rolled]);
+		}
+
+		// The check above about taking no rng is worth nothing if a roll never
+		// moves the stream either, so say here that one that does roll does move it
+		checks++;
+		if (g_RngSeed != rngbefore) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a roll that answers does take from the stream");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a roll that answers left the stream alone, so the empty-list check proves nothing");
+			failed++;
+		}
+
+		checks++;
+		if (ok) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   the whole table rolled only guns");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL the whole table rolled a row it should not");
+			failed++;
+		}
+	}
+
+done:
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		g_MpWeaponSetRandomFilters[i] = save[i];
+	}
+
+	g_ModOptions.spawnweapon = spawnweaponkeep;
+
+	if (failed == 0) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: all %d roll checks as expected", checks);
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: %d of %d roll checks as expected: %d FAILED",
+				checks - failed, checks, failed);
+	}
+}
+
+/**
+ * What the weapon slots the player made random have to get right, run once at
+ * startup under --test-randomgroups.
+ *
+ * These are the halves that were not visible from the store or the roll alone:
+ *
+ *   a slot made random holds a row of its group, and rolls nothing else - and
+ *   never a row the slot's own dropdown would not have offered, which is the
+ *   lesson of Select Dark picking up guns it was named for not being;
+ *   a group with nothing in it leaves the slot empty, and takes no draw, as an
+ *   empty curated list arms nobody (both are the same rule about not consuming a
+ *   peer's rng);
+ *   a slot written by hand, or by the game's own Random set, or by the check at
+ *   mpReset, stops claiming a group - the page lying is the only failure this
+ *   design can have, and it cannot be seen in the arena;
+ *   and the clamp in mpGetMpWeaponByLocation() catches a marker that escaped into
+ *   the array the arena reads, which is the crash this design exists to avoid.
+ *
+ * Groups are saved through the store, into the scratch file main.c pointed it at
+ * (mpWeaponFiltersTestFile), and the table's rows are moved along one to show a
+ * group follows its guns rather than the rows they were in - the bijection the
+ * store's own test uses, since a mod's import rewrites the table from the top.
+ */
+void mpRandomSlotSelfTest(void)
+{
+	s32 candidates[NUM_MPWEAPONS];
+	s32 rows[NUM_MPWEAPONS];
+	s32 seen[NUM_MPWEAPONS];
+	s32 slotkeep[NUM_MPWEAPONSLOTS];
+	u8 listkeep[NUM_MPWEAPONS];
+	u8 gunkeep[NUM_MPWEAPONS];
+	s32 numcandidates = 0;
+	s32 numunoffered = 0;
+	s32 checks = 0;
+	s32 failed = 0;
+	s32 setnumkeep = g_MpWeaponSetNum;
+	s32 two;
+	s32 every;
+	s32 empty;
+	s32 i;
+	s32 n;
+
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		listkeep[i] = g_MpWeaponSetRandomFilters[i];
+		gunkeep[i] = g_MpWeapons[i].weaponnum;
+
+		if (mpCanRollWeaponSlot(&g_MpWeapons[i])) {
+			candidates[numcandidates++] = i;
+		} else {
+			numunoffered++;
+		}
+	}
+
+	for (i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+		slotkeep[i] = g_MpSetup.weapons[i];
+	}
+
+	if (numcandidates < 2 || numunoffered == 0) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL the table offers %d rows and hides %d: a slot needs 2 to draw and 1 hidden to prove it does not",
+				numcandidates, numunoffered);
+		return;
+	}
+
+	// A group of exactly two rows the menu offers, and one of nothing at all
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		g_MpWeaponSetRandomFilters[i] = 0;
+	}
+
+	g_MpWeaponSetRandomFilters[candidates[0]] = 1;
+	g_MpWeaponSetRandomFilters[candidates[1]] = 1;
+	two = mpWeaponFiltersSave("Slot test");
+
+	// Every row the table has, offered or not: the check below asks that the roll
+	// still keeps to the offered ones
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		g_MpWeaponSetRandomFilters[i] = 1;
+	}
+
+	every = mpWeaponFiltersSave("Slot test all");
+
+	// And nothing at all, which is a thing a player can save
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		g_MpWeaponSetRandomFilters[i] = 0;
+	}
+
+	empty = mpWeaponFiltersSave("Slot test none");
+
+	checks++;
+	if (two >= 0 && empty >= 0 && mpWeaponFilterRows(two, rows, ARRAYCOUNT(rows)) == 2
+			&& rows[0] == candidates[0] && rows[1] == candidates[1]) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a group of two rows comes back as those two rows");
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a group of two rows did not come back as them (saved %d, %d row(s))",
+				two, mpWeaponFilterRows(two, rows, ARRAYCOUNT(rows)));
+		failed++;
+	}
+
+	// Made random: the marker is set and a real gun stands in for it, because the
+	// page claims the group from the press onwards
+	mpSetWeaponSlotRandom(0, two);
+
+	checks++;
+	if (mpGetWeaponSlotGroup(0) == two
+			&& (g_MpSetup.weapons[0] == candidates[0] || g_MpSetup.weapons[0] == candidates[1])) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a slot made random holds a row of its group");
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a slot made random holds row %d with marker %d, not one of its group's",
+				g_MpSetup.weapons[0], mpGetWeaponSlotGroup(0));
+		failed++;
+	}
+
+	// Rolled: only its group's rows, and both of them, so it is a draw and not the
+	// placeholder that never moved
+	{
+		bool ok = true;
+		s32 distinct = 0;
+
+		for (n = 0; n < ARRAYCOUNT(seen); n++) {
+			seen[n] = 0;
+		}
+
+		for (n = 0; n < 200 && ok; n++) {
+			s32 rolled;
+
+			mpRollRandomWeaponSlots();
+			rolled = g_MpSetup.weapons[0];
+
+			if (rolled != candidates[0] && rolled != candidates[1]) {
+				ok = false;
+				break;
+			}
+
+			if (seen[rolled] == 0) {
+				seen[rolled] = 1;
+				distinct++;
+			}
+		}
+
+		checks++;
+		if (ok && distinct == 2) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   the slot draws twice from a group of two");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL the slot of a group of two rolled row %d after %d rolls, %d distinct",
+					g_MpSetup.weapons[0], n, distinct);
+			failed++;
+		}
+	}
+
+	// A group of every row: never a row the slot's dropdown would not have offered.
+	// numunoffered above is what keeps this from passing by having nothing to catch
+	{
+		bool ok = true;
+		s32 bad = -1;
+
+		mpSetWeaponSlotRandom(1, every);
+
+		for (n = 0; n < 400 && ok; n++) {
+			s32 rolled;
+
+			mpRollRandomWeaponSlots();
+			rolled = g_MpSetup.weapons[1];
+
+			if (!challengeIsFeatureUnlocked(g_MpWeapons[rolled].unlockfeature)
+					|| weaponHost(g_MpWeapons[rolled].weaponnum) == WEAPON_DISABLED) {
+				ok = false;
+				bad = rolled;
+			}
+		}
+
+		checks++;
+		if (ok) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a group of every row never rolls a row the menu hides (%d hidden here)",
+					numunoffered);
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a group of every row rolled row %d, which the menu does not offer", bad);
+			failed++;
+		}
+	}
+
+	/**
+	 * A group with nothing in it leaves the slot empty and takes no draw - the same
+	 * rule as an empty curated list (mpGetSpawnWeapon), and for the same reason: a
+	 * peer that drew anyway would fall out of step with the stage's stream.
+	 */
+	{
+		u64 rngkeep;
+
+		// Only this slot marked: the roll answers for all six, and any other one
+		// still marked would draw and make the stream move behind the check's back
+		mpClearWeaponSlotGroups();
+		mpSetWeaponSlotRandom(2, empty);
+		rngkeep = g_RngSeed;
+
+		mpRollRandomWeaponSlots();
+
+		checks++;
+		if (g_MpSetup.weapons[2] == MPWEAPON_NONE && g_RngSeed == rngkeep && mpGetWeaponSlotGroup(2) == empty) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a group with nothing in it fills nobody and takes no rng");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a group with nothing in it filled slot 3 with row %d and moved the stream",
+					g_MpSetup.weapons[2]);
+			failed++;
+		}
+	}
+
+	/**
+	 * The page cannot be allowed to lie. Each of these writes a slot for a reason -
+	 * a hand pick, the game's Random set over the arena, a slot that stopped holding
+	 * its own roll - and the marker has to go with it.
+	 */
+	mpSetWeaponSlot(3, 1);
+
+	checks++;
+	if (mpGetWeaponSlotGroup(3) == -1) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: ok   putting a gun in a slot by hand retires its group");
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a slot the player set by hand still claims a group");
+		failed++;
+	}
+
+	mpSetWeaponSlotRandom(0, two);
+	mpSetWeaponSlotRandom(1, two);
+	mpSetWeaponSlotRandom(2, two);
+	g_MpWeaponSetNum = WEAPONSET_RANDOM;
+	mpApplyWeaponSet();
+
+	checks++;
+	if (mpGetWeaponSlotGroup(0) == -1 && mpGetWeaponSlotGroup(1) == -1 && mpGetWeaponSlotGroup(2) == -1) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: ok   the game's Random set over the arena overwrites the random slots");
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL the Random set left random slots marked (%d, %d, %d)",
+				mpGetWeaponSlotGroup(0), mpGetWeaponSlotGroup(1), mpGetWeaponSlotGroup(2));
+		failed++;
+	}
+
+	mpSetWeaponSlotRandom(0, two);
+	g_MpSetup.weapons[0] = g_MpSetup.weapons[0] == candidates[0] ? candidates[1] : candidates[0];
+	mpReconcileRandomWeaponSlots();
+
+	checks++;
+	if (mpGetWeaponSlotGroup(0) == -1) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a slot holding someone else's gun stops claiming a group");
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a slot holding a gun the roll did not put there still claims a group");
+		failed++;
+	}
+
+	mpSetWeaponSlotRandom(0, two);
+	mpReconcileRandomWeaponSlots();
+
+	checks++;
+	if (mpGetWeaponSlotGroup(0) == two) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a slot still holding its own roll keeps its group");
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a slot holding its own roll lost its group at a stage change");
+		failed++;
+	}
+
+	// The clamp: a marker that escaped into the array the arena reads is memory
+	// rather than a gun, so it says so and fills the location with Nothing
+	g_MpSetup.weapons[0] = (u8) (NUM_MPWEAPONS + 20);
+	mpGetMpWeaponByLocation(0);
+
+	checks++;
+	if (g_MpSetup.weapons[0] == MPWEAPON_NONE) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a weapon slot past the table is clamped, not indexed");
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a weapon slot past the table was left holding %d",
+				g_MpSetup.weapons[0]);
+		failed++;
+	}
+
+	/**
+	 * A group follows its guns, not the rows they were in, when the thing asking is
+	 * a slot rather than the page: every row's weapon number moved along one, which
+	 * is the shape of what a mod's import does to the table (moddata.c), and the rows
+	 * the group names are now elsewhere.
+	 *
+	 * Asked of the rows rather than of a draw, because the shift moves what each row
+	 * is too - a GoldenEye gun landing on a row that is not unlocked is no longer a
+	 * row the slot may take - and a draw that answered with the one row still legal
+	 * would prove nothing either way.
+	 */
+	{
+		s32 after[NUM_MPWEAPONS];
+		u8 gun0 = g_MpWeapons[candidates[0]].weaponnum;
+		u8 gun1 = g_MpWeapons[candidates[1]].weaponnum;
+		s32 nbefore;
+		s32 nafter;
+		s32 elsewhere = 0;
+		bool ok = true;
+
+		nbefore = mpWeaponFilterRows(two, rows, ARRAYCOUNT(rows));
+
+		for (i = ARRAYCOUNT(g_MpWeapons) - 1; i > 0; i--) {
+			g_MpWeapons[i].weaponnum = g_MpWeapons[i - 1].weaponnum;
+		}
+
+		nafter = mpWeaponFilterRows(two, after, ARRAYCOUNT(after));
+
+		/**
+		 * Not the same number of rows: the shift copies each row's gun into the row
+		 * below, so a gun the group names is now in two rows and the group names both -
+		 * which is what "select this gun" means here. What has to hold is that every row
+		 * it names holds one of the group's two guns, and that it found them somewhere
+		 * other than the rows it was saved from.
+		 */
+		for (i = 0; i < nafter && ok; i++) {
+			bool saved = false;
+
+			if (g_MpWeapons[after[i]].weaponnum != gun0 && g_MpWeapons[after[i]].weaponnum != gun1) {
+				ok = false;
+				break;
+			}
+
+			for (s32 j = 0; j < nbefore; j++) {
+				if (after[i] == rows[j]) {
+					saved = true;
+				}
+			}
+
+			if (!saved) {
+				elsewhere++;
+			}
+		}
+
+		checks++;
+		if (ok && elsewhere > 0) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a shifted table still names the group's two guns, in other rows");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a shifted table named %d row(s) for a group of %d, %d of them elsewhere",
+					nafter, nbefore, elsewhere);
+			failed++;
+		}
+	}
+
+	/**
+	 * Random Five's sixth slot is the Disabled row, by name rather than as the last
+	 * option the list offers - which on a GoldenEye stage list is GoldenEye's
+	 * remote mine, and that is the report this answers (mpGetDisabledWeaponRow).
+	 *
+	 * Asked with a row above Disabled unlocked, because on this table with nothing
+	 * else unlocked "the last unlocked row" and "the Disabled row" are the same row
+	 * and the check would prove nothing.
+	 */
+	{
+		const s32 disabledrow = mpGetDisabledWeaponRow();
+		const u8 unlockkeep = g_MpWeapons[MPWEAPON_GE_FIRST].unlockfeature;
+		s32 five[NUM_MPWEAPONSLOTS];
+		s32 filled = -1;
+
+		for (i = 0; i < NUM_MPWEAPONS; i++) {
+			g_MpWeaponSetRandomFilters[i] = mpCanRollWeaponSlot(&g_MpWeapons[i]) ? 1 : 0;
+		}
+
+		g_MpWeapons[MPWEAPON_GE_FIRST].unlockfeature = 0;
+		g_MpWeaponSetNum = WEAPONSET_RANDOMFIVE;
+		mpApplyWeaponSet();
+		g_MpWeapons[MPWEAPON_GE_FIRST].unlockfeature = unlockkeep;
+
+		for (i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+			five[i] = g_MpSetup.weapons[i];
+		}
+
+		for (i = 0; i < NUM_MPWEAPONSLOTS - 1; i++) {
+			if (five[i] == (u8) disabledrow) {
+				filled = i;
+			}
+		}
+
+		checks++;
+		if (disabledrow >= 0 && five[NUM_MPWEAPONSLOTS - 1] == (u8) disabledrow && filled < 0) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   Random Five's sixth slot is the Disabled row with a row above it unlocked, and the five it fills are not");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL Random Five left the sixth slot row %d holding gun %d, with row %d unlocked (the Disabled row is %d, %s)",
+					five[NUM_MPWEAPONSLOTS - 1], g_MpWeapons[five[NUM_MPWEAPONSLOTS - 1]].weaponnum,
+					MPWEAPON_GE_FIRST, disabledrow,
+					filled < 0 ? "no filled slot took it either" : "a slot it filled took it");
+			failed++;
+		}
+	}
+
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		g_MpWeapons[i].weaponnum = gunkeep[i];
+		g_MpWeaponSetRandomFilters[i] = listkeep[i];
+	}
+
+	mpWeaponFiltersDelete(mpWeaponFiltersFind("Slot test none"));
+	mpWeaponFiltersDelete(mpWeaponFiltersFind("Slot test all"));
+	mpWeaponFiltersDelete(mpWeaponFiltersFind("Slot test"));
+	mpClearWeaponSlotGroups();
+	g_MpWeaponSetNum = setnumkeep;
+
+	for (i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+		g_MpSetup.weapons[i] = (u8) slotkeep[i];
+	}
+
+	if (failed == 0) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: all %d slot checks as expected", checks);
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: %d of %d slot checks as expected: %d FAILED", checks - failed, checks, failed);
+	}
+}
+
+/**
+ * What the curated list's trip through a saved setup has to get right, run once
+ * at startup under --test-randomgroups.
+ *
+ * Versions up to 3 wrote the list into a u64, and a u64 cannot hold this fork's
+ * table: the rows past the 64th - GoldenEye's guns 16 to 24, a ROM hack's own
+ * pistols, the cheat guns - came back as whatever the boot default had put
+ * there, so a list that deselected one of them silently selected it again after
+ * a restart. The format grew for that (MPSETUP_VERSION_RANDOMFILTERS), and these
+ * are the halves of the job the new number has to do:
+ *
+ *   a list that deselected something past row 63 is written in the new layout
+ *   and reads back exactly (mpNeedsWideRandomFilters is what asks for it);
+ *   a list that touched nothing there is still written in the old one, since the
+ *   older layouts stay readable by other builds exactly as long as they lose
+ *   nothing - and it reads back the same rows all the same;
+ *   and a block does not grow past what MPSETUP_BLOCKSIZE holds, which the guard
+ *   at the end of mpsetupfileSaveWad() says out loud instead of writing past it.
+ *
+ * Reading a block decodes into the live globals, like everything else that
+ * touches these (mpsetups.c), so the live setup is written out first and put
+ * back at the end.
+ */
+void mpRandomSetupFileSelfTest(void)
+{
+	struct savebuffer live;
+	struct savebuffer written;
+	struct savebuffer readback;
+	u8 save[NUM_MPWEAPONS];
+	s32 setnumkeep = g_MpWeaponSetNum;
+	s32 checks = 0;
+	s32 failed = 0;
+	s32 i;
+
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		save[i] = g_MpWeaponSetRandomFilters[i];
+	}
+
+	/*
+	 * Custom, which is the only state in which a slot can be random: with a set of
+	 * the game's the six rows belong to that set, and the page will not let a slot be
+	 * pointed at a group at all (mpWeaponSlotsEditable). It matters here because the
+	 * load ends in challengeDetermineUnlockedFeatures(), which re-applies the set
+	 * whenever it is one of the game's - so a load of a saved setup would answer the
+	 * checks below with the set's own guns rather than the file's, and the marker
+	 * with it (this is what --test-randomgroups first caught).
+	 */
+	g_MpWeaponSetNum = WEAPONSET_CUSTOM;
+
+	savebufferClear(&live);
+	mpsetupfileSaveWad(&live, MPSETUP_VERSION_LATEST);
+
+	// One row past the u64's reach taken out: this is the state the old layout
+	// could not say anything about
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		g_MpWeaponSetRandomFilters[i] = 1;
+	}
+
+	g_MpWeaponSetRandomFilters[NUM_MPWEAPONS - 1] = 0;
+
+	checks++;
+	if (mpNeedsWideRandomFilters()) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a list with a GoldenEye row off asks for the new format");
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a list with a GoldenEye row off did not ask for the new format");
+		failed++;
+	}
+
+	// Written in one block and read from a copy in another: savebufferClear()
+	// zeroes the bytes as well as the bit position, so the block has to be moved
+	// across before it is decoded (mpsetups.c does exactly this to restore a live
+	// setup after decoding a stored one)
+	savebufferClear(&written);
+	mpsetupfileSaveWad(&written, MPSETUP_VERSION_LATEST);
+	savebufferClear(&readback);
+	memcpy(readback.bytes, written.bytes, MPSETUP_BLOCKSIZE);
+	mpsetupfileLoadWad(&readback, MPSETUP_VERSION_LATEST);
+
+	{
+		bool back = true;
+
+		for (i = 0; i < NUM_MPWEAPONS; i++) {
+			if (g_MpWeaponSetRandomFilters[i] != (i == NUM_MPWEAPONS - 1 ? 0 : 1)) {
+				back = false;
+			}
+		}
+
+		checks++;
+		if (back) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   and reads back with every row it wrote");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL the new format lost a row of the list");
+			failed++;
+		}
+	}
+
+	// Nothing past row 63 touched: the older layout still holds it, and holds it
+	// exactly - the rows it cannot name are the ones nothing can select off
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		g_MpWeaponSetRandomFilters[i] = 1;
+	}
+
+	checks++;
+	if (!mpNeedsWideRandomFilters()) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a list that touched nothing there stays in the old format");
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a list that touched nothing there asked for the new format");
+		failed++;
+	}
+
+	savebufferClear(&written);
+	mpsetupfileSaveWad(&written, MPSETUP_VERSION_SIMSTATS);
+	savebufferClear(&readback);
+	memcpy(readback.bytes, written.bytes, MPSETUP_BLOCKSIZE);
+	mpsetupfileLoadWad(&readback, MPSETUP_VERSION_SIMSTATS);
+
+	{
+		bool back = true;
+
+		for (i = 0; i < NUM_MPWEAPONS; i++) {
+			if (g_MpWeaponSetRandomFilters[i] != 1) {
+				back = false;
+			}
+		}
+
+		checks++;
+		if (back) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   the old format reads back the rows it can and fills the rest");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL the old format lost a row of the list");
+			failed++;
+		}
+	}
+
+	/**
+	 * A slot the player made random, through a block and back.
+	 *
+	 * The group is made here rather than borrowed from the store's own test, so that
+	 * this half says what it means whatever order the halves run in, and deleted at
+	 * the end for the same reason.
+	 */
+	{
+		struct savebuffer kept;
+		s32 group;
+		s32 rolled;
+
+		for (i = 0; i < NUM_MPWEAPONS; i++) {
+			g_MpWeaponSetRandomFilters[i] = 1;
+		}
+
+		group = mpWeaponFiltersSave("Setup test");
+		mpSetWeaponSlotRandom(2, group);
+		rolled = g_MpSetup.weapons[2];
+
+		// Not that the slot holds a gun rather than Nothing: row 0 is the "Nothing"
+		// row, and a slot may well be set to it - the question here is only whether
+		// the setup knows it has to remember a random slot at all
+		checks++;
+		if (group >= 0 && mpGetWeaponSlotGroup(2) == group && mpNeedsSlotGroups()) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a setup with a random slot asks for the format that holds it");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a setup with a random slot did not ask for the new format (group %d, slot marker %d)",
+					group, mpGetWeaponSlotGroup(2));
+			failed++;
+		}
+
+		savebufferClear(&written);
+		mpsetupfileSaveWad(&written, MPSETUP_VERSION_LATEST);
+
+		checks++;
+		if (written.bitpos <= MPSETUP_BLOCKSIZE * 8) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a version %d block needs %d of the %d bits it has",
+					MPSETUP_VERSION_LATEST, written.bitpos, MPSETUP_BLOCKSIZE * 8);
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a version %d block needs %d bits and MPSETUP_BLOCKSIZE holds %d",
+					MPSETUP_VERSION_LATEST, written.bitpos, MPSETUP_BLOCKSIZE * 8);
+			failed++;
+		}
+
+		savebufferClear(&readback);
+		memcpy(readback.bytes, written.bytes, MPSETUP_BLOCKSIZE);
+		mpsetupfileLoadWad(&readback, MPSETUP_VERSION_LATEST);
+
+		checks++;
+		if (mpGetWeaponSlotGroup(2) == group && g_MpSetup.weapons[2] == rolled) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a random slot comes back from a saved setup as the slot it was");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a random slot came back as marker %d holding row %d, not %d",
+					mpGetWeaponSlotGroup(2), g_MpSetup.weapons[2], rolled);
+			failed++;
+		}
+
+		/*
+		 * A set of the game's owns all six rows, so pointing the setup at one retires
+		 * every random slot it had: the marker would go on claiming a group for a row
+		 * the set chose, and the next match would swap the gun the player can see for
+		 * another one behind the row. This is not only a menu thing -
+		 * challengeDetermineUnlockedFeatures() re-applies the set at the end of every
+		 * setup load, so a file and a live setup can disagree about a slot even when
+		 * both were written honestly, which is what this check caught first time.
+		 * Back to Custom afterwards: every decode below re-applies whatever set number
+		 * it decodes.
+		 */
+		g_MpWeaponSetNum = 0;
+		mpApplyWeaponSet();
+
+		checks++;
+		if (mpGetWeaponSlotGroup(2) == -1) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a set of the game's retires the random slot");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a set of the game's left slot 2 claiming group %d",
+					mpGetWeaponSlotGroup(2));
+			failed++;
+		}
+
+		g_MpWeaponSetNum = WEAPONSET_CUSTOM;
+
+		// Written in the older layout, the randomness is not there - and the decode
+		// says so rather than leaving whatever the last block decoded had left in it,
+		// which is what would otherwise let one stored setup borrow another's slots
+		// through mpsetupReencodeBlocks (mpsetups.c). Done after the checks above, so
+		// that decoding this block does not clear the markers the block above is meant
+		// to have been written with.
+		savebufferClear(&kept);
+		memcpy(kept.bytes, written.bytes, MPSETUP_BLOCKSIZE);
+
+		savebufferClear(&written);
+		mpsetupfileSaveWad(&written, MPSETUP_VERSION_RANDOMFILTERS);
+		savebufferClear(&readback);
+		memcpy(readback.bytes, written.bytes, MPSETUP_BLOCKSIZE);
+		mpsetupfileLoadWad(&readback, MPSETUP_VERSION_RANDOMFILTERS);
+
+		checks++;
+		if (mpGetWeaponSlotGroup(2) == -1) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a block that cannot hold a random slot clears the markers");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a block of the older layout left a slot claiming a group");
+			failed++;
+		}
+
+		// The two files are saved apart, so a setup can name a group that is gone. The
+		// slot keeps the gun the group last rolled, which is a sensible thing for it to
+		// hold, and the page stops claiming the group.
+		mpWeaponFiltersDelete(group);
+		savebufferClear(&readback);
+		memcpy(readback.bytes, kept.bytes, MPSETUP_BLOCKSIZE);
+		mpsetupfileLoadWad(&readback, MPSETUP_VERSION_LATEST);
+
+		checks++;
+		if (mpGetWeaponSlotGroup(2) == -1 && g_MpSetup.weapons[2] == rolled) {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: ok   a setup naming a deleted group keeps its gun and drops the claim");
+		} else {
+			sysLogPrintf(LOG_NOTE, "randomgroups test: FAIL a setup naming a deleted group decoded as marker %d holding row %d",
+					mpGetWeaponSlotGroup(2), g_MpSetup.weapons[2]);
+			failed++;
+		}
+
+	}
+
+	// The live setup back, from the block written before any of this was touched
+	savebufferClear(&readback);
+	memcpy(readback.bytes, live.bytes, MPSETUP_BLOCKSIZE);
+	mpsetupfileLoadWad(&readback, MPSETUP_VERSION_LATEST);
+
+	g_MpWeaponSetNum = setnumkeep;
+
+	for (i = 0; i < NUM_MPWEAPONS; i++) {
+		g_MpWeaponSetRandomFilters[i] = save[i];
+	}
+
+	if (failed == 0) {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: all %d save checks as expected", checks);
+	} else {
+		sysLogPrintf(LOG_NOTE, "randomgroups test: %d of %d save checks as expected: %d FAILED",
+				checks - failed, checks, failed);
+	}
 }
 
 s32 mpGetNumWeaponOptions(void)
@@ -1555,6 +2626,57 @@ const char var7f1b8a5c[] = "Gun index %d -> slot %d = gun %d\n\n";
 const char var7f1b8a80[] = "HOLDER: selecting weapon set %d\n";
 #endif
 
+/*
+ * The table's Disabled row, by the gun it is rather than by its place in the
+ * list. Its place in the list is what used to be asked for, and that is only
+ * Disabled while the disabled row is the last unlocked one: with GoldenEye's
+ * guns listed the last unlocked row is 0x49, GoldenEye's remote mine
+ * (geguns.c), which is how Random Five's sixth slot came to be a GoldenEye
+ * Remote Mine on a GoldenEye stage list.
+ *
+ * MPWEAPON_DISABLED names where the stock table keeps it, and a mod's import
+ * writes the table from its top (moddata.c), so it is looked for by the gun it
+ * holds.
+ */
+static s32 mpGetDisabledWeaponRow(void)
+{
+	s32 i;
+
+	for (i = 0; i < (s32) ARRAYCOUNT(g_MpWeapons); i++) {
+		if (weaponHost(g_MpWeapons[i].weaponnum) == WEAPON_DISABLED) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+/**
+ * A slot filled by row, rather than by the nth gun the page offers.
+ *
+ * mpSetWeaponSlot() takes an option index, so anything that already knows
+ * which row it wants has to count the rows around it to say so - and the count
+ * is the thing that goes wrong (mpGetDisabledWeaponRow).
+ */
+void mpSetWeaponSlotRow(s32 slot, s32 row)
+{
+	if (slot < 0 || slot >= (s32) ARRAYCOUNT(g_MpSetup.weapons)) {
+		return;
+	}
+
+	if (row < 0 || row >= (s32) ARRAYCOUNT(g_MpWeapons)) {
+		sysLogPrintf(LOG_WARNING, "mp: weapon slot %d asked for row %d, which the table does not have", slot, row);
+		row = MPWEAPON_NONE;
+	}
+
+	g_MpSetup.weapons[slot] = (u8) row;
+
+#ifndef PLATFORM_N64
+	// As mpSetWeaponSlot(): a row put here by hand is not a random one
+	mpSetWeaponSlotGroup(slot, -1);
+#endif
+}
+
 void mpSetWeaponSlot(s32 slot, s32 mpweaponnum)
 {
 	s32 optionindex = mpweaponnum;
@@ -1569,6 +2691,14 @@ void mpSetWeaponSlot(s32 slot, s32 mpweaponnum)
 	}
 
 	g_MpSetup.weapons[slot] = optionindex;
+
+#ifndef PLATFORM_N64
+	// The player put a gun in this slot by hand, so it is not a random one. This is
+	// the one path a hand edit takes, which is what keeps the six markers and the six
+	// slots from drifting apart: the Random and Random Five sets, the page's dropdown,
+	// and a mod's fill all come through here.
+	mpSetWeaponSlotGroup(slot, -1);
+#endif
 }
 
 s32 mpGetWeaponSlot(s32 slot)
@@ -1594,6 +2724,19 @@ struct mpweapon *mpGetMpWeaponByLocation(s32 locationindex)
 
 	while (v0 > 0) {
 		mpweaponnum = g_MpSetup.weapons[slot];
+
+#ifndef PLATFORM_N64
+		// A slot names a row of this table, whatever wrote it. Something past the end
+		// can only be a random slot's marker that escaped into the array it must never
+		// reach (s_MpWeaponSlotGroup), and indexing the table there is memory rather
+		// than a gun - so say so, and fill the location with Nothing.
+		if (mpweaponnum >= ARRAYCOUNT(g_MpWeapons)) {
+			sysLogPrintf(LOG_ERROR, "mpGetMpWeaponByLocation: slot %d holds %d, past the %d rows of the weapon table",
+					slot, mpweaponnum, ARRAYCOUNT(g_MpWeapons));
+			mpweaponnum = MPWEAPON_NONE;
+			g_MpSetup.weapons[slot] = MPWEAPON_NONE;
+		}
+#endif
 
 		if (weaponHost(g_MpWeapons[mpweaponnum].weaponnum) != WEAPON_DISABLED) {
 			v0--;
@@ -1889,6 +3032,49 @@ void mpApplyWeaponSet(void)
 
 				g_MpSetup.weapons[i] = mpweaponnum;
 			}
+
+#ifndef PLATFORM_N64
+			/*
+			 * The set named six guns and wrote every one of them, so every random slot
+			 * this setup had is over: the marker would claim a group for a row the set
+			 * now owns, and the next roll would move a row the player can see is the
+			 * set's. So the clear is not inside the test below - a set of the game's
+			 * would otherwise leave a marker sitting on its own choice, which is what
+			 * --test-randomgroups caught: challengeDetermineUnlockedFeatures() re-applies
+			 * the set at the end of every setup load, so the stale marker came back with
+			 * the load rather than with the save.
+			 *
+			 * Then the player's own set puts back the slots it was saved with, which is
+			 * all a saved set keeps beyond its six guns (mpweaponsets.c). Resolved by
+			 * name, here rather than stored as a row: the group may have been deleted, or
+			 * belong to a mod that is not mounted now, and then the set plays the gun it
+			 * stored, once said.
+			 */
+			mpClearWeaponSlotGroups();
+
+			if (mpWeaponSetIsPlayerOwn(g_MpWeaponSetNum)) {
+
+				for (s32 slot = 0; slot < NUM_MPWEAPONSLOTS; slot++) {
+					const char *name = mpWeaponSetsGroupFor(g_MpWeaponSetNum, slot);
+					s32 group;
+
+					if (name[0] == '\0') {
+						continue;
+					}
+
+					group = mpWeaponFiltersFind(name);
+
+					if (group < 0) {
+						sysLogPrintf(LOG_NOTE, "weapon set: %s keeps a random slot from a group called %s, which is gone: the slot plays the gun the set stored",
+								langGet(g_MpWeaponSets[g_MpWeaponSetNum].name), name);
+						continue;
+					}
+
+					s_MpWeaponSlotGroup[slot] = (s8) group;
+					s_MpWeaponSlotRolled[slot] = g_MpSetup.weapons[slot];
+				}
+			}
+#endif
 		}
 	} else if (g_MpWeaponSetNum == WEAPONSET_RANDOM) {
 #ifdef PLATFORM_N64
@@ -1917,7 +3103,23 @@ void mpApplyWeaponSet(void)
 		}
 #endif
 
-		mpSetWeaponSlot(i, mpGetNumWeaponOptions() - 1);
+		/**
+		 * The sixth slot of Random Five is the one the set does not fill, and the
+		 * page says Disabled for it. It was written as the last option in the list,
+		 * which is the disabled row only while that row is the last unlocked one -
+		 * with GoldenEye's guns listed it is GoldenEye's remote mine, which is what
+		 * players found standing in the slot on a GoldenEye stage list.
+		 */
+		{
+			const s32 disabledrow = mpGetDisabledWeaponRow();
+
+			if (disabledrow >= 0) {
+				mpSetWeaponSlotRow(i, disabledrow);
+			} else {
+				sysLogPrintf(LOG_WARNING, "mp: the weapon table has no Disabled row: Random Five leaves slot %d the last option it has", i);
+				mpSetWeaponSlot(i, mpGetNumWeaponOptions() - 1);
+			}
+		}
 	}
 }
 
@@ -5014,6 +6216,14 @@ void mpApplyConfig(struct mpconfigfull *config)
 
 	g_MpSetup = config->config.setup;
 
+#ifndef PLATFORM_N64
+	// A challenge record, a preset or a Load Settings hands over the six slots whole,
+	// and none of them has a notion of a slot being random. The markers are separate
+	// from that struct, so they have to be retired here: left standing, the page would
+	// go on naming a group for guns that arrived from a ROM record.
+	mpClearWeaponSlotGroups();
+#endif
+
 #if VERSION >= VERSION_PAL_FINAL
 	g_MpSetup.chrslots = chrslots;
 #endif
@@ -5108,9 +6318,19 @@ void mp0f18dec4(s32 slot)
 #endif
 }
 
-static u64 packWeaponSetRandomFilters()
+/**
+ * A saved setup's curated random weapon list, read.
+ *
+ * Version 4 and later store one bit per row of g_MpWeapons; this reads the
+ * older u64, which could only hold 64 of the fork's rows. The rows past its end
+ * are left as they stand rather than cleared: they were never in the file, and
+ * zeroing them would quietly unselect the GoldenEye guns for somebody whose
+ * setup predates them.
+ */
+static u64 packWeaponSetRandomFilters(void)
 {
 	u64 packed = 0;
+
 	for (int i = 0; i < NUM_MPWEAPONS && i < 64; ++i) {
 		packed |= g_MpWeaponSetRandomFilters[i] != 0 ? (1LL << i) : 0;
 	}
@@ -5123,6 +6343,27 @@ static void unpackWeaponSetRandomFilters(u64 packed)
 	for (int i = 0; i < NUM_MPWEAPONS && i < 64; ++i) {
 		g_MpWeaponSetRandomFilters[i] = (packed & (1LL << i)) != 0;
 	}
+}
+
+/**
+ * Whether a saved setup needs the version 4 layout of the curated list.
+ *
+ * Versions up to 3 hold one bit per row in a u64, so they can say nothing about
+ * the rows past the 64th - which in this fork are GoldenEye's guns 16 to 24, a
+ * ROM hack's own pistols and its cheat guns. Those rows select everything by
+ * default, so a setup that never touched them loses nothing in the old layout;
+ * one that deselected any of them does, and that is what this asks. Same shape
+ * as mpNeedsSimStats(): the oldest format that loses nothing of the live setup.
+ */
+bool mpNeedsWideRandomFilters(void)
+{
+	for (s32 i = 64; i < NUM_MPWEAPONS; i++) {
+		if (g_MpWeaponSetRandomFilters[i] == 0) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void mpsetupfileLoadWad(struct savebuffer *buffer, u8 version)
@@ -5207,9 +6448,25 @@ void mpsetupfileLoadWad(struct savebuffer *buffer, u8 version)
 		g_MpSetup.weapons[i] = savebufferReadBits(buffer, 7);
 	}
 
-	if (version > 0) {
-		u64 wpnRndPacked = savebufferReadBits(buffer, 64);
-		unpackWeaponSetRandomFilters(wpnRndPacked);
+	if (version >= MPSETUP_VERSION_RANDOMFILTERS) {
+		for (i = 0; i < NUM_MPWEAPONS; i++) {
+			g_MpWeaponSetRandomFilters[i] = (u8) savebufferReadBits(buffer, 1);
+		}
+	}
+	else {
+		if (version > 0) {
+			u64 wpnRndPacked = savebufferReadBits(buffer, 64);
+			unpackWeaponSetRandomFilters(wpnRndPacked);
+		}
+
+		// The rows the u64 could not hold are selected: that is the only state a
+		// file of this version could have been written for (mpNeedsWideRandomFilters
+		// writes v4 the moment any of them is not), and writing them here rather
+		// than leaving them keeps a decoded block equal to a live setup - the
+		// re-encode in mpsetups.c reads stored blocks back one after another.
+		for (i = 64; i < NUM_MPWEAPONS; i++) {
+			g_MpWeaponSetRandomFilters[i] = 1;
+		}
 	}
 
 	g_MpWeaponSetNum = savebufferReadBits(buffer, 8);
@@ -5238,6 +6495,50 @@ void mpsetupfileLoadWad(struct savebuffer *buffer, u8 version)
 
 			g_BotConfigsArray[i].stats[j] = value;
 		}
+	}
+
+	/*
+	 * Which of the six slots were random: the group each draws from, by name. Read
+	 * last, in the order mpsetupfileSaveWad writes them - the two halves of this
+	 * format are a pair of hands on the same bit stream, and reading them out of
+	 * step does not fail, it decodes somebody else's fields (which is what
+	 * --test-randomgroups found the first time this block was put above the stat
+	 * sliders instead of after them, as they are written).
+	 *
+	 * By name, and not by the group's number as the page and this file's own memory
+	 * form use it, because deleting a group shifts every number above it down: a
+	 * setup holding 3 would quietly start naming another group, which is the mistake
+	 * this fork has already paid for twice (weapon-sets.md, "the first entry"). A
+	 * name that no longer resolves - the two files are saved apart, so a player can
+	 * delete a group and keep an older setup - leaves the slot plain and keeps the
+	 * gun the group last rolled. Nothing is said about it.
+	 *
+	 * The store has to be loaded before any of this (main.c), since the answer is a
+	 * lookup in it.
+	 *
+	 * The else arm is not a formality. mpsetupReencodeBlocks() decodes one stored
+	 * block after another into these globals and writes each back at the newer
+	 * version, so a block that says nothing about the markers has to clear them, or
+	 * every block in the file comes back carrying the markers of whichever block was
+	 * decoded last (the same trap the curated list above documents).
+	 */
+	if (version >= MPSETUP_VERSION_SLOTGROUPS) {
+		for (i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+			char groupname[MPSETUP_MAXNAME + 1];
+			s32 group;
+
+			savebufferReadString_ext(buffer, groupname, false, sizeof(groupname));
+			groupname[MPSETUP_MAXNAME] = '\0';
+			group = groupname[0] != '\0' ? mpWeaponFiltersFind(groupname) : -1;
+			mpSetWeaponSlotGroup(i, group);
+
+			if (group >= 0) {
+				s_MpWeaponSlotRolled[i] = g_MpSetup.weapons[i];
+			}
+		}
+	}
+	else {
+		mpClearWeaponSlotGroups();
 	}
 
 	challengeForceUnlockBotFeatures();
@@ -5325,8 +6626,17 @@ void mpsetupfileSaveWad(struct savebuffer *buffer, u8 version)
 		savebufferOr(buffer, g_MpSetup.weapons[i], 7);
 	}
 
-	u64 wpnRndPacked = packWeaponSetRandomFilters();
-	savebufferOr(buffer, wpnRndPacked, 64);
+	if (version >= MPSETUP_VERSION_RANDOMFILTERS) {
+		// One bit per row, so that a table wider than a u64 keeps all of itself:
+		// every GoldenEye row, a ROM hack's own pistols and the cheat guns sit past
+		// the 64th, and a u64 here wrote none of them and read back the default
+		for (i = 0; i < NUM_MPWEAPONS; i++) {
+			savebufferOr(buffer, g_MpWeaponSetRandomFilters[i] != 0 ? 1 : 0, 1);
+		}
+	}
+	else {
+		savebufferOr(buffer, packWeaponSetRandomFilters(), 64);
+	}
 	savebufferOr(buffer, g_MpWeaponSetNum, 8);
 
 	savebufferOr(buffer, g_MpSetup.timelimit, 6);
@@ -5345,6 +6655,27 @@ void mpsetupfileSaveWad(struct savebuffer *buffer, u8 version)
 				savebufferOr(buffer, g_BotConfigsArray[i].stats[j] - BOTSTAT_MIN, BOTSTAT_BITS);
 			}
 		}
+	}
+
+	// Written last, and only when the setup asks for it (mpNeedsSlotGroups): which of
+	// the six slots were random, as the group each draws from. Empty for a slot that
+	// names a gun, which is the whole of what an ordinary slot has to say.
+	if (version >= MPSETUP_VERSION_SLOTGROUPS) {
+		for (i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+			const struct mpweaponfilterentry *entry;
+
+			entry = mpWeaponFiltersGet(mpGetWeaponSlotGroup(i));
+			savebufferWriteString_ext(buffer, entry != NULL ? (char *) entry->name : "", MPSETUP_MAXNAME + 1);
+		}
+	}
+
+	// A block is an opaque bit stream and savebufferOr() writes where it is told,
+	// so say out loud what MPSETUP_BLOCKSIZE has to cover: a setup that does not
+	// fit would otherwise be written straight past the end of it. Widening the
+	// curated list from a u64 to one bit per row is what asked for this.
+	if (buffer->bitpos > MPSETUP_BLOCKSIZE * 8) {
+		sysLogPrintf(LOG_ERROR, "mpsetup: a version %d block holds %d bits, this setup needs %d",
+				version, MPSETUP_BLOCKSIZE * 8, buffer->bitpos);
 	}
 }
 

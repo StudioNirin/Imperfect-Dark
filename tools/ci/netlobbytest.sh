@@ -75,8 +75,12 @@ status=0
 # ONLY: the cases to run (pairs seat crash endgame), all by default
 want() { [ -z "${ONLY:-}" ] || [[ " $ONLY " == *" $1 "* ]]; }
 [ "${SEAT:-1}" = 0 ] && ONLY=${ONLY:-pairs crash endgame} && ONLY=${ONLY// seat/}
-# the rules pair's host's own settings: none of them stock
-RULESINI='JumpHeight=3\nStartArmed=2\nAkimbo=1\nSimBrain=modern\n'
+# the rules pair's host's own settings: none of them stock. Akimbo is seeded to
+# two players and simulants because the default has been one player and
+# simulants (MODAKIMBO_EVERYONE) since 6fb988022 - a seed equal to the stock
+# value makes the room's stock-apply log nothing at all, and the check below
+# had been quietly red on that since that commit.
+RULESINI='JumpHeight=3\nStartArmed=2\nAkimbo=2\nSimBrain=modern\n'
 fail() { echo "FAIL $*"; status=1; }
 pass() { echo "ok   $*"; }
 
@@ -138,6 +142,16 @@ MODINI="$RULESINI" game rules-host hostguy3 $((GPORT + 2)) 300 --net-lobby-scrip
 P5=$!
 game rules-join joiner3 $((GPORT + 2)) 300 --net-lobby-script join --net-lobby-room "Rules Test" --net-lobby-leave-frame 0 &
 P6=$!
+# a launch over a member who has not ticked Ready, in a pdlobbyd room: the room
+# refuses it, the host's page is asked and answers itself, and the match runs
+# with that member in it anyway. netlantest.sh's force case is the same round in
+# a LAN room, where the refusal comes from netlan.c instead of a 409.
+game force-host hostguy4 $((GPORT + 30)) 300 --net-lobby-script host --net-lobby-room "Force Test" \
+	--net-lobby-force-launch --net-test-force-launch --net-lobby-end-frame 300 --net-test-stage 0x32 &
+P7=$!
+game force-join joiner4 $((GPORT + 30)) 300 --net-lobby-script join --net-lobby-room "Force Test" \
+	--net-lobby-no-ready --net-lobby-leave-frame 0 &
+P8=$!
 # the lobby's notice while the leave pair's match runs
 NOTICE="Restarting Server for Update in 1 minute, apologies for the inconvenience!"
 (
@@ -151,6 +165,7 @@ PY
 ) &
 PN=$!
 wait $P1; r1=$?; wait $P2; r2=$?; wait $P3; r3=$?; wait $P4; r4=$?; wait $P5; r5=$?; wait $P6; r6=$?
+wait $P7; r7=$?; wait $P8; r8=$?
 wait $PN
 fi
 # a lobby of its own for a case: the pairs' sign-ins from 127.0.0.1 use up
@@ -316,17 +331,19 @@ fi
 [ "$r3" = 0 ] && [ "$r4" = 0 ] || fail "rematch: exit codes host $r3 join $r4"
 meet rules joiner3
 H=$OUT/rules-host.log; J=$OUT/rules-join.log; I=$OUT/save-rules-host/pd.ini
-for kv in "Mod.JumpHeight 3 -> 0" "Mod.StartArmed 2 -> 0" "Mod.Akimbo 1 -> 0" 'Mod.SimBrain "modern" -> "stock"'; do
+for kv in "Mod.JumpHeight 3 -> 0" "Mod.StartArmed 2 -> 0" "Mod.Akimbo 2 -> 1" 'Mod.SimBrain "modern" -> "stock"'; do
 	[ "$(grep -c "net: rules: $kv (the new room's)" "$H")" = 2 ] && pass "rules: both rooms started at stock: $kv" \
 		|| fail "rules: '$kv (the new room's)' seen $(grep -c "net: rules: $kv (the new room's)" "$H") times, not 2"
 done
 grep -q "net: rules: Mod.JumpHeight 0 -> 2 (the host's, for the match)" "$J" && pass "rules: the match played the room's Jump (2)" \
 	|| fail "rules: the client did not take the room's Mod.JumpHeight 2: $(grep -m1 'net: rules: Mod.JumpHeight' "$J")"
-grep -q "net: rules: Mod.StartArmed\|net: rules: Mod.Akimbo" "$J" && fail "rules: the host's own Start Armed or Akimbo reached the match" \
+# \b, not a bare prefix: Mod.StartArmedAkimbo is a room rule of its own, which
+# does belong in the match
+grep -qE "net: rules: Mod\.StartArmed\b|net: rules: Mod\.Akimb" "$J" && fail "rules: the host's own Start Armed or Akimbo reached the match" \
 	|| pass "rules: the host's own Start Armed and Akimbo stayed out of the match"
 [ "$(grep -c "hosting over; this machine's own setup and settings are back" "$H")" = 2 ] && pass "rules: own setup back after the room and after Create Room's Back" \
 	|| fail "rules: own setup back $(grep -c "hosting over; this machine's own setup" "$H") times, not 2"
-if grep -qx "JumpHeight=3" "$I" && grep -qx "StartArmed=2" "$I" && grep -qx "Akimbo=1" "$I" && grep -qx 'SimBrain="\?modern"\?' "$I"; then
+if grep -qx "JumpHeight=3" "$I" && grep -qx "StartArmed=2" "$I" && grep -qx "Akimbo=2" "$I" && grep -qx 'SimBrain="\?modern"\?' "$I"; then
 	pass "rules: pd.ini still has the host's own values"
 else
 	fail "rules: pd.ini lost the host's own values: $(grep -E '^(JumpHeight|StartArmed|Akimbo|SimBrain)=' "$I" | tr '\n' ' ')"
@@ -342,6 +359,34 @@ fi
 b=$(grep -o "host: setup before the room: .*" "$H" | cut -d: -f3-); a=$(grep -o "host: setup after the rooms: .*" "$H" | cut -d: -f3-)
 [ -n "$b" ] && [ "$b" = "$a" ] && pass "rules: the Combat Simulator setup is the host's own again:$a" || fail "rules: setup before '$b', after '$a'"
 [ "$r5" = 0 ] || fail "rules: host exit $r5"
+fi
+if want force; then
+	# the pair launched above with the rules pair: the room refuses the host's
+	# Launch, its page is asked and answers itself, and the match runs with the
+	# member who never ticked Ready in it
+	H=$OUT/force-host.log; J=$OUT/force-join.log
+	room=$(sed -n 's/.*lobby: made room \([0-9a-f]*\).*/\1/p' "$H" | head -1)
+	[ -n "$room" ] && pass "force: host made room $room" || fail "force: host made no room"
+	grep -q "NOT ready on purpose" "$J" && pass "force: $(line "$J" 'NOT ready on purpose')" || fail "force: the joiner ticked Ready after all"
+	grep -q "lobby: LAUNCH$" "$H" && pass "force: $(line "$H" 'lobby: LAUNCH')" || fail "force: the host never pressed Launch"
+	grep -q "refused (409)" "$H" && pass "force: pdlobbyd refused it: $(line "$H" 'refused (409)')" \
+		|| fail "force: the room did not refuse the launch: $(line "$H" 'LAUNCH')"
+	grep -q "lobby force test: ok   the room asked the host" "$H" && pass "force: the host was asked" \
+		|| fail "force: the host was never asked: $(line "$H" 'lobby force test')"
+	grep -q "Waiting for: joiner4" "$H" && pass "force: the question named the member (from the room's waiting list)" \
+		|| fail "force: the question did not name the member"
+	grep -q "lobby: LAUNCH (forced)" "$H" && pass "force: $(line "$H" 'lobby: LAUNCH (forced)')" || fail "force: the second press was not forced"
+	grep -q "lobby force test: ok   the room is counting down with a member not ready" "$H" \
+		&& pass "force: the countdown ran with the member unready" || fail "force: no countdown after the Yes"
+	[ -n "$room" ] && grep -q "room $room launched" "$L" && pass "force: pdlobbyd: $(line "$L" "room $room launched")" \
+		|| fail "force: the room never launched"
+	grep -q "net: match 1: GO" "$J" && pass "force: the unready joiner passed GO" || fail "force: the unready joiner was not in the match"
+	if [ "$(grep -h 'net: stage hash' "$H" | head -8 | md5sum)" = "$(grep -h 'net: stage hash' "$J" | head -8 | md5sum)" ]; then
+		pass "force: stage hash equal"
+	else
+		fail "force: stage hash differs"
+	fi
+	[ "$r7" = 0 ] && [ "$r8" = 0 ] || fail "force: exit codes host $r7 join $r8"
 fi
 
 if want seat; then
