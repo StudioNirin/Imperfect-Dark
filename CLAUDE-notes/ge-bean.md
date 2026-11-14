@@ -5,6 +5,11 @@
 The entries CLAUDE.md carried for this note, verbatim. The sections below are
 the long form.
 
+> Added later, so not from CLAUDE.md: **"A Perfect Dark weapon wearing a Bean
+> first-person mesh"** (2026-11-14) - the map of `fpRows[]`, the alias names,
+> the fileid→row chain and the fit, for anyone about to give a non-GoldenEye
+> gun a first-person Bean mesh. Read it before adding a weapon to this tree.
+
 - **GoldenEye's clones** — ge-bean.md, "GoldenEye's clones" (2026-09-30, converter 94): `TRYCloningChr` (0xc1) is Perfect Dark's `aiDuplicateChr` (0x00ca) with spawn flags 0, and a guard record's 0x04 (CHRFLAG_CLONE) is written as CHRFLAG0_CAN_HEARSPAWN, which body.c turns into CHRCFLAG_CLONEABLE (the same bit, 0x02); both had been dropped, so no converted guard ever cloned. On a converted mission the clone takes guns and hat only (not the chr's flags or pad preset) and waits for one of GoldenEye's slots (setup guards + 7 alive)
 - **A GoldenEye hat on an HD head** — ge-bean.md, "A GoldenEye hat on an HD head" (2026-09-30): GoldenEye's per-head hat table is the N64 heads' (Bean's image has it byte for byte) and floated side caps over 4J's HD hair; on an HD head the hat is worn as modelled, and a side cap or helmet is lifted clear of hair through it (`xblaMeshHatSeat()`), berets and fur hats unmeasured
 - **GE Plus's level music** — ge-bean.md, "The levels' own music": GoldenEye's `music_setup_entries` row on each map/mission line (converter 45), `gemusic.c` appends the ROM's sequences on one shared bank with GoldenEye's own volumes; a converted mission was silent because Perfect Dark starts a mission's music from its intro's AI list; background plays level-wide; watch and death tunes
@@ -15410,3 +15415,88 @@ built-in had swapped for the release's headneil (curly hair, goatee, glasses) on
   run dir's own pd.ini is only read with an absolute path. Teleporting the player by gdb needs
   `prop->pos`, `prop->rooms[]` and `vv_ground`/`vv_manground`; the trace's `theta` is
   `vv_theta` as stored.
+
+## A Perfect Dark weapon wearing a Bean first-person mesh (2026-11-14)
+
+Drawn while planning the Rail-Laser's model (`WEAPON_RAILLASER`, weapon-sets.md),
+because the `geslappers.c` borrowed-model shape does not reach a *first-person
+Bean* mesh, and two of the things below looked like blockers until they weren't.
+Every anchor is `port/src/gebean.c` unless named.
+
+**The alias name is not a path, and one asset may have two names.**
+`romdataRegisterAliasFile(name, hostFileNum)` (`romdata.c:743`) keys on the name,
+keeps it **by pointer**, and holds one `alias` host number that a later call
+overwrites (`:750-753`) - so the same name cannot be skinned onto two hosts at
+once, which is what makes a naive `gun/laser` alias for a second gun able to move
+the Moonraker's own gun. But the name and the asset are different fields of the
+row (`struct gebeanrow` `:161`: `file` is the alias name, `source` the XBLA path),
+and two names over one asset is already in use: `fpRows` `"GgePP7Z"` and
+`fpWatchRows` `"GgePP7WZ"` both source `gun/ppk` (`:569`, `:607`), and
+`propRows`' detonator and watch laser both source `gun/trigger` (`:514`, `:519`).
+Two names, two slots, two independently built meshes, one asset. **The name must
+be the table's own literal** - the FP lookup compares pointers (`:1158`) - and an
+alias's bytes are its host's (`romdata.c:917`), never a path built from the name.
+
+**Where the asset's bytes come from:** the row's `source`, in `beanLoad()`
+(`:5174`, path at `:5191`), as `<root>/new/<source>/default.bin` - `original/`
+or the Community-Edition overlay by `gebeanCeFilePath()` - with callers
+composing `"new"`/`"original"` onto it (`:13054` for the first-person build).
+
+**The chain a first-person mesh is built by:** the hand's file number is
+resolved to a row by `gebeanPoolRowForFile()` (`:1137`, FP part `:1156-1165`,
+which recognises an FP slot by `fpSlot[i] == fileid && name == fpRows[i].file`),
+called only from `gebeanFindRow()` (`:3028`), called only from
+`xblaMeshRegisterPackModel()` (`xblamesh.c:6658`), which stores it as
+`e->beanrow` → `m->beanrow`, and `xblaMeshBuildBeanOnce()` (`:7031`) dispatches
+on `gebeanRowIsFirstPerson()` to `gebeanBuildFirstPerson()` (`:12849`). A stock
+file number is refused at `:3046` - the mesh is only ever built for an alias.
+
+**Everything in that machinery is indexed by a GoldenEye gun.** `fpRows[]` is
+`[NUM_GE_GUNS]` (25, `:568`), `FPROW` leaves the node/vertex shape guard unused
+for FP rows (`:566`), and the whole family of parallel per-index tables -
+`fpReady[]` (a hand-checked *const* survey, `:689`), `fpNoHands` (`:650`),
+`fpN64Glove` (`:673`), `fpOnOwn` (`:735`), `fpGrip` (`:797`), `fpTint` (`:856`),
+`fpRound` (`:1019`), `fpMuzzle*` (`:950`) - is the same shape. Every getter takes
+`i = weaponnum - WEAPON_GE_FIRST` and bounds it to `ARRAYCOUNT(fpRows)`, so a
+Perfect Dark number is rejected by all of them: muzzle offset `:14288` (where the
+beam ends - get this wrong and it ends in the hand), flash cards `:14268`,
+release file `:14332`, grip shift `:14064`, hands `:1644`. A second small table
+plus a row base (as `fpWatchRows` has `GEBEAN_FPWATCH_BASE`) is unavoidable; a
+row is also *not* found unless it is in a table (`propRows`/`chrRows` match by
+`strcmp` on `Igx/Pgx/Cgx`, `:1176-1200`).
+
+**The fit is computed against the host, not stored.**
+`scale = (hosthi[2] - hostlo[2]) / (beanhi[2] - beanlo[2])` (`:13126`), centring
+from both extents (`:13157`), then `fpGrip[fp].set` picks a mode (`:759`): 0
+plain fit, 1 Bean's grip point onto the host's palm matrix (`FP_PALM_MTX` 2,
+`:772`, `:774`), 2 `FP_OWNPLACE` = where GoldenEye holds it (`:13328`, the
+Moonraker's own row `:822` is `{ FP_OWNPLACE, { 0, 0, -53 }, 1/4.7 }`), and the
+result is walked onto the host's vertices (`fpRefinePlacement`, `:13355`) and
+applied per vertex at `:13744`. `FP_OWNPLACE` needs `gegunsViewPlacement()`
+(`geguns.c:2178`), which is `GE_GUN_INDEX`-guarded and reads `g_GeWeaponDefs[]` -
+so **a non-GoldenEye gun must start in mode 0 or 1**, or carry its own numbers
+rather than call that. A build also wants the host's `modeldef` with
+`numnodes <= 64` and a barrel extent over 1 (`:13117`).
+
+**For the floor prop it's a different table with a good precedent.**
+`gegunstable.h`'s `GUNROW` floats are the *pickup* fit, not the first-person one:
+they land in `gunRows[]` (`:484`) → `g_ModelStates[MODEL_GE_FIRST + i]` (`:1573`)
+→ `gebeanBuildRigid()` (`:14646`). And the closest thing already in the tree to
+"a Perfect Dark file wearing a Bean mesh" is `cartRows[]` (`:1054`): PD's own
+`FILE_GCARTRIDGE`, `FILE_GCARTRIFLE`, `FILE_GCARTBLUE`, `FILE_GCARTSHELL` drawn
+with Bean's `gun/cartridge*`, registered as `GEBEAN_RIGID` rows at `:1543-1550`
+and handed out by `gebeanCasingFile()` (`:2929`).
+
+**When any of it is refreshed:** `gebeanGunsRefresh()` (`:1516`) is the per-stage
+registration - called from `gebeanGunsStageRefresh()` (`:1661`) ←
+`gegunsStageSet()` (`geguns.c:4522`) ← `src/game/setup.c:1760`; from
+`gebeanMeshesSwitched()` (`:1693`) ← `xblamesh.c:14263`, which is the F6 look
+switch; and from `gebeanPoolRefresh()` (`:2285`) at boot. Its predicates are
+`bean = gebeanIsAvailable()` (`:2794`, presence of the release - not a Mod switch
+any more), `show = bean || anyborrowed || anyown` (`:1540`), and `Mod.XblaMeshes`
+arrives as `gebeanGunsAreN64()` (`:1494`). Anything new that draws in the hand
+has to be refreshed at all three, or the F6 switch will strip it.
+
+Nothing in `gebean.c` or `xblamesh.c` mentions `WEAPON_RAILLASER` today, and the
+gun runs on the stock `FILE_GLASER` in every look, which is a correct answer on
+its own (weapon-sets.md).

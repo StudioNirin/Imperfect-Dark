@@ -799,14 +799,18 @@ file id in `hi_model`/`lo_model`, swap `g_Weapons[n]` between two defs on the
 stage boundary. For a *GoldenEye XBLA* gun it is not that, and the two reasons
 are worth having down before anybody tries it:
 
-- **Alias names are one slot and one host, globally.**
-  `romdataRegisterAliasFile(name, hostFileNum)` (`romdata.c:743`) keys on the
-  *name* - which is the XBLA-relative path, `gun/laser`, because that is what the
-  XBLA mesh loader files by - and keeps a single `alias` host number that every
-  later registration **overwrites**. So `gun/laser` cannot be skinned onto the
-  Rail-Laser's host and onto `g_GeWeaponDefs[WEAPON_GE_MOONRAKER]`'s host at the
-  same time: whoever registers last steers both. A Rail-Laser that registers the
-  name itself can silently move the Moonraker's own gun.
+- **An alias name is one slot and one host, globally - so a second gun needs a
+  second name.** `romdataRegisterAliasFile(name, hostFileNum)` (`romdata.c:743`)
+  keys on the *name* and keeps a single `alias` host number that every later
+  registration **overwrites**, and the first-person lookup recognises a row by
+  *pointer* on that name (`gebean.c:1158`). So `gun/laser` - the name the
+  Moonraker's row already owns - cannot be skinned onto two hosts at once, and a
+  Rail-Laser that registers it would silently move the Moonraker's own gun.
+  This one is solvable, and solved in the tree already: the name and the XBLA
+  asset are separate fields of the row, and `fpWatchRows` gives `gun/ppk` a
+  second name for the watch face (`gebean.c:569`, `607`). A Rail-Laser row needs
+  its own name literal over the same `gun/laser` asset - not a new asset, which
+  matters because the geometry is the player's and cannot ship with us.
 - **A Bean gun is not a model, it is a pile of per-index machinery.** The first
   person slot lives in `gebean.c`'s `fpSlot[ARRAYCOUNT(fpRows)]`, and the grip
   placement, the sight cards, the muzzle flash and the round state all sit behind
