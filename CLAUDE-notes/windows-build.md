@@ -119,4 +119,4 @@ Reading this kind of failure:
   and run it under wine. The local mingw (Debian GCC 14) did not reproduce the
   bug at all: the release is built by MSYS2's GCC 16, whose code and unwind
   tables are its own, so test the CI exe itself (`gh run download <run> -n
-  pd-dabs-mod-x86_64-windows`).
+  pd-imperfect-dark-x86_64-windows`).

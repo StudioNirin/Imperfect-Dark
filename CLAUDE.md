@@ -139,8 +139,8 @@ x86_64-w64-mingw32-addr2line -f -C -i -e <scratch>/v3.1.2/pd.x86_64-windows.exe 
 # from 82b7a71 on:                           -e <scratch>/<tag>/pd.x86_64-windows.exe.debug
 ```
 
-A CI run's own copies are the `pd-dabs-mod-x86_64-windows-debug` and
-`pd-dabs-mod-x86_64-linux-debug` artifacts, for a dev build the rolling
+A CI run's own copies are the `pd-imperfect-dark-x86_64-windows-debug` and
+`pd-imperfect-dark-x86_64-linux-debug` artifacts, for a dev build the rolling
 release has moved past.
 
 Plain `addr2line` says `??` for every line. When the report does not say

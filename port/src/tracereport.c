@@ -517,7 +517,7 @@ static bool traceReportSend(char *err, u32 errsize)
 	}
 
 	snprintf(header, sizeof(header),
-			"Dab's Mod problem report\n"
+			"Imperfect Dark problem report\n"
 			"version: %s\n"
 			"channel: %s\n"
 			"trace: %s\n"

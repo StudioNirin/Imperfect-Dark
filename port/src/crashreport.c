@@ -173,7 +173,7 @@ const char *crashReportSave(const char *text)
 
 	// The header is what a reader needs before the stack means anything: which
 	// build, which machine, and what was loaded into it.
-	fprintf(f, "Dab's Mod crash report\n");
+	fprintf(f, "Imperfect Dark crash report\n");
 	fprintf(f, "version: %s\n", sysGetVersionString());
 	fprintf(f, "channel: %s\n", VERSION_CHANNEL);
 	fprintf(f, "when: %s\n", g_PendingWhen);

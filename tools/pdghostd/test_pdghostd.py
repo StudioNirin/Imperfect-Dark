@@ -936,7 +936,7 @@ def test_sign_in_creates():
 def test_crash_reports():
     print("crash reports")
 
-    report = ("Dab's Mod crash report\nversion: dabs-mod abc1234\n\n"
+    report = ("Imperfect Dark crash report\nversion: imperfect-dark abc1234\n\n"
               "--- crash ---\nEXCEPTION: 0xc0000005\nFAULT: read of 0x00000000000000a8\n")
 
     st, body, _ = send_crash(report, note="runway, sniping", ip="10.7.0.1")
@@ -1056,7 +1056,7 @@ def send_report(report, note="", screenshot=None, ip=None, raw=None, name=None):
 def test_problem_reports():
     print("problem reports")
 
-    report = ("Dab's Mod problem report\nversion: dabs-mod abc1234\n\n"
+    report = ("Imperfect Dark problem report\nversion: imperfect-dark abc1234\n\n"
               "--- trace ---\npd trace 2026-09-17 12:00:00\nstage 0x09 lvframenum 3000\n")
     png = tiny_png()
 
@@ -1212,7 +1212,7 @@ def put_report(base, name="-", note="-", png=None, version="abc1234",
         if header_name:
             f.write("name: %s\n" % name)
         f.write("note: %s\n\n" % note)
-        f.write("Dab's Mod problem report\nSECRET-DUMP-LINE\n[Mod]\nMod.SecretSetting=1\n"
+        f.write("Imperfect Dark problem report\nSECRET-DUMP-LINE\n[Mod]\nMod.SecretSetting=1\n"
                 "path: /home/tester/pd\n")
 
 
@@ -1246,7 +1246,7 @@ def test_report_board():
     clear_board()
 
     # One through the real route, so that what it writes is what is read.
-    st, body, _ = send_report("Dab's Mod problem report\nSECRET-DUMP-LINE\n" + "x" * 64,
+    st, body, _ = send_report("Imperfect Dark problem report\nSECRET-DUMP-LINE\n" + "x" * 64,
                               note="posted <b>live</b>", name="Poster", screenshot=tiny_png(),
                               ip="10.66.55.44")
     posted = body.get("id", "")
@@ -1442,7 +1442,7 @@ def test_report_board():
     # The status file is not a report, for the directory's cap.
     clear_board()
     put_status("# nothing\n")
-    taken = sum(send_report("Dab's Mod problem report\n" + "y" * 64, ip="10.6.2.%d" % i)[0] == 200
+    taken = sum(send_report("Imperfect Dark problem report\n" + "y" * 64, ip="10.6.2.%d" % i)[0] == 200
                 for i in range(REPORT_MAX_FILES))
     check(taken == REPORT_MAX_FILES, "the status file does not count against the report cap")
     clear_board()

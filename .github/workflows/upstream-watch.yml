@@ -1,10 +1,15 @@
 name: Upstream watch
 
-# Dab's Mod is the source of this fork and may still get fixes. This says so:
-# it fetches DabDavis/perfect-dark-dabs-mod's dabs-mod branch once a day and
-# keeps one issue open listing the commits this branch does not have, so
-# anything worth merging is waiting as a list rather than being something
-# someone has to think to look for. Nothing is merged or pushed by it.
+# The donor this fork was cut from may still get fixes worth taking, and this
+# says so: it fetches DabDavis/perfect-dark-dabs-mod's dabs-mod branch - which
+# keeps that name, because it is that repository's own branch and not this
+# repo's renamed one - once a day, and keeps one issue open listing the commits
+# this branch does not have, so anything worth merging is waiting as a list
+# rather than being something someone has to think to look for. Nothing is
+# merged or pushed by it. The remote it fetches is `dabs`, added with
+#   git remote add dabs https://github.com/DabDavis/perfect-dark-dabs-mod.git
+# and here made on the fly; this repository's own branch is imperfect-dark and
+# its releases are the only ones published.
 
 on:
   schedule:

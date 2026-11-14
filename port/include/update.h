@@ -13,7 +13,7 @@
  * was promised, and puts it where the running one is.
  *
  * Like follows like. A build cut from a v* tag looks at the stable release; a
- * build off the branch - which is what the rolling dabs-mod-dev prerelease is,
+ * build off the branch - which is what the rolling imperfect-dark-dev prerelease is,
  * and what anything compiled locally is - looks at the rolling one. Nobody is
  * moved between the two by pressing a button that says "update": a player on
  * stable is never handed whatever the last commit happened to be, and somebody

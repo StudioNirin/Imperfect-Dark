@@ -9,15 +9,15 @@ the long form.
 
 
 Check for Updates is `port/src/update.c`. It reads one file — `update.txt` on
-the release, written by `dabs-mod.yml` — and downloads one bare executable,
+the release, written by `imperfect-dark.yml` — and downloads one bare executable,
 because the releases are a zip and two tarballs, one of them xz with no
 decompressor linked in.
 
 **The channel is baked in at build time.** The release job runs
-`git checkout -B dabs-mod` for tag builds and branch builds alike, so the
+`git checkout -B imperfect-dark` for tag builds and branch builds alike, so the
 binary has nothing in it that says which it was; CMake takes `UPDATE_CHANNEL`
 and puts it in `versioninfo.h`. A tag build follows the stable release, a
-branch build follows the rolling `dabs-mod-dev` prerelease, and nothing moves a
+branch build follows the rolling `imperfect-dark-dev` prerelease, and nothing moves a
 player between the two.
 
 **`git rev-parse --short` picks its own length** from how many objects the

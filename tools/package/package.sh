@@ -71,7 +71,7 @@ JOBS="$(nproc 2>/dev/null || echo 4)"
 MINGW_PREFIX="$HOME/.local/mingw64"
 
 # The clean package's contents, from a build directory. The release job does
-# the same in .github/workflows/dabs-mod.yml; keep the two in step.
+# the same in .github/workflows/imperfect-dark.yml; keep the two in step.
 stage_windows_from_build() { # <build dir> <staging>
 	local build="$1" stage="$2" exe dll name found sysroot
 
@@ -177,7 +177,7 @@ build_one() { # <platform> -> the build directory on stdout
 }
 
 for platform in "${platforms[@]}"; do
-	name="pd-dabs-mod-x86_64-$platform"
+	name="pd-imperfect-dark-x86_64-$platform"
 	stage="$DIST/stage/$name"
 
 	rm -rf "$stage"

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ghost server for Dab's Mod - accounts, ghost storage and leaderboards.
+Ghost server for Imperfect Dark - accounts, ghost storage and leaderboards.
 
 Runs behind nginx on 127.0.0.1, which terminates TLS and forwards
 https://texturepacks.art/pdghosts/ here. Nothing in here should be exposed
@@ -1684,11 +1684,11 @@ def board_html(reports, archived, notes, query):
     p.append('<!doctype html><html lang="en"><head><meta charset="utf-8">'
              '<meta name="viewport" content="width=device-width,initial-scale=1">'
              '<meta name="color-scheme" content="light dark">'
-             '<title>Dab\'s Mod problem reports</title>'
+             '<title>Imperfect Dark problem reports</title>'
              '<style>%s</style></head><body><main>' % BOARD_CSS)
     p.append('<h1>Problem reports</h1>')
     p.append('<p class="lead">Everything sent from the F3 <b>Report a Problem</b> '
-             'dialog in Dab\'s Mod, newest first, and what became of it. '
+             'dialog in Imperfect Dark, newest first, and what became of it. '
              'This page is read-only; Dab updates the statuses as reports are '
              'looked at. Bugs and crashes come first; feature requests wait '
              'in the <b>Feature queue</b> and are fitted in between fixes or '

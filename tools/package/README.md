@@ -62,4 +62,4 @@ then refuses to ship the package unless `SDL2.dll` and zlib's DLL came with it.
 The list is read from the binary rather than written out by hand because a list
 kept by hand is one DLL short the first time a dependency changes, and that is
 a game that will not start with nothing to act on. The release job
-(`.github/workflows/dabs-mod.yml`) checks the same things; keep the two in step.
+(`.github/workflows/imperfect-dark.yml`) checks the same things; keep the two in step.

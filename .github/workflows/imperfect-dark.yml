@@ -1,4 +1,4 @@
-name: Dab's Mod CI
+name: Imperfect Dark CI
 
 # A separate workflow from c-cpp.yml on purpose: that file is upstream's and is
 # left untouched, so merging from the port branch never conflicts here. Disable
@@ -9,7 +9,11 @@ on:
   push:
     # A branch push refreshes the rolling dev prerelease; a v* tag cuts a
     # stable release that is never rewritten afterwards.
-    branches: [ "dabs-mod" ]
+    # imperfect-dark, renamed from dabs-mod on 2026-11-14. The old name is still
+    # a trigger so a push that lands before the branch itself is renamed is
+    # built rather than silently ignored; drop it once the rename is done and no
+    # clone is still pushing there.
+    branches: [ "imperfect-dark", "dabs-mod" ]
     tags: [ "v*" ]
     # Two builds and a new executable offered to every dev-channel player is
     # too much to ask for a change to a file that is not in the download and
@@ -36,12 +40,12 @@ env:
   # CMakeLists.txt puts `git rev-parse --abbrev-ref HEAD` on the title screen as
   # "Perfect Dark (<branch>)". actions/checkout leaves a detached HEAD, which it
   # reads as "port-custom", so each job names the checked out commit first.
-  MOD_BRANCH: dabs-mod
+  MOD_BRANCH: imperfect-dark
   # Which release the built copy's Check for Updates follows. A tag build is a
   # stable release and looks for the next stable release; everything else is
   # the rolling dev prerelease and looks for the next one of those. The binary
   # cannot work this out for itself, because the checkout step below forces the
-  # branch name to dabs-mod either way.
+  # branch name to imperfect-dark either way.
   UPDATE_CHANNEL: ${{ github.ref_type == 'tag' && 'stable' || 'dev' }}
   # ntsc-final only. The mod has never been tested against PAL or JPN, and
   # building all three would triple the time for two ROMs nobody has asked for.
@@ -128,13 +132,13 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pd-dabs-mod-x86_64-windows
+          name: pd-imperfect-dark-x86_64-windows
           path: bin/
           retention-days: 0
       - name: Upload debug info
         uses: actions/upload-artifact@v4
         with:
-          name: pd-dabs-mod-x86_64-windows-debug
+          name: pd-imperfect-dark-x86_64-windows-debug
           path: debug/
           retention-days: 0
 
@@ -196,13 +200,13 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pd-dabs-mod-x86_64-linux
+          name: pd-imperfect-dark-x86_64-linux
           path: bin/
           retention-days: 0
       - name: Upload debug info
         uses: actions/upload-artifact@v4
         with:
-          name: pd-dabs-mod-x86_64-linux-debug
+          name: pd-imperfect-dark-x86_64-linux-debug
           path: debug/
           retention-days: 0
 
@@ -222,9 +226,9 @@ jobs:
           pushd ci-artifacts
           # upload-artifact round-trips through a zip and drops the executable
           # bit, so the tarball would ship a game nobody can start.
-          chmod +x pd-dabs-mod-x86_64-linux/pd.x86_64
-          tar czf ../ci-release/pd-dabs-mod-x86_64-linux.tar.gz pd-dabs-mod-x86_64-linux
-          zip -r ../ci-release/pd-dabs-mod-x86_64-windows.zip pd-dabs-mod-x86_64-windows
+          chmod +x pd-imperfect-dark-x86_64-linux/pd.x86_64
+          tar czf ../ci-release/pd-imperfect-dark-x86_64-linux.tar.gz pd-imperfect-dark-x86_64-linux
+          zip -r ../ci-release/pd-imperfect-dark-x86_64-windows.zip pd-imperfect-dark-x86_64-windows
           popd
 
       # The bare executables, beside the packages rather than instead of them.
@@ -237,14 +241,14 @@ jobs:
       - name: Lay out the bare builds and write the update manifest
         run: |
           set -eu
-          cp ci-artifacts/pd-dabs-mod-x86_64-windows/pd.x86_64.exe ci-release/pd.x86_64-windows.exe
-          cp ci-artifacts/pd-dabs-mod-x86_64-linux/pd.x86_64         ci-release/pd.x86_64-linux
+          cp ci-artifacts/pd-imperfect-dark-x86_64-windows/pd.x86_64.exe ci-release/pd.x86_64-windows.exe
+          cp ci-artifacts/pd-imperfect-dark-x86_64-linux/pd.x86_64         ci-release/pd.x86_64-linux
 
           # The debug info the Windows and Linux builds were stripped of, for
           # symbolising a crash report from this build. Release assets only:
           # update.txt below names the binaries, so no game ever downloads them.
-          cp ci-artifacts/pd-dabs-mod-x86_64-windows-debug/pd.x86_64.exe.debug ci-release/pd.x86_64-windows.exe.debug
-          cp ci-artifacts/pd-dabs-mod-x86_64-linux-debug/pd.x86_64.debug       ci-release/pd.x86_64-linux.debug
+          cp ci-artifacts/pd-imperfect-dark-x86_64-windows-debug/pd.x86_64.exe.debug ci-release/pd.x86_64-windows.exe.debug
+          cp ci-artifacts/pd-imperfect-dark-x86_64-linux-debug/pd.x86_64.debug       ci-release/pd.x86_64-linux.debug
 
           # The patch notes, beside the manifest. Check for Updates fetches
           # them after update.txt to show what the release brings; a release
@@ -303,7 +307,7 @@ jobs:
         run: |
           gh release view "$VER" >/dev/null 2>&1 || \
             gh release create "$VER" \
-              --title "Dab's Mod $VER" \
+              --title "Imperfect Dark $VER" \
               --notes "Perfect Dark with jump, a combat roll, melee combos, a third person camera, up to 80 simulants, a spectator camera, screenshots and video recording.
 
           You need your own Perfect Dark \`ntsc-final\` ROM — see README.md inside the download for where it goes."
@@ -316,19 +320,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git tag --force dabs-mod-dev "$GITHUB_SHA"
-          git push --force origin refs/tags/dabs-mod-dev
+          git tag --force imperfect-dark-dev "$GITHUB_SHA"
+          git push --force origin refs/tags/imperfect-dark-dev
           # Upstream's workflow assumes the release already exists, because in
           # its repo someone made it by hand years ago. A fresh repo has no such
           # release and `gh release upload` would fail on the first run.
-          gh release view dabs-mod-dev >/dev/null 2>&1 || \
-            gh release create dabs-mod-dev --prerelease \
-              --title "Dab's Mod (latest dev build)" \
-              --notes "Automatic build of the latest \`dabs-mod\` commit, which may be ahead of the stable release and less tested. You need your own Perfect Dark \`ntsc-final\` ROM — see README.md inside the download."
-          gh release upload --clobber dabs-mod-dev ci-release/*
+          gh release view imperfect-dark-dev >/dev/null 2>&1 || \
+            gh release create imperfect-dark-dev --prerelease \
+              --title "Imperfect Dark (latest dev build)" \
+              --notes "Automatic build of the latest \`imperfect-dark\` commit, which may be ahead of the stable release and less tested. You need your own Perfect Dark \`ntsc-final\` ROM — see README.md inside the download."
+          gh release upload --clobber imperfect-dark-dev ci-release/*
           # The release page says what the build brings: the newest patch
           # notes entries, the same lines Check for Updates shows in game.
           if [ -f patchnotes.txt ]; then
-            sh tools/patchnotes-md.sh patchnotes.txt "Automatic build of the latest \`dabs-mod\` commit, which may be ahead of the stable release and less tested. You need your own Perfect Dark \`ntsc-final\` ROM - see README.md inside the download." 5 > dev-notes.md
-            gh release edit dabs-mod-dev --notes-file dev-notes.md
+            sh tools/patchnotes-md.sh patchnotes.txt "Automatic build of the latest \`imperfect-dark\` commit, which may be ahead of the stable release and less tested. You need your own Perfect Dark \`ntsc-final\` ROM - see README.md inside the download." 5 > dev-notes.md
+            gh release edit imperfect-dark-dev --notes-file dev-notes.md
           fi

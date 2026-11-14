@@ -1,8 +1,8 @@
 # Dab's Mod
 
-**[Download](https://github.com/DabDavis/perfect-dark-dabs-mod/releases/latest)**
+**[Download](https://github.com/StudioNirin/Imperfect-Dark/releases/latest)**
 — Windows, Linux and macOS. You supply the ROM; see [You need a ROM](#you-need-a-rom).
-There is also a [rolling dev build](https://github.com/DabDavis/perfect-dark-dabs-mod/releases/tag/dabs-mod-dev)
+There is also a [rolling dev build](https://github.com/StudioNirin/Imperfect-Dark/releases/tag/imperfect-dark-dev)
 of the newest commit, if you want fixes before they reach a release.
 
 A fork of the [Perfect Dark PC port](https://github.com/perfect-dark-pc-port/perfect_dark),
@@ -578,8 +578,8 @@ or pass `--savedir <path>`.
 Same as the stock port:
 
 ```sh
-git clone --recursive https://github.com/DabDavis/perfect-dark-dabs-mod.git
-cd perfect-dark-dabs-mod
+git clone --recursive https://github.com/StudioNirin/Imperfect-Dark.git
+cd Imperfect-Dark
 cmake -G"Unix Makefiles" -Bbuild .
 cmake --build build -j8
 ```
