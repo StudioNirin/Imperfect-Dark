@@ -21,6 +21,7 @@
 #include "game/mplayer/setup.h"
 #include "mpweaponsets.h"
 #include "mpweaponfilters.h"
+#include "raillaser.h"
 #include "bss.h"
 #include "data.h"
 
@@ -98,6 +99,7 @@ s32 g_TestDodge = false; // --test-dodge: the crouch double tap put through ever
 s32 g_TestMpWeaponSets = false; // --test-mpweaponsets: the saved weapon sets' store (mpWeaponSetsSelfTest)
 s32 g_TestRandomGroups = false; // --test-randomgroups: the random weapon groups' store and the roll they steer (mpweaponfilters.c, mplayer.c)
 s32 g_TestStartArmed = false; // --test-startarmed: what a Start Armed spawn is handed, and how many of it (mpStartArmedSelfTest)
+s32 g_TestRailLaser = false; // --test-raillaser: the Rail-Laser's row, number, charge and saved-setup width (raillaserSelfTest)
 s32 g_TestSprint = false; // --test-sprint: a sprint, a trigger inside it, and a switch (lvTestSprintTick)
 s32 g_TestBindFamilies = false; // --test-bindfamilies: which of a command's four bindings is whose (inputBindsSelfTest)
 s32 g_NumPoseAnims = 0;
@@ -343,6 +345,7 @@ int main(int argc, const char **argv)
 
 	mpWeaponSetsInit();
 	mpWeaponFiltersInit();
+	raillaserInit();
 
 	if (g_TestMpWeaponSets) {
 		mpWeaponSetsSelfTest();
@@ -373,6 +376,15 @@ int main(int argc, const char **argv)
 
 	if (g_TestStartArmed) {
 		mpStartArmedSelfTest();
+	}
+
+	// The Rail-Laser's own checks, read here for the same reason: it asks the
+	// weapon table, the Combat Simulator's rows and the saved-setup codec, which
+	// are all live by now (port/src/raillaser.c).
+	g_TestRailLaser = sysArgCheck("--test-raillaser");
+
+	if (g_TestRailLaser) {
+		raillaserSelfTest();
 	}
 
 	// Read with the flag above and not with the --test flags further down: this

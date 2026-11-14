@@ -457,7 +457,7 @@ s32 geHudActive(void)
  */
 static s32 hudWeaponIsGoldenEyes(s32 weaponnum)
 {
-	return weaponnum <= WEAPON_UNARMED || weaponnum >= WEAPON_GE_FIRST;
+	return weaponnum <= WEAPON_UNARMED || WEAPON_IS_GE(weaponnum);
 }
 
 /**

@@ -48,7 +48,7 @@ void invClear(void)
 static s32 invOrderKey(s32 weaponnum)
 {
 #ifndef PLATFORM_N64
-	if (weaponnum >= WEAPON_GE_FIRST && modloaderStageIsRemake(g_Vars.stagenum)) {
+	if (WEAPON_IS_GE(weaponnum) && modloaderStageIsRemake(g_Vars.stagenum)) {
 		switch (weaponnum) {
 		case WEAPON_GE_HUNTINGKNIFE:  return WEAPON_UNARMED * 4 + 1;
 		case WEAPON_GE_THROWINGKNIFE: return WEAPON_UNARMED * 4 + 2;

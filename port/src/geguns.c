@@ -60,9 +60,10 @@ _Static_assert(MODEL_GE_FIRST + NUM_GE_WEAPONS <= MODEL_REMAKE_FIRST,
 		"a model state per GoldenEye gun, before the remake's models");
 _Static_assert(MPWEAPON_GE_EXTRA1 - MPWEAPON_GE_FIRST == NUM_GE_GUNS
 		&& MPWEAPON_GE_SILVERPP7 - MPWEAPON_GE_EXTRA1 == NUM_GE_EXTRA
-		&& NUM_MPWEAPONS - MPWEAPON_GE_SILVERPP7 == NUM_GE_CHEATGUNS
+		&& MPWEAPON_RAILLASER - MPWEAPON_GE_SILVERPP7 == NUM_GE_CHEATGUNS
+		&& NUM_MPWEAPONS - MPWEAPON_RAILLASER == 1 // this fork's Rail-Laser, appended past them
 		&& WEAPON_GE_SILVERPP7 == WEAPON_GE_EXTRA4 + 1,
-		"a Combat Simulator row per GoldenEye gun, per hack's own pistol and per cheat gun, in weapon order");
+		"a Combat Simulator row per GoldenEye gun, per hack's own pistol and per cheat gun, in weapon order, and the fork's own row past them");
 _Static_assert(NUM_WEAPONS <= WEAPON_MPLOCATION00, "a weapon number below the pads' (gunctrl's are s16)");
 
 static const char *const names[NUM_GE_WEAPONS] = {

@@ -392,6 +392,12 @@ struct mpweapon g_MpWeapons[NUM_MPWEAPONS] = {
 	/*0x4e*/ { WEAPON_GE_SILVERPP7,       AMMOTYPE_PISTOL,      80,  0, 0, 1, MPFEATURE_NEVER, MODEL_GE_FIRST + WEAPON_GE_SILVERPP7 - WEAPON_GE_FIRST, 256 },
 	/*0x4f*/ { WEAPON_GE_GOLDPP7,         AMMOTYPE_PISTOL,      80,  0, 0, 1, MPFEATURE_NEVER, MODEL_GE_FIRST + WEAPON_GE_GOLDPP7 - WEAPON_GE_FIRST, 256 },
 	/*0x50*/ { WEAPON_GE_TASER,           0,                    0,   0, 0, 1, MPFEATURE_NEVER, MODEL_GE_FIRST + WEAPON_GE_TASER - WEAPON_GE_FIRST, 256 },
+	// This fork's Rail-Laser (invitems.c). Nothing unlocks it, so it is in the
+	// lists with no feature behind it, and it is on the Moonraker's own floor
+	// model until its own is loaded (port/src/raillaser.c). One shot a magazine
+	// out of five, so the hand-out is one and bgunGetSpawnAmmoQuantity()
+	// doubles it to the cap.
+	/*0x51*/ { WEAPON_RAILLASER,          AMMOTYPE_RAIL,        1,   0, 0, 1, 0,                   MODEL_CHRLASER,         512 },
 #endif
 };
 
@@ -1424,7 +1430,7 @@ bool mpWeaponRowSuitsStage(const struct mpweapon *mpweapon)
 		return false;
 	}
 
-	if (mpweapon->weaponnum >= WEAPON_GE_FIRST
+	if (WEAPON_IS_GE(mpweapon->weaponnum)
 			|| gexPlusGetPdGuns()
 			|| !modloaderStageIsRemake(g_Vars.stagenum)) {
 		return true;
@@ -6449,8 +6455,18 @@ void mpsetupfileLoadWad(struct savebuffer *buffer, u8 version)
 	}
 
 	if (version >= MPSETUP_VERSION_RANDOMFILTERS) {
-		for (i = 0; i < NUM_MPWEAPONS; i++) {
+		const s32 numfilters = version >= MPSETUP_VERSION_RAILLASER ? NUM_MPWEAPONS : NUM_MPWEAPONS - 1;
+
+		for (i = 0; i < numfilters; i++) {
 			g_MpWeaponSetRandomFilters[i] = (u8) savebufferReadBits(buffer, 1);
+		}
+
+		// The Rail-Laser's row, for a file that predates it: selected, on the same
+		// reasoning as the rows the u64 could not hold below - a file that cannot
+		// name the row cannot have excluded it either - and a decoded block has to
+		// stand equal to a live setup for mpsetups.c to re-encode it.
+		if (version < MPSETUP_VERSION_RAILLASER) {
+			g_MpWeaponSetRandomFilters[NUM_MPWEAPONS - 1] = 1;
 		}
 	}
 	else {
@@ -6629,8 +6645,12 @@ void mpsetupfileSaveWad(struct savebuffer *buffer, u8 version)
 	if (version >= MPSETUP_VERSION_RANDOMFILTERS) {
 		// One bit per row, so that a table wider than a u64 keeps all of itself:
 		// every GoldenEye row, a ROM hack's own pistols and the cheat guns sit past
-		// the 64th, and a u64 here wrote none of them and read back the default
-		for (i = 0; i < NUM_MPWEAPONS; i++) {
+		// the 64th, and a u64 here wrote none of them and read back the default.
+		// Version 6 adds the Rail-Laser's bit, which moves everything below it by
+		// one bit, so an older file is read with the width it was written at.
+		const s32 numfilters = version >= MPSETUP_VERSION_RAILLASER ? NUM_MPWEAPONS : NUM_MPWEAPONS - 1;
+
+		for (i = 0; i < numfilters; i++) {
 			savebufferOr(buffer, g_MpWeaponSetRandomFilters[i] != 0 ? 1 : 0, 1);
 		}
 	}

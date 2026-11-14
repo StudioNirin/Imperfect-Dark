@@ -4751,7 +4751,7 @@ static s32 watchPdGunBox(s32 weaponnum, f32 *lo, f32 *hi)
 {
 	struct watchbox *box;
 
-	if (weaponnum <= 0 || weaponnum >= WEAPON_GE_FIRST) {
+	if (weaponnum <= 0 || WEAPON_IS_GE(weaponnum)) {
 		return 0;
 	}
 

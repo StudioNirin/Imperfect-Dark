@@ -2333,7 +2333,7 @@ static s32 geSetsGroup(const char *dir)
 			const u8 w = row[GESETS_NAME + (j * (GESETS_SLOTS - 1) + (NUM_MPWEAPONSLOTS - 1) / 2) / (NUM_MPWEAPONSLOTS - 1)];
 
 			// Slappers Only hands out nothing at all
-			set->slots[j] = w >= WEAPON_GE_FIRST ? w : WEAPON_DISABLED;
+			set->slots[j] = WEAPON_IS_GE(w) ? w : WEAPON_DISABLED;
 		}
 
 		set->unk0c = set->slots[0];

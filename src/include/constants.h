@@ -388,6 +388,11 @@ s32 langpackIsCjk(void);
 #define AMMOTYPE_TOKEN        0x1e
 #define AMMOTYPE_1F           0x1f
 #define AMMOTYPE_ECM_MINE     0x20
+#define AMMOTYPE_RAIL         0x21
+// Every ammo type the game can hold: g_AmmoTypes (bondgun.c), the player's
+// ammoheldarr (types.h) and the randomizer's carry-over copy (modrun.c) all
+// have to be this wide, and the _Static_assert by g_AmmoTypes says so
+#define NUM_AMMOTYPES         (AMMOTYPE_RAIL + 1)
 
 // GoldenEye's golden bullets (its AMMO_GGUN), which only its Golden Gun
 // fires, in the port. The dart row is GoldenEye's leftover AMMO_DARTS, which
@@ -3449,7 +3454,11 @@ s32 langpackIsCjk(void);
 // shown while Mod.GePlusCheatGuns asks for them (geguns.c); after the hack's
 // so no saved index moves, and past what the randomizer rolls
 #define MPWEAPON_GE_SILVERPP7     (MPWEAPON_GE_EXTRA1 + 4)
-#define NUM_MPWEAPONS             (MPWEAPON_GE_SILVERPP7 + 3)
+// This fork's own gun (WEAPON_RAILLASER, invitems.c), past everything the two
+// cartridges have: appended, so no saved index, saved set or match's RULES
+// moves, and past what the randomizer rolls like the two groups above it
+#define MPWEAPON_RAILLASER        (MPWEAPON_GE_SILVERPP7 + 3)
+#define NUM_MPWEAPONS             (MPWEAPON_RAILLASER + 1)
 #endif
 
 #ifndef PLATFORM_N64
@@ -4995,13 +5004,25 @@ enum weaponnum {
 	/*0x84*/ WEAPON_GE_SILVERPP7,        // PP9i
 	/*0x85*/ WEAPON_GE_GOLDPP7,          // PP9i
 	/*0x86*/ WEAPON_GE_TASER,            // PP9i
+	// This fork's own gun (invitems.c's invitem_raillaser): a railgun that has
+	// to be charged by holding the trigger, one shot a magazine and a scope.
+	// Drawn on the Moonraker Laser's model until its own is loaded, and given
+	// only by the multiplayer and Combat Simulator paths - no stage's item
+	// table can name it, so no mission hands it out.
+	/*0x87*/ WEAPON_RAILLASER,
 #endif
 	NUM_WEAPONS
 };
 
 #ifndef PLATFORM_N64
 #define WEAPON_GE_FIRST WEAPON_GE_PP7
-#define NUM_GE_WEAPONS  (NUM_WEAPONS - WEAPON_GE_FIRST)
+// The end of GoldenEye's block, not the end of the enum: this fork has its own
+// gun past WEAPON_GE_TASER now (WEAPON_RAILLASER), and the count of GoldenEye's
+// guns is the length of their own block, not of everything from the first of
+// them to the last weapon there is. Anchored here, the tables sized by it
+// (g_GeWeaponDefs, g_GeWeaponHosts, geguns.c's names[]) and every test against
+// it keep the length they had.
+#define NUM_GE_WEAPONS  (WEAPON_GE_TASER + 1 - WEAPON_GE_FIRST)
 #define NUM_GE_GUNS     (WEAPON_GE_COVERTMODEM - WEAPON_GE_FIRST)
 #define NUM_GE_EXTRA    (WEAPON_GE_EXTRA4 + 1 - WEAPON_GE_EXTRA1)
 #define NUM_GE_CHEATGUNS (WEAPON_GE_TASER + 1 - WEAPON_GE_SILVERPP7)
@@ -5461,8 +5482,15 @@ enum weaponnum {
 // mpsetupfileSaveWad() that says when it has stopped being true.
 #define MPSETUP_VERSION_SLOTGROUPS 5
 
+// File format version that stores the curated random weapon list with a bit for
+// this fork's Rail-Laser too (MPWEAPON_RAILLASER, NUM_MPWEAPONS). The list is
+// one bit per row, so the row appends one bit and moves every field after it by
+// one - a version 5 file is read with 81 bits, a version 6 one with 82, and the
+// version byte is what says which (mpsetupfileSaveWad, mpsetupfileLoadWad).
+#define MPSETUP_VERSION_RAILLASER 6
+
 // The newest format, which loses nothing of a live setup.
-#define MPSETUP_VERSION_LATEST MPSETUP_VERSION_SLOTGROUPS
+#define MPSETUP_VERSION_LATEST MPSETUP_VERSION_RAILLASER
 
 #endif
 

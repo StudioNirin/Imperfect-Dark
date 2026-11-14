@@ -80,6 +80,7 @@
 #include "getank.h"
 #include "gewatch.h"
 #include "geslappers.h"
+#include "raillaser.h"
 #include "modloader.h"
 #endif
 
@@ -1279,7 +1280,7 @@ bool bgunWantsLoweredReload(s32 weaponnum)
 	// animation of its own - the magnum, the shotgun, the sniper rifle - or
 	// that were borrowed from GoldenEye X with its authored ones would play
 	// that instead, which is not GoldenEye's.
-	if (weaponnum >= WEAPON_GE_FIRST && weaponnum < NUM_WEAPONS) {
+	if (WEAPON_IS_GE(weaponnum)) {
 		return true;
 	}
 
@@ -2709,6 +2710,21 @@ bool bgunTickIncAttackingShoot(struct handweaponinfo *info, s32 handnum, struct 
 		}
 #endif
 
+#ifndef PLATFORM_N64
+		// The Rail-Laser does not fire until the trigger has been held for its
+		// charge (raillaser.c). It is held out of the first minor state, which is
+		// where the shot's animation and the shot itself are started, so the gun
+		// comes up and nothing leaves it; letting the trigger go leaves the
+		// attacking state, and hand->stateframes begins again with the next press,
+		// so a charge let go early is only the holding it cost. hand->primetimer60
+		// is the marker that the press has already fired (below): the GoldenEye
+		// grenade cook's own use of it is the other side of the same trick.
+		if (raillaserOwn(hand->gset.weaponnum)
+				&& raillaserCharging(hand->stateframes, hand->primetimer60)) {
+			sp64 = 0;
+		}
+#endif
+
 		if (sp64) {
 			hand->stateminor = HANDSTATEMINOR_ATTACK_SHOOT_1;
 		}
@@ -2731,6 +2747,15 @@ bool bgunTickIncAttackingShoot(struct handweaponinfo *info, s32 handnum, struct 
 
 		if (sp60 > 0) {
 			bgun0f09a6f8(info, handnum, hand, func);
+#ifndef PLATFORM_N64
+			if (raillaserOwn(hand->gset.weaponnum)) {
+				// A press fires the one shot it charged. Held through the reload that
+				// shot costs - the magazine is one - the gun waits for the trigger to
+				// be let go and pressed again, which is what bgunSetTriggerOn() clears
+				// the marker for.
+				hand->primetimer60 = -1;
+			}
+#endif
 		}
 
 		if (sp60 < 0 || sp60 == 2) {
@@ -14477,6 +14502,11 @@ void bgunSetTriggerOn(s32 handnum, bool on)
 
 	if (!on) {
 		hand->triggerreleased = true;
+#ifndef PLATFORM_N64
+		if (raillaserOwn(hand->gset.weaponnum)) {
+			hand->primetimer60 = 0; // the next press may charge again
+		}
+#endif
 	}
 }
 
@@ -15107,7 +15137,11 @@ struct ammotype g_AmmoTypes[] = {
 	{ 1,            0, 0  }, // AMMOTYPE_TOKEN
 	{ 200,          0, 0  }, // AMMOTYPE_1F
 	{ 10,           0, 0  }, // AMMOTYPE_ECM_MINE
+	{ 5,            0, 0  }, // AMMOTYPE_RAIL: the Rail-Laser's five charged shots (invitems.c)
 };
+
+_Static_assert(ARRAYCOUNT(g_AmmoTypes) == NUM_AMMOTYPES,
+	"g_AmmoTypes is indexed by AMMOTYPE_*: keep it as wide as NUM_AMMOTYPES");
 
 s32 bgunGetNumAmmoTypes(void)
 {

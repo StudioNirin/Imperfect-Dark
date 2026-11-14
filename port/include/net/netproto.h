@@ -225,7 +225,12 @@
 //    slots as slots), and Start Armed's Random reads it on every peer now, where
 //    a different candidate list means a different spawn gun and a different
 //    number of rng draws in a match that must agree with itself (weapon-sets.md)
-#define NET_PROTOCOL_VERSION 35
+// 36 (the Rail-Laser's row): RULES' u8 randomfilters[NUM_MPWEAPONS] is one
+//    byte wider, NUM_MPWEAPONS having grown for this fork's own gun
+//    (WEAPON_RAILLASER, MPWEAPON_RAILLASER). It is appended, so every row
+//    below it keeps its number and only the tail of the array is new, but the
+//    blob is a different length, which is what a peer reads first.
+#define NET_PROTOCOL_VERSION 36
 
 #define NETMSG_CONNECT    1
 #define NETMSG_ACCEPT     2

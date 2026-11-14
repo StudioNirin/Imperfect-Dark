@@ -1510,7 +1510,7 @@ static void borrowWeaponSets(struct moddataborrow *b)
 
 		for (s32 j = 0; j < NUM_MPWEAPONSLOTS; j++) {
 			set->slots[j] = borrowSetWeapon(raw[2 + j]);
-			guns += set->slots[j] >= WEAPON_GE_FIRST;
+			guns += WEAPON_IS_GE(set->slots[j]);
 		}
 
 		// its alternative slots are the same guns, and nothing locks it

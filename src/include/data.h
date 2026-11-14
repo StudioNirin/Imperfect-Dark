@@ -257,7 +257,7 @@ extern struct weapon g_GeWeaponDefs[NUM_GE_WEAPONS];
  */
 static inline s32 weaponHost(s32 weaponnum)
 {
-	return weaponnum >= WEAPON_GE_FIRST && weaponnum < NUM_WEAPONS
+	return weaponnum >= WEAPON_GE_FIRST && weaponnum <= WEAPON_GE_TASER
 		? g_GeWeaponHosts[weaponnum - WEAPON_GE_FIRST] : weaponnum;
 }
 
@@ -266,7 +266,10 @@ static inline s32 weaponHost(s32 weaponnum)
  * host's behaviour is not GoldenEye's (the audit of the weaponHost() sites,
  * ge-bean.md), which ask this beside the host.
  */
-#define WEAPON_IS_GE(weaponnum) ((weaponnum) >= WEAPON_GE_FIRST && (weaponnum) < NUM_WEAPONS)
+// Bounded by GoldenEye's own block rather than by NUM_WEAPONS, which counts
+// this fork's Rail-Laser (WEAPON_RAILLASER) now that there is one after
+// WEAPON_GE_TASER - and NUM_WEAPONS is a count, not a bound, in any case
+#define WEAPON_IS_GE(weaponnum) ((weaponnum) >= WEAPON_GE_FIRST && (weaponnum) <= WEAPON_GE_TASER)
 #else
 #define weaponHost(weaponnum) (weaponnum)
 #define WEAPON_IS_GE(weaponnum) (false)

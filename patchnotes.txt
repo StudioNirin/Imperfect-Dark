@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 90 2026-11-14
+New gun: the Rail-Laser. Hold the trigger for a second and a half and it fires - one shot, a Moonraker's beam, that kills at any range. Let go early and the charge starts over. It holds one shot a magazine out of five, so it reloads after every shot, it asks for the trigger again instead of firing twice to a press, and it zooms like the AR34 on the aim button. It is in the multiplayer lists and the Combat Simulator; no mission hands one out and no guard carries one. For now it wears the Moonraker Laser's model, firing sound and hands, since that is the look it is going for - GoldenEye XBLA's Moonraker over it is still to come, which is what will make it read as a railgun rather than a laser. Netplay protocol 36, so a match needs everyone on the same build.
+
 notes 89 2026-11-14
 Online: a host who launches before everyone is ready is asked rather than refused. Launch used to do nothing but say Not everyone is ready. Waiting for: names - a player who had not ticked Ready left the host pressing a button that refused. Now the room's page asks Launch anyway?, and Yes starts the same five second countdown with that player still not ready, who is in the match like everyone else. It asks only when the room refuses, so a room where everyone is ready goes straight in, and the players who are ready see no difference. Online rooms and LAN rooms both.
 

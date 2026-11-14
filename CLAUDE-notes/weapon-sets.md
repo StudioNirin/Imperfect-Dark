@@ -21,6 +21,13 @@ draws; what the saved setup file and the saved set each had to grow to hold (5 a
 2), and the fact that the two halves of a setup block are one hand on the same bit
 stream.
 
+A weapon number this fork appends (the Rail-Laser): why there was nowhere under
+GoldenEye's block to put one, and the segfault in a constructor that said so;
+why `NUM_WEAPONS` is a count and not a bound; the four tables indexed by the
+thing being scaled, one of which was exactly full; the two bit-level formats
+that grow by one bit and one byte; where a charge gate can sit that costs no
+ammunition, and which `hand` field is free to hold its state.
+
 Start Armed, one gun or two: why the pair is its own setting rather than
 `Mod.Akimbo`; why keeping the values 0/1/2 is what made the rename free; the
 ammount rule and the mines' exception to it, and the hidden tick that still
@@ -666,3 +673,153 @@ and Start Armed's three option strings. Mods: Player's copy of the tick row is
 `static` in `optionsmenu.c`, so what is asserted is the one predicate both rows
 answer. Nothing here sees the layout, the mission branch, or the simulants'
 hands - the same limit as every gate above.
+
+## A weapon number this fork appends: the Rail-Laser (2026-11-14)
+
+`WEAPON_RAILLASER` (patchnotes 90) is the first weapon number added to this tree
+that is neither Perfect Dark's nor GoldenEye's. Nothing about the row in
+`invitems.c` shows where the bodies are buried, and two of the three traps cost
+a detour.
+
+### There was nowhere to put the number
+
+Perfect Dark's guns end at `WEAPON_SUICIDEPILL` 0x5d and GoldenEye's run 0x5e to
+`WEAPON_GE_TASER` 0x86, contiguous, so a new number either renumbers GoldenEye's
+block - whose numbers are in players' saved setups, saved sets, mods and a
+match's RULES - or goes after it. Going after it killed three gates before a
+single log line, because **`NUM_GE_WEAPONS` was `NUM_WEAPONS - WEAPON_GE_FIRST`**:
+GoldenEye's block was defined as *everything to the end of the enum*, and
+`NUM_WEAPONS` is the enumerator count, so an appended number made it a 42nd
+GoldenEye gun. `gegunsInit()` is a `PD_CONSTRUCTOR`, its `names[]` has a NULL for
+the slot that does not exist, `langAddPortText(NULL)` does a `strcmp` on it, and
+the process dies during static initialisation - which is why the gate logs were
+empty and only gdb named it.
+
+`NUM_GE_WEAPONS` is now anchored on `WEAPON_GE_TASER + 1 - WEAPON_GE_FIRST`, and
+`WEAPON_IS_GE()` and `weaponHost()` in `data.h` are bounded by
+`<= WEAPON_GE_TASER`. Eight sites read a bare `>= WEAPON_GE_FIRST`, and six of
+them mean "one of GoldenEye's" rather than "one of the new ones": whose HUD a
+gun draws (`gehud.c`), the watch's gun list (`gewatch.c`), the borrowed-set count
+(`modborrow.c`), Slappers Only (`gexplus.c`), whether a Combat Simulator row is
+visible (`mplayer.c`), and the remake test in `inv.c`. All six now say
+`WEAPON_IS_GE()`. The rule for next time: **`NUM_WEAPONS` is a count, not a
+bound**; anything that means "one of a set" has to name that set's end.
+
+### The tables indexed by the thing you are scaling
+
+- `player.ammoheldarr` was `s32 [33]` - exactly full at `AMMOTYPE_ECM_MINE`
+  0x20, with nothing spare and no assert. There is now `NUM_AMMOTYPES` in
+  `constants.h`, a `_Static_assert` beside `g_AmmoTypes` in `bondgun.c` (a table
+  with one row per `AMMOTYPE_*` and only a trailing comment to say so), and
+  `modrun.c`'s hard-coded `s32 ammo[33]` - the one copy of that length kept by
+  hand, with the comment `// ammoheldarr's length`.
+- `multiammocrateslot slots[19] /* indexed by ammotype minus 1 */` looks like the
+  same trap and is not: those objects are built from a stage's own records, and
+  no stage record can name an ammo type the ROM never had.
+- `gunconfig[][5]` in `mainmenu.c` is indexed `weaponnum - 2`, and the fear that
+  a new number reads past it is wrong - `menuGetWeaponModelConfig()` bounds-checks
+  and returns false, and GoldenEye's guns are already past it. A new number
+  without a row simply has no inventory menu-model entry, like every GE gun.
+- `botinv.c`'s preference table stops with Perfect Dark's guns and is indexed by
+  weapon number. Nothing asks it about a gun without `WEAPONFLAG_AICANUSE`, which
+  is how the Rail-Laser is kept out of the simulants' hands *and* off that table
+  at the same time. A simulant needs its own charge state to have the gun
+  (`aibot->maulercharge[]` is the Mauler's copy), so the flag stays off.
+
+### Two formats grow, one by a bit and one by a byte
+
+A saved setup keeps the curated random weapon list as **one bit per row**, so a
+row appended to `g_MpWeapons[]` moves every field written after it by one bit:
+`MPSETUP_VERSION_RAILLASER` is 6, and both directions read at
+`version >= 6 ? NUM_MPWEAPONS : NUM_MPWEAPONS - 1`. A file that predates a row
+selects it - the same reasoning the rows past the old `u64`'s reach already use,
+and it keeps a decoded block equal to a live setup, which `mpsetups.c`'s
+re-encode of stored blocks depends on. The wire's `RULES.randomfilters` is one
+**byte** per row, so that is protocol 36.
+
+Appending is also what the Combat Simulator rows are checked by: `tools/ci`'s
+gate asserts `g_MpWeapons[0x21].weaponnum == WEAPON_LASER` and
+`0x50 == WEAPON_GE_TASER` by *literal index*, because a check written with
+`MPWEAPON_LASER` and friends would pass no matter where the rows actually were.
+
+### Where a charge can sit
+
+The gun fires only after `TICKS(90)` of held trigger, and the seam is
+`HANDSTATEMINOR_ATTACK_SHOOT_0` in `bgunTickIncAttackingShoot()`: forcing that
+minor state not to advance holds the gun up without a shot, which is exactly how
+GoldenEye's trigger delay (`gegunsTriggerDelay60()`) and the grenade cook
+(`bgunTickIncAttackingGeThrow()`) work, and it is three lines. The shot itself
+leaves in `SHOOT_1` (`bgun0f09a6f8()`), and the count is `hand->stateframes`, so
+a charge let go early leaves the attacking state and begins again - and spends
+nothing, which is the point: the Mauler *does* spend as it charges
+(`bondgun.c:10636`), and with `clipsize 1` that would bill a reset its own shot.
+
+`hand->primetimer60` (an `s16`, and the cook's own field, which is free because
+one hand cannot be holding both guns) is the marker that *this press* has fired:
+one shot to a press, cleared in `bgunSetTriggerOn()`, which is the only place
+`triggerreleased` is set - the release edge. Do not borrow `hand->matmot1` for
+any of this: it is the Mauler's charge, and the bot damage scale and the beam
+width both read it.
+
+The gun has no charge feedback yet - no sound ramp, no HUD bar - so releasing
+early is silent. That is the known gap, not an oversight in the gate.
+
+### What the gate sees
+
+`tools/ci/raillaser.sh` runs `--test-raillaser` (`raillaserSelfTest()`, in
+`port/src/raillaser.c`, which is also where `raillaserOwn()`,
+`raillaserCharge60()` and `raillaserCharging()` live so that `bondgun.c` has
+three one-line hooks instead of a weapon number sprinkled down it). 28 checks:
+the row through the accessors the game itself uses (`bgunGetAmmoTypeForWeapon()`,
+`bgunGetAmmoCapacityForWeapon()`, `aimsettings->flags`, the name id, the absent
+`WEAPONFLAG_AICANUSE` and `WEAPONFLAG3_FREESHOTS`), the number's neighbours by
+literal index, `NUM_GE_WEAPONS == 41`, `WEAPON_IS_GE()` both ways and
+`weaponHost()` on itself, `raillaserCharging()` at `TICKS(90) - 1`, at
+`TICKS(90)`, and spent, and a setup block written and read at version 6 next to
+a version 5 block read at 81 bits.
+
+The rows themselves - `invitem_raillaser`, `invfunc_raillaser_charge`,
+`invammo_raillaser` - have **no declarations outside `invitems.c`**, so the test
+asks the questions the game asks rather than naming the objects. The gun's name
+text comes from `langAddPortText()` (the port text bank, 512 entries, ids
+`(LANGBANK_PORT << 9) | i`, the string static and ending in a newline like the
+language files') because `L_GUN_*` ids are the ROM's and this name is not; that
+is set in `raillaserInit()` from `port/src/main.c`.
+
+What it cannot see: that one and a half seconds feels right, that the reload
+animation is the Rocket Launcher's borrowed for now, that the zoom is the AR34's
+20° on the aim input, and everything about the look - the gun still wears the
+Moonraker's model, hands, firing sound and pickup sound, and GoldenEye XBLA's
+Moonraker over it is the step still to do.
+
+### Why that step is not the `geslappers.c` shape it looked like
+
+The borrowed-model precedent is `geslappers.c:245-289`: register a file, put the
+file id in `hi_model`/`lo_model`, swap `g_Weapons[n]` between two defs on the
+stage boundary. For a *GoldenEye XBLA* gun it is not that, and the two reasons
+are worth having down before anybody tries it:
+
+- **Alias names are one slot and one host, globally.**
+  `romdataRegisterAliasFile(name, hostFileNum)` (`romdata.c:743`) keys on the
+  *name* - which is the XBLA-relative path, `gun/laser`, because that is what the
+  XBLA mesh loader files by - and keeps a single `alias` host number that every
+  later registration **overwrites**. So `gun/laser` cannot be skinned onto the
+  Rail-Laser's host and onto `g_GeWeaponDefs[WEAPON_GE_MOONRAKER]`'s host at the
+  same time: whoever registers last steers both. A Rail-Laser that registers the
+  name itself can silently move the Moonraker's own gun.
+- **A Bean gun is not a model, it is a pile of per-index machinery.** The first
+  person slot lives in `gebean.c`'s `fpSlot[ARRAYCOUNT(fpRows)]`, and the grip
+  placement, the sight cards, the muzzle flash and the round state all sit behind
+  guards of the form `!fpSlot[i] || g_GeWeaponDefs[i].hi_model != fpSlot[i]`
+  (`gebean.c:14064`, `14268`, `14288`, `14332`) with `i` the *GoldenEye* index.
+  Point a non-GoldenEye weapon's `hi_model` at that slot and the mesh draws
+  without the placement pass that makes it sit in a hand.
+
+So the seam is one of: teach `fpRows[]` and its per-index machinery that a row
+can be a Perfect Dark weapon (right answer, and it crosses the alias-name
+sharing); or reuse the Moonraker's slot only when the Bean look has already
+registered it, and stand in otherwise (small, cannot move the Moonraker, but the
+railgun's own look then only exists where GoldenEye's does). The stand-in - the
+Moonraker's own model, which is what `invitem_raillaser` is written with - is not
+a placeholder to be ashamed of: it is the answer the plan chose for "no XBLA
+package", and it is what runs today in every case.

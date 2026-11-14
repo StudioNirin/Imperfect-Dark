@@ -334,7 +334,7 @@ static f32 g_ModRunTintFrac;
 struct modruncarry {
 	f32 health;
 	f32 shield;
-	s32 ammo[33]; // ammoheldarr's length
+	s32 ammo[NUM_AMMOTYPES]; // ammoheldarr's length
 	u8 weapons[MODRUN_MAXCARRY];
 	s32 numweapons;
 	s32 hands[2];

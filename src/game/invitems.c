@@ -4280,6 +4280,102 @@ struct weapon invitem_laser = {
 	WEAPONFLAG3_CHRSHOTBEAM | WEAPONFLAG3_FREESHOTS, // flags3
 };
 
+#ifndef PLATFORM_N64
+/*
+ * The Rail-Laser (WEAPON_RAILLASER): this fork's own gun, and the only
+ * weapon here that has to be charged by holding the trigger (the gate is in
+ * bondgun.c's bgunChargeTick()). A Moonraker Laser's beam and picture, one
+ * shot a magazine out of five (AMMOTYPE_RAIL), reloading after each one, and
+ * the AR34's zoom on the aim input.
+ *
+ * It borrows the Moonraker's models, hand position, equip animation, firing
+ * sound and name text, because that is the look it is going for and the
+ * stand-in until it has its own of each: GoldenEye XBLA's Moonraker model
+ * over the top of it is the plan (port/src/geraillaser.c). Simulants are shut
+ * out by the missing WEAPONFLAG_AICANUSE, which is also what keeps them away
+ * from the tables indexed by weapon number below botinv.c's end, and there is
+ * no second function: in Perfect Dark a zoom is a mode on the aim input
+ * (INVAIMFLAG_MANUALZOOM, bondmove.c), not an alt-fire of its own, and the
+ * alt-fire slot of a gun here shoots something and would spend a charged shot
+ * to do it. WEAPONFLAG3_FREESHOTS, which is what makes the Moonraker never
+ * run out, is deliberately not copied.
+ */
+struct invaimsettings invaimsettings_raillaser = {
+	20, // the AR34's zoom (invaimsettings_ar34), not the sniper's plain one
+	3,
+	8,
+	15,
+	0.9721,
+	0.9767,
+	SIGHTTRACKTYPE_DEFAULT,
+	5,
+	INVAIMFLAG_MANUALZOOM | INVAIMFLAG_ACCURATESINGLESHOT,
+};
+
+struct inventory_ammo invammo_raillaser = {
+	AMMOTYPE_RAIL,
+	CASING_NONE,
+	1, // clip size: one charged shot, and then the reload
+	invanim_rocketlauncher_reload, // the Rocket Launcher's, until it has its own
+	0, // flags
+};
+
+struct weaponfunc_shootsingle invfunc_raillaser_charge = {
+	INVENTORYFUNCTYPE_SHOOT_SINGLE,
+	L_GUN_132, // name: the Moonraker's Pulse's, until the bank has its own
+	0, // unused
+	0, // ammoindex: invammo_raillaser
+	&invnoisesettings_default,
+	NULL, // fire animation
+	0, // flags
+	&invrecoilsettings_default,
+	0, // recoverytime60
+	100, // damage: a charged shot kills, as the Farsight's does (invitems.c)
+	0, // spread
+	6, 18, 24, -1,
+	0, // recoildist
+	0, // recoilangle
+	0, // slidemax
+	0, // impactforce
+	3, // duration60
+	SFX_8043, // shootsound: the Moonraker's Pulse's, until it has its own
+	1, // penetration
+};
+
+struct weapon invitem_raillaser = {
+	FILE_GLASER, // hi model: the Moonraker's, until its own is loaded (geraillaser.c)
+	FILE_GLASERLOD, // lo model: ditto
+	invanim_laser_equip, // equip animation
+	invanim_laser_unequip, // unequip animation
+	NULL, // pritosec animation
+	NULL, // sectopri animation
+	{ &invfunc_raillaser_charge, NULL }, // functions
+	&invammo_raillaser, // pri ammo
+	NULL, // sec ammo
+	&invaimsettings_raillaser,
+	3, // muzzlez: the Moonraker's, the same model under it
+	-12, // posx
+	-12.7, // posy
+	-21.5, // posz
+	1, // sway
+	NULL, // gunviscmds
+	NULL, // part visibility
+	L_GUN_047, // short name: the Moonraker's, until langAddPortText gives it its own (mplayer.c)
+	L_GUN_047, // name: ditto
+	L_GUN_150, // manufacturer: the Moonraker's
+	L_GUN_189, // description: the Moonraker's
+	// The Moonraker's flags, less three: AICANUSE and DUALFLIP, because no
+	// simulant has the charge logic a Rail-Laser needs and it is not a gun to
+	// hold one in each hand, and WEAPONFLAG2_NORELOADSOUND and
+	// WEAPONFLAG3_FREESHOTS, because it does reload and it does run out.
+	WEAPONFLAG_ONEHANDED | WEAPONFLAG_00000040 | WEAPONFLAG_TRACKTIMEUSED | WEAPONFLAG_00000400 | WEAPONFLAG_00002000 | WEAPONFLAG_00008000 | WEAPONFLAG_HASHANDS | WEAPONFLAG_DONTCOUNTSHOTS | WEAPONFLAG_04000000,
+	WEAPONFLAG2_NOWALLHIT | WEAPONFLAG2_LASERHIT | WEAPONFLAG2_LASERBEAM | WEAPONFLAG2_CROSSBEAM | WEAPONFLAG2_LASERFLIGHT | WEAPONFLAG2_BOTLIMITLESS, // flags2
+	0, // unequipped reload index
+	SFX_PICKUP_LASER, // pickup sound: the Moonraker's, until it has its own
+	WEAPONFLAG3_CHRSHOTBEAM, // flags3
+};
+#endif
+
 struct modelpartvisibility invpartvisibility_classic[] = {
 	{ MODELPART_GUN_MUZZLEFLASH1, false },
 	{ 255 },
@@ -6361,6 +6457,9 @@ struct weapon *g_Weapons[] = {
 	[WEAPON_CROSSBOW         ] = &invitem_crossbow,
 	[WEAPON_TRANQUILIZER     ] = &invitem_tranquilizer,
 	[WEAPON_LASER            ] = &invitem_laser,
+#ifndef PLATFORM_N64
+	[WEAPON_RAILLASER        ] = &invitem_raillaser,
+#endif
 	[WEAPON_GRENADE          ] = &invitem_grenade,
 	[WEAPON_NBOMB            ] = &invitem_nbomb,
 	[WEAPON_TIMEDMINE        ] = &invitem_timedmine,
