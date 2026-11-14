@@ -60,7 +60,10 @@
  * Simulator only.
  */
 
-static const char s_RailLaserName[] = "Rail-Laser\n";
+// What the weapon list calls it. The code keeps the Rail-Laser name through the
+// enum, the ammo type, this file and the gate, so the two names are not a
+// mistake: this string is the only place the gun's face is decided.
+static const char s_RailLaserName[] = "Moonrailer\n";
 static const char s_RailLaserChargeName[] = "Charged Shot\n";
 
 /**
@@ -222,7 +225,14 @@ void raillaserSelfTest(void)
 			}
 		}
 
-		RAILLASER_CHECK(strstr(mpGetWeaponLabel(display), "Rail-Laser") != NULL, "the weapon list offers it, and by its own name");
+		const char *label = mpGetWeaponLabel(display);
+
+		// Both halves matter: the name players see, and not the name the code
+		// carries, because the second is what a copy-paste of the enum would leave
+		// in the list
+		RAILLASER_CHECK(strstr(label, "Moonrailer") != NULL
+				&& strstr(label, "Rail-Laser") == NULL,
+			"the weapon list offers it as Moonrailer, which is not what the code calls it");
 		sysLogPrintf(LOG_NOTE, "raillaser test: note  row %d of %d in the weapon list; a stage's roll takes it: %s",
 				display + 1, mpGetNumWeaponOptions(),
 				mpWeaponRowSuitsStage(&g_MpWeapons[MPWEAPON_RAILLASER]) ? "yes" : "no");

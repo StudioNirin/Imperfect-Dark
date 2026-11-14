@@ -681,7 +681,11 @@ hands - the same limit as every gate above.
 ## A weapon number this fork appends: the Rail-Laser (2026-11-14)
 
 `WEAPON_RAILLASER` (patchnotes 90) is the first weapon number added to this tree
-that is neither Perfect Dark's nor GoldenEye's. Nothing about the row in
+that is neither Perfect Dark's nor GoldenEye's. The weapon list calls it
+**Moonrailer** - one string, `s_RailLaserName` in `raillaserInit()` - while the
+code keeps Rail-Laser through the enum, the ammo type, this file and the gate, so
+`grep Moonrailer` finds the text and nothing else. The gate pins both halves, in
+case a copy of the enum's name ever lands in the list. Nothing about the row in
 `invitems.c` shows where the bodies are buried, and two of the three traps cost
 a detour.
 

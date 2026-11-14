@@ -1,7 +1,8 @@
 #!/bin/bash
 # raillaser.sh - the Rail-Laser: its row, its number, its charge, and the width of a saved setup
 #
-# The fork's own gun (patchnotes 90): a Moonraker Laser's look, one shot a
+# The fork's own gun (patchnotes 90), which the weapon list calls Moonrailer: a
+# Moonraker Laser's look, one shot a
 # magazine out of five, a trigger held one and a half seconds to fire it, and
 # the AR34's zoom on the aim input (invitems.c, port/src/raillaser.c). Its
 # charge is the Mauler's machine - bgunTickMaulerCharge() widened to the new
