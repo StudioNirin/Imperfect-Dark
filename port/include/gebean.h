@@ -600,6 +600,15 @@ u8 *gebeanBuild(s32 row, s32 original, struct modeldef *modeldef, struct modelno
 /** The guns' models in the hand again, after geguns.c swapped their definitions (gegunsStageSet()). */
 void gebeanGunsStageRefresh(void);
 
+/**
+ * The file number the fork's own Moonrailer (WEAPON_RAILLASER, raillaser.c) is
+ * wearing in first person: the release's Moonraker drawn on Perfect Dark's Laser,
+ * or 0 when the release is not installed and the gun keeps Perfect Dark's model.
+ * Set by gebeanGunsRefresh() on a stage load and on F6, so it reads 0 before
+ * either has happened - which is the answer at boot, not a failure.
+ */
+s32 gebeanMoonrailerSlot(void);
+
 #ifdef __cplusplus
 }
 #endif

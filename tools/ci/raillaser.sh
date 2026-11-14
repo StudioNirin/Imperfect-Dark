@@ -103,4 +103,30 @@ if [ "$between" -lt 1 ]; then
 	exit 1
 fi
 
+# The first-person row's wiring (gebean.c). A row that is not there, or an alias
+# name that is not its own, means the gun quietly keeps Perfect Dark's Laser - the
+# stand-in is a correct answer, so nothing complains when it is the wrong one. And
+# the two watch arrays must be sized by the rows: the loops that read them run to
+# ARRAYCOUNT(fpRows), and past GoldenEye's block fpWatchSlot[] abuts a live flag.
+between=$(grep -c 'FPROW("GpdMoonrailerZ", "gun/laser")' "$ROOT/port/src/gebean.c")
+if [ "$between" -lt 1 ]; then
+	echo "raillaser: gebean.c has no first-person row of the Moonrailer's own over gun/laser"
+	exit 1
+fi
+for guard in 'fpWatchSlot\[ARRAYCOUNT(fpRows)\]' 'fpWatchRows\[ARRAYCOUNT(fpRows)\]'; do
+	grep -q "$guard" "$ROOT/port/src/gebean.c" || {
+		echo "raillaser: a watch array is sized by GoldenEye's block again, and the loops over the rows are not"
+		exit 1
+	}
+done
+between=$(grep -c 'fp < NUM_GE_GUNS && gegunsIsBorrowed(fp)' "$ROOT/port/src/gebean.c")
+if [ "$between" -lt 2 ]; then
+	echo "raillaser: a gegunsIsBorrowed() call lost its guard ($between of 2); the extra row is inside borrowed[]'s reach, where it is the Covert Modem's"
+	exit 1
+fi
+
+# What a stage says when the release is installed - the positive path the run
+# above cannot reach, because the guns are refreshed on a stage load and on F6,
+# not at boot. The mesh's own fit logs next to it as "fpfit: row 25 ... scale".
+#	  gebean: the Moonrailer's first person is GpdMoonrailerZ (file N)
 echo "raillaser: as expected"

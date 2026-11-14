@@ -951,11 +951,31 @@ are worth having down before anybody tries it:
   Point a non-GoldenEye weapon's `hi_model` at that slot and the mesh draws
   without the placement pass that makes it sit in a hand.
 
-So the seam is one of: teach `fpRows[]` and its per-index machinery that a row
-can be a Perfect Dark weapon (right answer, and it crosses the alias-name
-sharing); or reuse the Moonraker's slot only when the Bean look has already
-registered it, and stand in otherwise (small, cannot move the Moonraker, but the
-railgun's own look then only exists where GoldenEye's does). The stand-in - the
-Moonraker's own model, which is what `invitem_raillaser` is written with - is not
-a placeholder to be ashamed of: it is the answer the plan chose for "no XBLA
-package", and it is what runs today in every case.
+So the seam looked like one of: teach `fpRows[]` and its per-index machinery that a
+row can be a Perfect Dark weapon; or reuse the Moonraker's slot only when the Bean
+look has already registered it, and stand in otherwise (small, cannot move the
+Moonraker, but the railgun's own look then only exists where GoldenEye's does). The
+first is what was built, and the alias-name sharing that made it look hard turned
+out to be the way in rather than the obstacle: two names over one release asset is
+what `fpWatchRows` already does, so the Moonrailer got a row of its own -
+`GpdMoonrailerZ` over `gun/laser` - and the Moonraker's fit stayed exactly where it
+was. The whole thing, and the Covert Modem an unguarded GoldenEye accessor reads
+instead of this row, is in ge-bean.md ("As built: the Moonrailer's row").
+
+The stand-in - `FILE_GLASER`, Perfect Dark's own Laser, which is what
+`invitem_raillaser` is written with - is not a placeholder to be ashamed of either:
+it is the answer for a player with no GoldenEye XBLA package, and it is the file the
+gun's own definition carries, which is what another player's hand holds (a body's
+gun comes from `playermgrGetModelOfWeapon()`, a chr model, not from this file).
+What the alias reaches is the file number, and the hand draws whatever `hi_model`
+holds - loading that file is what makes the built mesh exist, since the build is
+keyed on the name (the `g_GeWeaponDefs[i].hi_model != fpSlot[i]` guards in the
+accessors at `gebean.c:14161, 14429` are that convention written down: the def
+carries the alias). GoldenEye's 25 rows do the same to their own defs, so a gun
+dropped on the ground spawning from an aliased `hi_model` (`game_0c0920.c:78`) is a
+case that already happens for them; still worth a glance for ours.
+
+The accessors that ask for a muzzle offset, a watch face or a card are
+`GE_GUN_INDEX`-guarded and read `g_GeWeaponDefs[]`, so all of them answer "nothing"
+for the Moonrailer: those are the slice that maps a weapon number to the row, and
+without them the gun draws and simply has no muzzle flash origin.

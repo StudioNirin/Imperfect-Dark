@@ -13,6 +13,7 @@
 #include "game/challenge.h"
 #include "game/game_0b0fd0.h"
 #include "game/playermgr.h"
+#include "gebean.h"
 #include "game/mplayer/mplayer.h"
 #include "system.h"
 #include "raillaser.h"
@@ -186,7 +187,20 @@ void raillaserSelfTest(void)
 	// The row, and what the game reads off it. The rows themselves (invitem_
 	// invfunc_ invammo_) have no declarations outside invitems.c, so this asks
 	// the questions the game asks rather than naming the objects.
-	RAILLASER_CHECK(gun != NULL && gun->hi_model == FILE_GLASER, "the weapon table has the Rail-Laser, on the Moonraker's model for now");
+	// Which model it is wearing, and whether the two agree. Written first as "it is
+	// on Perfect Dark's Laser at boot, and no release mesh is claimed yet", which
+	// was wrong twice over: the gun refresh has already run by the time the test
+	// does, and the release is installed on this machine, so the alias was
+	// registered and the gun was wearing it - a gate catching a guess about
+	// ordering, which is what the gates are for. Either answer is legitimate, so
+	// what is pinned is that the row's model is the stand-in or exactly the slot the
+	// seam claims, never a stale number in between.
+	RAILLASER_CHECK(gun != NULL
+			&& gun->hi_model == (u16)(gebeanMoonrailerSlot() ? gebeanMoonrailerSlot() : FILE_GLASER),
+		"what it wears is Perfect Dark's Laser, or exactly the release mesh it says it wears");
+	sysLogPrintf(LOG_NOTE, "raillaser test: note  first-person model: %s (file %d); the fit logs in a stage as fpfit: row %d",
+		gebeanMoonrailerSlot() ? "the release's Moonraker" : "Perfect Dark's Laser", gebeanMoonrailerSlot(),
+		NUM_GE_GUNS);
 	RAILLASER_CHECK(gun->functions[FUNC_SECONDARY] == NULL, "it has one function: a zoom is the aim input here, not an alt-fire");
 	RAILLASER_CHECK(((struct weaponfunc *) gun->functions[FUNC_PRIMARY])->type == INVENTORYFUNCTYPE_SHOOT_SINGLE, "its shot is a single hitscan beam, not a projectile");
 	RAILLASER_CHECK(gun->ammos[FUNC_PRIMARY] != NULL && gun->ammos[FUNC_PRIMARY]->clipsize == 1, "one shot a magazine");

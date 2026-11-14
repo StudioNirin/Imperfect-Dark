@@ -15500,3 +15500,61 @@ has to be refreshed at all three, or the F6 switch will strip it.
 Nothing in `gebean.c` or `xblamesh.c` mentions `WEAPON_RAILLASER` today, and the
 gun runs on the stock `FILE_GLASER` in every look, which is a correct answer on
 its own (weapon-sets.md).
+
+### As built: the Moonrailer's row, and what reading this section bought
+
+Built the same day, for `WEAPON_RAILLASER` (raillaser.c). One row of its own in
+`fpRows[]` - now `NUM_GE_GUNS + 1` wide, indexed `FP_PD_RAILLASER == NUM_GE_GUNS` -
+with its own alias name `GpdMoonrailerZ` over the release's `gun/laser`: the
+Moonraker's asset, which the Moonraker's own row already aliases as
+`GgeMoonrakerZL`, and one alias name holds one host, so sharing the name would have
+given one gun the other's placement and nothing to say about it. The Moonraker's
+`{ FP_OWNPLACE, { 0, 0, -53 }, 1/4.7 }` stays its own.
+
+Registration is by hand, in `gebeanGunsRefresh()` after the loop over `gunRows[]`,
+because every step of that loop reads GoldenEye's tables (the host from
+`g_GeWeaponHosts[]`, the watch copy, the Combat Simulator's row) and here the host
+is the weapon's own `FILE_GLASER` and there is no watch copy. `hi_model` is assigned
+**from `FILE_GLASER` every time**, not accumulated: this runs on every stage load
+and again on F6, and a Perfect Dark row has no `stockDefs[]` copy to restore from,
+so the second pass would alias the alias. `lo_model` stays `FILE_GLASERLOD`.
+
+**The row sits inside GoldenEye's tables, and that is the trap this section
+predicted.** The family's index doubles as `weaponnum - WEAPON_GE_FIRST` against
+tables `NUM_GE_WEAPONS` wide (41), so index 25 is nowhere near out of bounds - it
+is **`WEAPON_GE_COVERTMODEM`'s row**, and an unguarded accessor returns a confident
+wrong answer. `gegunsIsBorrowed()` reads `borrowed[]` with no bound at all and is
+guarded `fp < NUM_GE_GUNS` at both call sites now. The other direction is just as
+silent: `WEAPON_RAILLASER - WEAPON_GE_FIRST` is 41, past both sizes, so no
+weapon-number accessor reaches the row - the muzzle offset, the release file, the
+hands and the watch face all answer "no release mesh here" for the Moonrailer until
+they map it here by hand. Of those, the one the look switch needs is
+`gebeanSwitchReloads()`, which has the `WEAPON_RAILLASER` case: without it F6 left
+the gun in the hand wearing the look you switched away from.
+
+**Its `fpGrip` entry is absent rather than tuned**, which is mode 0: box, then
+walked onto the host's own vertices - the case `fpRefinePlacement()` exists for,
+since here the host *is* the same gun. Mode 2 is not available (the placement call
+is `GE_GUN_INDEX`-guarded and fails closed), and if the fit reads wrong the fix is
+mode 0 or 1 with measured numbers, exactly as the Moonraker's row ended up.
+
+What proves it, since the shape of a gun in the hand is not a thing a test can
+say: `gebean: the Moonrailer's first person is GpdMoonrailerZ (file N)` on a stage
+load and on F6 - and `... is Perfect Dark's Laser (file 0)` when the release is not
+installed, which is the answer rather than a failure - and `fpfit: row 25 ... scale
+<x>` when the mesh builds with the gun in hand. That scale is read there and never
+guessed, and it is the number to change if the gun is the wrong size. The gate
+(`tools/ci/raillaser.sh`) pins the row, both watch-array sizes and the two guards,
+and asks that `g_Weapons[WEAPON_RAILLASER]->hi_model` be the stand-in or exactly
+what `gebeanMoonrailerSlot()` reports; asked first as "it is on Perfect Dark's
+Laser at boot", it failed immediately, because `gebeanGunsRefresh()` has already run
+by the time the test does and the release was installed here.
+
+**And the array that was already reading past its end.** `fpWatchRows[]` and
+`fpWatchSlot[]` were `[NUM_GE_GUNS]` while every loop over them runs to
+`ARRAYCOUNT(fpRows)` - true before this change as well, so GoldenEye's own 25 rows
+walked one element off the end on each pass, and `fpWatchSlot[25]` abuts
+`fpBuildBare`, a live flag and not a zero. Both are sized by `ARRAYCOUNT(fpRows)`
+now. Adding a row to that family grows them, so check it whenever one is added: only
+the Moonrailer's fit was wrong by it, because `gegunsIsBorrowed()` was reading the
+Covert Modem's `borrowed[25]`.

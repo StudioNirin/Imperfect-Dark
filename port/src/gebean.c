@@ -565,7 +565,31 @@ static const struct gebeanrow chrRows[] = {
 
 #define FPROW(file, source) { file, 0, 0, GEBEAN_FIRSTPERSON, source }
 
-static const struct gebeanrow fpRows[NUM_GE_GUNS] = {
+/**
+ * One row in this family is not GoldenEye's: this fork's Moonrailer
+ * (WEAPON_RAILLASER), which wears the release's Moonraker on Perfect Dark's
+ * Laser. It sits past GoldenEye's block rather than inside it, because every
+ * other row here is also addressed as `weaponnum - WEAPON_GE_FIRST` and that
+ * number must keep meaning one thing.
+ *
+ * Two things follow from that, and neither is a crash, which is what makes them
+ * worth saying. GoldenEye's own tables (g_GeWeaponDefs[], g_GeWeaponHosts[],
+ * geguns.c's borrowed[] and stockDefs[]) are NUM_GE_WEAPONS wide, wider than
+ * these rows, so handing them FP_PD_RAILLASER reads **the Covert Modem's row**
+ * and returns a confident wrong answer - hence the `fp < NUM_GE_GUNS` guards on
+ * the two gegunsIsBorrowed() calls, which have no bound of their own. And
+ * WEAPON_RAILLASER - WEAPON_GE_FIRST is 41, past both sizes, so no accessor
+ * reaches this row on its own: the ones that take a weapon number answer "no
+ * release mesh here" for the Moonrailer until they map it here by hand.
+ *
+ * The asset is the Moonraker's; the name is not. One alias name has one host, and
+ * the row lookup matches that name by pointer, so a second name over the same
+ * `gun/laser` is what fpWatchRows already does for the watch's face - and it is
+ * also what keeps the two guns' fits independent.
+ */
+#define FP_PD_RAILLASER NUM_GE_GUNS
+
+static const struct gebeanrow fpRows[NUM_GE_GUNS + 1] = {
 	[WEAPON_GE_PP7             - WEAPON_GE_FIRST] = FPROW("GgePP7Z",             "gun/ppk"),
 	[WEAPON_GE_PP7SILENCED     - WEAPON_GE_FIRST] = FPROW("GgePP7silZ",          "gun/ppksilenced"),
 	[WEAPON_GE_DD44            - WEAPON_GE_FIRST] = FPROW("GgeDD44Z",            "gun/tt33"),
@@ -591,6 +615,17 @@ static const struct gebeanrow fpRows[NUM_GE_GUNS] = {
 	[WEAPON_GE_TIMEDMINE       - WEAPON_GE_FIRST] = FPROW("GgeTimedMineZ",       "gun/timedmine"),
 	[WEAPON_GE_PROXIMITYMINE   - WEAPON_GE_FIRST] = FPROW("GgeProximityMineZ",   "gun/proximitymine"),
 	[WEAPON_GE_REMOTEMINE      - WEAPON_GE_FIRST] = FPROW("GgeRemoteMineZ",      "gun/remotemine"),
+
+	// Perfect Dark's gun, GoldenEye X's shape. Its fit entry is deliberately
+	// absent: with no fpGrip row it is placed by its box and then walked onto the
+	// host's own vertices (gebeanBuildFirstPerson()'s refine), which is the case
+	// that refinement was written for - here the host *is* the same gun. The
+	// Moonraker's own row needed FP_OWNPLACE and a measured -53 after a report of
+	// the laser sitting in the wrong place (F3 20260926-101031), and if this one
+	// reads wrong the same fix applies, minus the placement call: that one is
+	// guarded to GoldenEye's defs and fails closed for this row, so
+	// fpGrip[FP_PD_RAILLASER].set may be 0 or 1 and never FP_OWNPLACE.
+	[FP_PD_RAILLASER] = FPROW("GpdMoonrailerZ", "gun/laser"),
 };
 
 static s32 fpSlot[ARRAYCOUNT(fpRows)];
@@ -603,7 +638,10 @@ static s32 fpSlot[ARRAYCOUNT(fpRows)];
  * with those draws left out (beanGunExtent()'s handoff). Only the file and
  * the source matter; the rest is the hand's row's.
  */
-static const struct gebeanrow fpWatchRows[NUM_GE_GUNS] = {
+// Sized by the rows and not by NUM_GE_GUNS: the loops that read these two run to
+// ARRAYCOUNT(fpRows), and fpWatchSlot[] sits immediately before fpBuildBare, so a
+// slot past GoldenEye's block reads a live flag rather than a zero.
+static const struct gebeanrow fpWatchRows[ARRAYCOUNT(fpRows)] = {
 	[WEAPON_GE_PP7             - WEAPON_GE_FIRST] = FPROW("GgePP7WZ",            "gun/ppk"),
 	[WEAPON_GE_PP7SILENCED     - WEAPON_GE_FIRST] = FPROW("GgePP7silWZ",         "gun/ppksilenced"),
 	[WEAPON_GE_DD44            - WEAPON_GE_FIRST] = FPROW("GgeDD44WZ",           "gun/tt33"),
@@ -613,7 +651,7 @@ static const struct gebeanrow fpWatchRows[NUM_GE_GUNS] = {
 	[WEAPON_GE_THROWINGKNIFE   - WEAPON_GE_FIRST] = FPROW("GgeThrowingKnifeWZ",  "gun/throwingknife"),
 };
 
-static s32 fpWatchSlot[NUM_GE_GUNS];
+static s32 fpWatchSlot[ARRAYCOUNT(fpRows)];
 static s32 fpBuildBare; // gebeanBuildFirstPerson() is building one of fpWatchRows
 
 // How each first-person gun was last laid onto its host (gebeanBuildFirstPerson()):
@@ -1651,11 +1689,57 @@ static void gebeanGunsRefresh(void)
 				ARRAYCOUNT(gunRows), shown);
 	}
 
+	// The one first-person row that is not GoldenEye's, done by hand because
+	// everything above reads GoldenEye's tables to find a gun: here the host is the
+	// weapon's own model, the hands stay exactly as the Perfect Dark row has them,
+	// and there is no watch copy of it.
+	//
+	// Assigned from FILE_GLASER afresh every time rather than accumulated, because
+	// this runs on every stage load and again on F6, and there is no stockDefs[]
+	// copy of a Perfect Dark row to restore from - an alias of an alias would be
+	// the result. The mesh then builds by itself: the alias is a name, the name
+	// finds its row (gebeanPoolRowForFile), the row is a first-person one
+	// (gebeanRowIsFirstPerson) and xblamesh builds it per look.
+	{
+		struct weapon *gun = g_Weapons[WEAPON_RAILLASER];
+		s32 slot = 0;
+
+		fpSlot[FP_PD_RAILLASER] = 0;
+		gun->hi_model = FILE_GLASER;
+
+		if (bean && gun->lo_model) {
+			slot = romdataRegisterAliasFile(fpRows[FP_PD_RAILLASER].file, FILE_GLASER);
+
+			if (slot) {
+				fpSlot[FP_PD_RAILLASER] = slot;
+				gun->hi_model = (u16)slot;
+			}
+		}
+
+		// Which of the two it ended up wearing, said in the run's log rather than
+		// guessed from the look: this is the line that says a player with the release
+		// installed is about to be shown GoldenEye X's Moonraker - and the one that
+		// answers 0 when the release is there but its gun/laser could not be read,
+		// instead of leaving the gun on Perfect Dark's model with nothing to say.
+		sysLogPrintf(LOG_NOTE, "gebean: the Moonrailer's first person is %s (file %d)",
+			slot ? fpRows[FP_PD_RAILLASER].file : "Perfect Dark's Laser", slot);
+	}
+
 	// and the guns there are no rows here for, the hack's own pistols and
 	// GoldenEye's cheat guns: GoldenEye's own model (geguns.c); and the cheat
 	// guns' Combat Simulator rows, where asked for
 	gegunsExtraModelsRefresh();
 	gegunsCheatRowsRefresh();
+}
+
+/**
+ * The file number the Moonrailer's first-person model is wearing: 0 when the
+ * release is not installed, in which case the gun keeps Perfect Dark's Laser.
+ * The gate asks, and so does anything that has to say which model is in use.
+ */
+s32 gebeanMoonrailerSlot(void)
+{
+	return fpSlot[FP_PD_RAILLASER];
 }
 
 void gebeanGunsStageRefresh(void)
@@ -1666,6 +1750,15 @@ void gebeanGunsStageRefresh(void)
 /** Whether a gun in a hand has to be loaded again when the look changes. */
 static s32 gebeanSwitchReloads(s32 weaponnum)
 {
+	if (weaponnum == WEAPON_RAILLASER) {
+		// Perfect Dark's number, so the GoldenEye test below cannot answer for it -
+		// and its own row is inside that table's reach, where it is the Covert
+		// Modem's. What matters is the same thing either way: whether a mesh of the
+		// other look's is loaded in the hand, which for this gun is whether the
+		// alias is registered at all.
+		return fpSlot[FP_PD_RAILLASER] != 0;
+	}
+
 	return weaponnum >= WEAPON_GE_FIRST && weaponnum < WEAPON_GE_FIRST + NUM_GE_GUNS
 		&& gegunsHasOwnModel(weaponnum - WEAPON_GE_FIRST);
 }
@@ -13170,7 +13263,11 @@ static u8 *gebeanBuildFirstPerson(s32 fp, s32 original, struct modeldef *modelde
 	// and the silenced D5K off to one side, the sniper rifle a sliver, the
 	// Moonraker only its sight, the rocket launcher a slab and the remote mine
 	// out of the hand.
-	if (gegunsIsBorrowed(fp) || fpOnOwn[fp]) {
+	// A borrowed gun is GoldenEye X's own model under the release's skin, and it is
+	// a GoldenEye question: gegunsIsBorrowed() indexes borrowed[] by
+	// weaponnum - WEAPON_GE_FIRST with no bound at all, and the extra row here is
+	// inside that table, where it is the Covert Modem's.
+	if ((fp < NUM_GE_GUNS && gegunsIsBorrowed(fp)) || fpOnOwn[fp]) {
 		struct beanmodel orig;
 		char origsource[64];
 		u8 *origuse = calloc(2, BEAN_MAXDRAWS);
@@ -14586,8 +14683,9 @@ u8 *gebeanBuild(s32 row, s32 original, struct modeldef *modeldef, struct modelno
 			*outLen = 0;
 			*outAbsent = 0;
 
-			// GoldenEye X's own model is GoldenEye's N64 gun already
-			if (original && gegunsIsBorrowed(fp)) {
+			// GoldenEye X's own model is GoldenEye's N64 gun already (and, as
+			// above, a question only a GoldenEye row can be asked)
+			if (original && fp < NUM_GE_GUNS && gegunsIsBorrowed(fp)) {
 				return NULL;
 			}
 
