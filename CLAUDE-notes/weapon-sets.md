@@ -26,7 +26,9 @@ GoldenEye's block to put one, and the segfault in a constructor that said so;
 why `NUM_WEAPONS` is a count and not a bound; the four tables indexed by the
 thing being scaled, one of which was exactly full; the two bit-level formats
 that grow by one bit and one byte; where a charge gate can sit that costs no
-ammunition, and which `hand` field is free to hold its state.
+ammunition, whose charge field it runs on, the two other writers of that field
+that come near it, and the damage multiplier that must not be widened along
+with it.
 
 Start Armed, one gun or two: why the pair is its own setting rather than
 `Mod.Akimbo`; why keeping the values 0/1/2 is what made the rename free; the
@@ -742,41 +744,109 @@ gate asserts `g_MpWeapons[0x21].weaponnum == WEAPON_LASER` and
 `0x50 == WEAPON_GE_TASER` by *literal index*, because a check written with
 `MPWEAPON_LASER` and friends would pass no matter where the rows actually were.
 
-### Where a charge can sit
+### Where a charge can sit, and whose charge it is
 
-The gun fires only after `TICKS(90)` of held trigger, and the seam is
+The gun fires only when its charge is full, and the seam is
 `HANDSTATEMINOR_ATTACK_SHOOT_0` in `bgunTickIncAttackingShoot()`: forcing that
 minor state not to advance holds the gun up without a shot, which is exactly how
 GoldenEye's trigger delay (`gegunsTriggerDelay60()`) and the grenade cook
 (`bgunTickIncAttackingGeThrow()`) work, and it is three lines. The shot itself
-leaves in `SHOOT_1` (`bgun0f09a6f8()`), and the count is `hand->stateframes`, so
-a charge let go early leaves the attacking state and begins again - and spends
-nothing, which is the point: the Mauler *does* spend as it charges
-(`bondgun.c:10636`), and with `clipsize 1` that would bill a reset its own shot.
+leaves in `SHOOT_1` (`bgun0f09a6f8()`). `hand->primetimer60` (an `s16`, and the
+cook's own field, which is free because one hand cannot be holding both guns) is
+the marker that *this press* has fired: one shot to a press, cleared in
+`bgunSetTriggerOn()`, which is the only place `triggerreleased` is set - the
+release edge.
 
-`hand->primetimer60` (an `s16`, and the cook's own field, which is free because
-one hand cannot be holding both guns) is the marker that *this press* has fired:
-one shot to a press, cleared in `bgunSetTriggerOn()`, which is the only place
-`triggerreleased` is set - the release edge. Do not borrow `hand->matmot1` for
-any of this: it is the Mauler's charge, and the bot damage scale and the beam
-width both read it.
+What the gate counts is `hand->matmot1`, and the reason to move the clock onto
+that field rather than keep a frame count is that **everything the player needs
+to feel a charge is already hung off it**, all of it in `bondgun.c`:
 
-The gun has no charge feedback yet - no sound ramp, no HUD bar - so releasing
-early is silent. That is the known gap, not an oversight in the gate.
+- the loop that winds up and cuts out - `SFX_MAULER_CHARGE`, started above
+  `matmot1 > 0.1f` while the tick says it is charging, pitch
+  `0.5 + matmot1/3 + sine wobble` posted every frame, `audioStop`ped the moment
+  it is not (`:10689`);
+- the model building red, which is not a model part at all: `renderdata.envcolour
+  = colourBlend(0xff00007f, envcolour, matmot1 * 50)` (`:13653`). It follows the
+  weapon number, so it works over a borrowed model, which is the only reason a
+  gun on someone else's mesh gets a glow;
+- the shot's own voice, pitched by the charge when the gun has
+  `WEAPONFLAG2_CHARGEABLE`: `1.0f - min(matmot1 / 3, 1) * 0.4` (`:2470`), so a
+  full charge plays the shot at 0.6 - lower *and* longer, for nothing.
+
+The machine is run from **one** place, `:10781`
+(`if (weaponHost(player->gunctrl.weaponnum) == WEAPON_MAULER) bgunTickMaulerCharge();`),
+and `weaponChargesLikeMauler()` in `port/src/raillaser.c` is what it asks now -
+by `weaponHost()`, so a mod's reskinned Mauler keeps its charge. Inside the tick
+this gun has its own branch, because the Mauler's rules are wrong for it: the
+Mauler fills whenever its charged *function* is selected, needs two rounds in the
+magazine and **pays one out for each unit of charge** (`:10653`), which with
+`clipsize 1` would bill a reset its own shot. This one fills only while
+`hand->triggeron` with the hand in `HANDSTATE_ATTACK`, pays nothing until the
+shot leaves, gives the field back to zero the moment the press is not live (so
+the loop stops on the release and the next press starts again at the bottom of
+its pitch), and fires itself when the gate is no longer holding it. Its full is
+the Mauler's `5.0f` *on purpose*: the cues above are written against that number,
+so a lower full would fire a shot that sounds nothing like a Mauler at full
+charge and a higher one would sit at the same pitch and colour while the charge
+ran on.
+
+`hand->matmot1` is per-hand scratch - the muzzle flash writes it, the RCP-120's
+cloak ammo writes it (`:7313`, `:10803`) - so borrowing it means auditing its
+writers, and two of them come close enough to matter: `bgunUpdateLaser()`
+(`:10095`, wants `FUNCFLAG_LASERSTREAM` on a *function*) and
+`bgunUpdateShotgun()` (`:10360`, wants `WEAPONFLAG3_SHOTGUNMODEL` on the gun).
+Either would fight the charge and neither is visible from the row, so both are
+asserted in the gate. (What was written here the first time - *do not borrow
+`matmot1`* - was the right caution and the wrong conclusion: the bot readers go
+through `weaponHost() == WEAPON_MAULER` and so cannot pick up a new number, and
+the writers are flag-gated.)
+
+**The trap that decides what is *not* widened** is `game_0b0fd0.c`. Two sites
+name the Mauler there: `:602` carries the charge into the gun state other
+players see (`gset->unk063a = matmot1 * 10`), and `:686` is the Mauler's damage
+scale - `damage = (gset->unk063a / 3.0f + 1.0f) * damage`, which at full charge
+is about eighteen times the function row's own 1.2. Widening the carry for a gun
+whose shot is a fixed Farsight-class 100 would have multiplied it by that same
+eighteen. So the presentation sites are widened and the `gset` carry is not:
+**the charge is not yet visible on another player's body**, and whoever wants it
+must find a path that is not that multiplier. The self-test pins the Mauler's
+charged shot as still the damage that scales.
+
+Two flags with one letter between them, and the gun wants exactly one:
+`WEAPONFLAG2_CHARGEABLE` is the shot's voice (one reader, `:2470`) and is set;
+`WEAPONFLAG3_CHARGEBEAM` is `beam->weaponnum = -3 - (s32)matmot1` at
+`gunfx.c:161` and `:192` with the Mauler's texture at `:374`, and would replace
+the Moonraker's white bolt with the Mauler's ball. The shot's sound is now the
+Mauler's charged shot's (`SFX_805B`), pinned by comparing against
+`g_Weapons[WEAPON_MAULER]->functions[FUNC_SECONDARY]` rather than by literal.
+
+Last, a risk taken rather than fixed: the decomp's own comment at `:10674-10687`
+records that other places which start a sound and then re-pitch it raise the
+main thread above the audio thread between `sndStart` and `audioPostEvent`, that
+this block does not, and that there is a *"known issue where the Mauler charge
+sound is played correctly then the game proceeds to play other unrelated sound
+effects before eventually crashing"*. The Mauler enters that window rarely; a
+gun that charges on every press and on every aborted one enters it constantly.
+If a crash ever lands in `audioPostEvent` off a charge loop, that is the place.
 
 ### What the gate sees
 
 `tools/ci/raillaser.sh` runs `--test-raillaser` (`raillaserSelfTest()`, in
 `port/src/raillaser.c`, which is also where `raillaserOwn()`,
-`raillaserCharge60()` and `raillaserCharging()` live so that `bondgun.c` has
-three one-line hooks instead of a weapon number sprinkled down it). 28 checks:
-the row through the accessors the game itself uses (`bgunGetAmmoTypeForWeapon()`,
+`raillaserCharge60()`, `raillaserChargeFull()`, `raillaserChargeRate60()` and
+`raillaserCharging()` live so that `bondgun.c` has a handful of one-line hooks
+instead of a weapon number sprinkled down it). 44 checks: the row through the
+accessors the game itself uses (`bgunGetAmmoTypeForWeapon()`,
 `bgunGetAmmoCapacityForWeapon()`, `aimsettings->flags`, the name id, the absent
 `WEAPONFLAG_AICANUSE` and `WEAPONFLAG3_FREESHOTS`), the number's neighbours by
 literal index, `NUM_GE_WEAPONS == 41`, `WEAPON_IS_GE()` both ways and
-`weaponHost()` on itself, `raillaserCharging()` at `TICKS(90) - 1`, at
-`TICKS(90)`, and spent, and a setup block written and read at version 6 next to
-a version 5 block read at 81 bits.
+`weaponHost()` on itself, the charge by *level* (a hair short of full holds, at
+full fires, spent holds, and the rate fills it in the length the gun says),
+`weaponChargesLikeMauler()` three ways, `WEAPONFLAG2_CHARGEABLE` set and
+`WEAPONFLAG3_CHARGEBEAM` absent, neither of the two other writers of the charge
+field asked for, the shot's sound equal to the Mauler's charged shot's, and a
+setup block written and read at version 6 next to a version 5 block read at 81
+bits.
 
 The rows themselves - `invitem_raillaser`, `invfunc_raillaser_charge`,
 `invammo_raillaser` - have **no declarations outside `invitems.c`**, so the test

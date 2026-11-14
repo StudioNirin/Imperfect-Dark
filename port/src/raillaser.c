@@ -11,6 +11,7 @@
 #include "game/savebuffer.h"
 #include "game/bondgun.h"
 #include "game/challenge.h"
+#include "game/game_0b0fd0.h"
 #include "game/mplayer/mplayer.h"
 #include "system.h"
 #include "raillaser.h"
@@ -29,10 +30,26 @@
  * XBLA package - which is the whole point of the gun, and is not written yet.
  *
  * What the gun does that the Moonraker does not: it holds one shot, out of
- * five, and it has to be charged by holding the trigger, which is
- * bgunChargeTick() in bondgun.c. Releasing early costs nothing and fires
- * nothing. Its zoom is the AR34's, on the aim input, because in Perfect Dark
- * a zoom is a mode on the aim input rather than a gun function of its own.
+ * five, and it has to be charged by holding the trigger. That charge is the
+ * Mauler's machine - bgunTickMaulerCharge() in bondgun.c, widened to this
+ * number by weaponChargesLikeMauler() below - because everything the player
+ * needs to feel a charge is already hung off that one field, hand->matmot1: the
+ * rising loop that cuts out when the charge ends, the model building red, and
+ * the shot's own voice pitched down by how full it is. What this gun does
+ * differently is when the field moves at all: the Mauler fills whenever its
+ * charged function is selected and pays a round out of the magazine for each
+ * unit of charge, where this gun fills only while the trigger is held, spends
+ * nothing until the shot leaves, begins again from nothing if the press is let
+ * go, and fires itself the moment the charge is full. Its zoom is the AR34's,
+ * on the aim input, because in Perfect Dark a zoom is a mode on the aim input
+ * rather than a gun function of its own.
+ *
+ * hand->matmot1 is per-hand scratch with other owners, and two of them are
+ * close enough to matter here: the Moonraker's stream (bgunUpdateLaser()) and
+ * the shotgun's starburst (bgunUpdateShotgun()) both write it. Neither is
+ * reached by this row - the first wants FUNCFLAG_LASERSTREAM on a function, the
+ * second WEAPONFLAG3_SHOTGUNMODEL on the gun - and the self-test pins both,
+ * because either would fight the charge and neither is visible from the row.
  *
  * Simulants cannot have it: no WEAPONFLAG_AICANUSE, because a simulant's
  * charge is its own state (aibot->maulercharge[] is the Mauler's copy,
@@ -55,19 +72,41 @@ static const char s_RailLaserChargeName[] = "Charged Shot\n";
  */
 bool raillaserOwn(s32 weaponnum)
 {
-	return weaponnum == WEAPON_RAILLASER;
+	return weaponHost(weaponnum) == WEAPON_RAILLASER;
+}
+
+bool weaponChargesLikeMauler(s32 weaponnum)
+{
+	weaponnum = weaponHost(weaponnum);
+
+	return weaponnum == WEAPON_MAULER || weaponnum == WEAPON_RAILLASER;
 }
 
 /**
  * How long the trigger has to be held: one and a half seconds.
  *
- * In the same 60th-of-a-second base as hand->stateframes, which is what the
- * charge counts, so it keeps its length above 60 fps the way the GoldenEye
- * grenade cook's does (bgunTickIncAttackingGeThrow()).
+ * In the same 60th-of-a-second base the charge itself counts in (the Mauler's
+ * own g_Vars.lvupdate60freal), so it keeps its length above 60 fps.
  */
 s32 raillaserCharge60(void)
 {
 	return TICKS(90);
+}
+
+f32 raillaserChargeFull(void)
+{
+	// The Mauler's own cap (bgunTickMaulerCharge()). The cues that read the
+	// field are written against it: the shot's voice is pitched by matmot1 / 3
+	// clamped at 1, so a lower full would fire a shot that sounds nothing like
+	// the Mauler's full charge, and a higher one would sit at that same pitch
+	// and colour while the charge ran on.
+	return 5.0f;
+}
+
+f32 raillaserChargeRate60(void)
+{
+	// Per 60th, in the same base as the Mauler's own g_Vars.lvupdate60freal * 0.05
+	return raillaserChargeFull() / (f32) raillaserCharge60();
 }
 
 void raillaserInit(void)
@@ -93,18 +132,19 @@ void raillaserInit(void)
 /**
  * Whether the Rail-Laser is still charging a shot.
  *
- * The whole of what bondgun.c asks where it lets a gun be itself: `frames` is
- * the hand's stateframes, the ticks since it came into the attacking state,
- * and `spent` is hand->primetimer60, which is -1 once the press has fired - a
- * press fires one shot, and the trigger has to be let go for another.
+ * The whole of what bondgun.c asks where it lets a gun be itself: `charge` is
+ * the hand's matmot1, and `spent` is hand->primetimer60, which is -1 once the
+ * press has fired - a press fires one shot, and the trigger has to be let go
+ * for another. Held past the shot, then, the gun stays held rather than
+ * beginning a second charge the player never asked for.
  */
-bool raillaserCharging(s32 frames, s32 spent)
+bool raillaserCharging(f32 charge, s32 spent)
 {
 	if (spent < 0) {
 		return true;
 	}
 
-	return frames < raillaserCharge60();
+	return charge < raillaserChargeFull();
 }
 
 #define RAILLASER_CHECK(cond, what) \
@@ -190,11 +230,47 @@ void raillaserSelfTest(void)
 	RAILLASER_CHECK(challengeIsFeatureUnlocked(g_MpWeapons[MPWEAPON_RAILLASER].unlockfeature), "nothing has to be unlocked for it");
 	RAILLASER_CHECK(mpCanSpawnWithWeapon(&g_MpWeapons[MPWEAPON_RAILLASER]), "a spawn can hand it out");
 
-	// The charge, at its edges
+	// The charge, at its edges. It rides hand->matmot1, the field the Mauler's
+	// cues already read, so its full is the Mauler's 5 and its rate is whatever
+	// fills that in the gun's own length.
 	RAILLASER_CHECK(raillaserCharge60() == TICKS(90), "the charge is one and a half seconds");
-	RAILLASER_CHECK(raillaserCharging(TICKS(90) - 1, 0), "a tick short of it, the gun holds");
-	RAILLASER_CHECK(!raillaserCharging(TICKS(90), 0), "at it, the gun fires");
-	RAILLASER_CHECK(raillaserCharging(TICKS(400), -1), "and once the press has fired, holding does nothing");
+	RAILLASER_CHECK(raillaserChargeFull() == 5.0f, "it fills to the Mauler's own full, so its cues land with the Mauler's");
+	{
+		f32 ticks = raillaserChargeFull() / raillaserChargeRate60();
+
+		RAILLASER_CHECK(ticks > 89.5f && ticks < 90.5f, "and its rate fills it in exactly that many 60ths");
+	}
+	RAILLASER_CHECK(raillaserCharging(raillaserChargeFull() - 0.01f, 0), "a hair short of full, the gun holds");
+	RAILLASER_CHECK(!raillaserCharging(raillaserChargeFull(), 0), "at full, the gun fires itself");
+	RAILLASER_CHECK(raillaserCharging(raillaserChargeFull(), -1), "and once the press has fired, holding does nothing");
+	RAILLASER_CHECK(raillaserCharging(0.0f, 0), "a press let go early begins again from nothing");
+
+	// The Mauler's machine, and what has to stay out of it
+	RAILLASER_CHECK(weaponChargesLikeMauler(WEAPON_MAULER), "the Mauler still charges the way it always did");
+	RAILLASER_CHECK(weaponChargesLikeMauler(WEAPON_RAILLASER), "and the Rail-Laser charges beside it");
+	RAILLASER_CHECK(!weaponChargesLikeMauler(WEAPON_LASER), "the Moonraker does not: it owns no charge");
+	RAILLASER_CHECK(!weaponChargesLikeMauler(WEAPON_GE_MOONRAKER), "and GoldenEye's own Moonraker is not swept in beside Perfect Dark's");
+	RAILLASER_CHECK(gun->flags2 & WEAPONFLAG2_CHARGEABLE, "its shot's voice is pitched by how full the charge is");
+	RAILLASER_CHECK(!(gun->flags3 & WEAPONFLAG3_CHARGEBEAM), "its beam is the Moonraker's bolt, not the Mauler's charge beam");
+	RAILLASER_CHECK(!weaponfuncHasFlag(WEAPON_RAILLASER, FUNC_PRIMARY, FUNCFLAG_LASERSTREAM)
+		&& !weaponfuncHasFlag(WEAPON_RAILLASER, FUNC_SECONDARY, FUNCFLAG_LASERSTREAM),
+		"nothing asks for the Moonraker's stream, which writes the charge field too");
+	RAILLASER_CHECK(!(gun->flags3 & WEAPONFLAG3_SHOTGUNMODEL), "nor the shotgun's starburst, which writes it a third");
+	{
+		const struct weaponfunc_shoot *ours = (const struct weaponfunc_shoot *) gun->functions[FUNC_PRIMARY];
+		const struct weaponfunc_shoot *mauler = (const struct weaponfunc_shoot *)
+			g_Weapons[WEAPON_MAULER]->functions[FUNC_SECONDARY];
+
+		RAILLASER_CHECK(ours->shootsound == mauler->shootsound, "it fires with the sound of the Mauler's full charge");
+		// The Mauler's charged shot scales its damage by the charge that took it
+		// (game_0b0fd0.c: damage *= unk063a / 3 + 1, unk063a being matmot1 * 10).
+		// This gun's is a fixed Farsight-class kill and takes none of that, so
+		// the field that carries it is left alone - pinned here so that the day
+		// the third-person charge animation is wanted, that multiplier is
+		// understood as the thing not to widen along with it.
+		RAILLASER_CHECK(mauler->damage < 2.0f && ours->damage > mauler->damage * 10.0f,
+			"the Mauler's charged shot is still the damage that scales, this gun's still the one that does not");
+	}
 
 	// The saved setup, both widths. The list is one bit per row, so the row
 	// appended for this gun moves everything written after it by one bit: a

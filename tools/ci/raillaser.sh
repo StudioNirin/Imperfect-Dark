@@ -3,7 +3,11 @@
 #
 # The fork's own gun (patchnotes 90): a Moonraker Laser's look, one shot a
 # magazine out of five, a trigger held one and a half seconds to fire it, and
-# the AR34's zoom on the aim input (invitems.c, port/src/raillaser.c).
+# the AR34's zoom on the aim input (invitems.c, port/src/raillaser.c). Its
+# charge is the Mauler's machine - bgunTickMaulerCharge() widened to the new
+# number by weaponChargesLikeMauler() - because the rising loop, the red build
+# over the model and the shot's pitched-down voice all read the one field that
+# machine fills, hand->matmot1.
 #
 # Two of its three traps are invisible from the row, which is what the gate is
 # for. GoldenEye's block used to run to the end of the weapon enum, so a number
@@ -14,13 +18,20 @@
 # row appended to g_MpWeapons[] moves every field written after it by one bit,
 # which is why MPSETUP_VERSION_RAILLASER exists and why a version 5 file is
 # still read at 81 bits (mplayer.c). Both are pinned here by a literal, along
-# with the charge at its edges - one tick short of it the gun holds - and with
-# the Combat Simulator's rows found where a saved setup names them.
+# with the charge at its edges - a hair short of full the gun holds, at full it
+# fires itself - and with the Combat Simulator's rows found where a saved setup
+# names them.
 #
-# What it does not reach is the feel: that the gun does not fire while it fills,
-# that letting the trigger go costs only the holding, and that a press fires one
-# shot and waits for another, are the gate's checks on raillaserCharging(), the
-# helper bondgun.c asks. The look of it is checked by hand.
+# A third trap is worth a check for the same reason: hand->matmot1 is per-hand
+# scratch, and two other writers come near this gun - the Moonraker's stream and
+# the shotgun's starburst. Neither is asked for by this row, and either would
+# fight the charge invisibly, so both are asserted (bondgun.c).
+#
+# What it does not reach is the feel. That the charge loop stops on a release
+# and starts again at the bottom of its pitch, that the colour and the shot's
+# voice land with the Mauler's full charge, that one and a half seconds is the
+# right wait, and what the laser model looks like held up while it glows red:
+# all of that is eyes and ears, and is checked by hand.
 #
 # --test-raillaser (main.c, raillaserSelfTest) puts the curated list back
 # afterwards and writes no files of its own: the run is on its own savedir.
@@ -57,11 +68,11 @@ grep -q "raillaser test: all .* checks as expected" "$LOG" || {
 }
 
 # The checks are the feature's whole reach; a run that reported fewer than the
-# thirty of them skipped some on the way (the same reason the other gates
+# forty of them skipped some on the way (the same reason the other gates
 # count verdicts rather than trusting one line)
 COUNT=$(grep -oE "raillaser test: all [0-9]+ checks" "$LOG" | grep -oE "[0-9]+")
-if [ "${COUNT:-0}" -lt 28 ]; then
-	echo "raillaser: $COUNT checks ran, expected at least 30"
+if [ "${COUNT:-0}" -lt 40 ]; then
+	echo "raillaser: $COUNT checks ran, expected at least 40"
 	exit 1
 fi
 

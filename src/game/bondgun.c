@@ -2711,16 +2711,17 @@ bool bgunTickIncAttackingShoot(struct handweaponinfo *info, s32 handnum, struct 
 #endif
 
 #ifndef PLATFORM_N64
-		// The Rail-Laser does not fire until the trigger has been held for its
-		// charge (raillaser.c). It is held out of the first minor state, which is
-		// where the shot's animation and the shot itself are started, so the gun
-		// comes up and nothing leaves it; letting the trigger go leaves the
-		// attacking state, and hand->stateframes begins again with the next press,
-		// so a charge let go early is only the holding it cost. hand->primetimer60
-		// is the marker that the press has already fired (below): the GoldenEye
-		// grenade cook's own use of it is the other side of the same trick.
+		// The Rail-Laser does not fire until its charge is full (raillaser.c). It
+		// is held out of the first minor state, which is where the shot's
+		// animation and the shot itself are started, so the gun comes up and
+		// nothing leaves it until bgunTickMaulerCharge() has filled
+		// hand->matmot1, and the charge let go early is only the holding it cost -
+		// that tick returns the field to nothing on the release, and this gun pays
+		// no ammunition for the charge itself. hand->primetimer60 is the marker
+		// that the press has already fired (below): the GoldenEye grenade cook's
+		// own use of it is the other side of the same trick.
 		if (raillaserOwn(hand->gset.weaponnum)
-				&& raillaserCharging(hand->stateframes, hand->primetimer60)) {
+				&& raillaserCharging(hand->matmot1, hand->primetimer60)) {
 			sp64 = 0;
 		}
 #endif
@@ -10642,6 +10643,31 @@ void bgunTickMaulerCharge(void)
 			if (bgunIsReloading(hand)) {
 				// Reloading - reset charge amount
 				hand->matmot1 = 0;
+			} else if (raillaserOwn(hand->gset.weaponnum)) {
+				// The Rail-Laser's charge is the press and nothing else. The Mauler
+				// fills whenever its charged function is the selected one and pays a
+				// magazine round for each unit of it (below); this gun has one shot a
+				// magazine, so it pays nothing here and the shot is billed by the
+				// ordinary path when it leaves. hand->state is the attacking state for
+				// as long as a press is live, and hand->primetimer60 is -1 once that
+				// press has fired (bgunTickIncAttackingShoot()), which is what keeps a
+				// trigger still held past the shot from starting a charge nobody asked
+				// for. A press let go early takes the field back to nothing: the charge
+				// loop stops on the release and the next press starts it again at the
+				// bottom of its pitch, and the shot fires itself when the field is
+				// full, because the gate in bgunTickIncAttackingShoot() is what was
+				// holding it.
+				if (hand->triggeron && hand->state == HANDSTATE_ATTACK
+						&& hand->primetimer60 >= 0 && hand->loadedammo[0] >= 1) {
+					charging = true;
+					hand->matmot1 += g_Vars.lvupdate60freal * raillaserChargeRate60();
+
+					if (hand->matmot1 > raillaserChargeFull()) {
+						hand->matmot1 = raillaserChargeFull();
+					}
+				} else {
+					hand->matmot1 = 0;
+				}
 			} else if (hand->gset.weaponfunc == FUNC_SECONDARY) {
 				// Charging or fully charged
 				s32 oldvalue = hand->matmot1;
@@ -10778,7 +10804,10 @@ void bgunTickGameplay2(void)
 		}
 	}
 
-	if (weaponHost(player->gunctrl.weaponnum) == WEAPON_MAULER) {
+	// The Mauler's charge, and the Rail-Laser's, which is the same machine
+	// driving the same field so that its cues - the rising loop, the red build -
+	// come with it (raillaser.c)
+	if (weaponChargesLikeMauler(player->gunctrl.weaponnum)) {
 		bgunTickMaulerCharge();
 	}
 
@@ -13650,7 +13679,7 @@ void bgunRender(Gfx **gdlptr)
 				colour = renderdata.envcolour;
 
 				// 838
-				if (weaponHost(hand->gset.weaponnum) == WEAPON_MAULER) {
+				if (weaponChargesLikeMauler(hand->gset.weaponnum)) {
 					u32 weight = hand->matmot1 * 50.0f;
 					renderdata.envcolour = colourBlend(0xff00007f, renderdata.envcolour, weight);
 				}

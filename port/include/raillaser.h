@@ -17,19 +17,38 @@ extern "C" {
 void raillaserInit(void);
 
 /**
- * Whether a weapon number is the Rail-Laser's, and how long its trigger has
- * to be held before it fires (in 60ths). bondgun.c asks these where a gun is
- * allowed to be itself rather than the general case - the charge gate, and
+ * Whether a weapon number is the Rail-Laser's. bondgun.c asks this where a gun
+ * is allowed to be itself rather than the general case - the charge gate, and
  * the one-shot-to-a-press after it - so the rules of the gun stay here.
  */
 bool raillaserOwn(s32 weaponnum);
-s32 raillaserCharge60(void);
 
 /**
- * Whether a hand of the Rail-Laser is still charging: the hand's stateframes,
- * and its primetimer60, which bondgun.c sets to -1 when the press has fired.
+ * The charge, and how long it takes: raillaserCharge60() is the length in 60ths
+ * of a second, raillaserChargeFull() the height hand->matmot1 has to reach, and
+ * raillaserChargeRate60() what a hand adds to it each 60th. The full is the
+ * Mauler's own 5, so every cue that field drives - the rising charge loop, the
+ * red build over the model, the shot's voice pitched down to 0.6 - arrives at
+ * the same moment and with the same weight as the Mauler's fully charged shot.
  */
-bool raillaserCharging(s32 frames, s32 spent);
+s32 raillaserCharge60(void);
+f32 raillaserChargeFull(void);
+f32 raillaserChargeRate60(void);
+
+/**
+ * Whether a hand of the Rail-Laser is still charging: the hand's charge (its
+ * matmot1), and its primetimer60, which bondgun.c sets to -1 when the press has
+ * fired - a press is one shot, and the trigger has to be let go for another.
+ */
+bool raillaserCharging(f32 charge, s32 spent);
+
+/**
+ * Whether a weapon number charges on hand->matmot1 in bgunTickMaulerCharge():
+ * the Mauler, and this gun beside it, by host, so a mod's reskinned Mauler
+ * keeps its charge. This is the one rule that says which guns share that
+ * machine; bondgun.c asks it where the Mauler's name stands alone.
+ */
+bool weaponChargesLikeMauler(s32 weaponnum);
 
 /**
  * The self-test (--test-raillaser): the row and what the game reads off it,

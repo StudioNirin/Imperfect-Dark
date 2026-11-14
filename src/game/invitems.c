@@ -4338,7 +4338,9 @@ struct weaponfunc_shootsingle invfunc_raillaser_charge = {
 	0, // slidemax
 	0, // impactforce
 	3, // duration60
-	SFX_8043, // shootsound: the Moonraker's Pulse's, until it has its own
+	SFX_805B, // shootsound: the Mauler's charged shot's, played 0.6 pitch at a
+		// full charge, which is what makes it deeper and longer than a quick shot
+		// (WEAPONFLAG2_CHARGEABLE, bondgun.c)
 	1, // penetration
 };
 
@@ -4367,9 +4369,14 @@ struct weapon invitem_raillaser = {
 	// The Moonraker's flags, less three: AICANUSE and DUALFLIP, because no
 	// simulant has the charge logic a Rail-Laser needs and it is not a gun to
 	// hold one in each hand, and WEAPONFLAG2_NORELOADSOUND and
-	// WEAPONFLAG3_FREESHOTS, because it does reload and it does run out.
+	// WEAPONFLAG3_FREESHOTS, because it does reload and it does run out. Plus the
+	// Mauler's CHARGEABLE, which is read in one place - the shot's voice is
+	// pitched down by hand->matmot1, the field this gun's charge fills - and
+	// which must not be taken for the Mauler's charge beam: that is
+	// WEAPONFLAG3_CHARGEBEAM, which would draw the beam as the Mauler's rather
+	// than the Moonraker's bolt (gunfx.c).
 	WEAPONFLAG_ONEHANDED | WEAPONFLAG_00000040 | WEAPONFLAG_TRACKTIMEUSED | WEAPONFLAG_00000400 | WEAPONFLAG_00002000 | WEAPONFLAG_00008000 | WEAPONFLAG_HASHANDS | WEAPONFLAG_DONTCOUNTSHOTS | WEAPONFLAG_04000000,
-	WEAPONFLAG2_NOWALLHIT | WEAPONFLAG2_LASERHIT | WEAPONFLAG2_LASERBEAM | WEAPONFLAG2_CROSSBEAM | WEAPONFLAG2_LASERFLIGHT | WEAPONFLAG2_BOTLIMITLESS, // flags2
+	WEAPONFLAG2_NOWALLHIT | WEAPONFLAG2_LASERHIT | WEAPONFLAG2_LASERBEAM | WEAPONFLAG2_CROSSBEAM | WEAPONFLAG2_LASERFLIGHT | WEAPONFLAG2_BOTLIMITLESS | WEAPONFLAG2_CHARGEABLE, // flags2
 	0, // unequipped reload index
 	SFX_PICKUP_LASER, // pickup sound: the Moonraker's, until it has its own
 	WEAPONFLAG3_CHRSHOTBEAM, // flags3
