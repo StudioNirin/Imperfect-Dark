@@ -12,6 +12,7 @@
 #include "game/bondgun.h"
 #include "game/challenge.h"
 #include "game/game_0b0fd0.h"
+#include "game/playermgr.h"
 #include "game/mplayer/mplayer.h"
 #include "system.h"
 #include "raillaser.h"
@@ -226,6 +227,13 @@ void raillaserSelfTest(void)
 				display + 1, mpGetNumWeaponOptions(),
 				mpWeaponRowSuitsStage(&g_MpWeapons[MPWEAPON_RAILLASER]) ? "yes" : "no");
 	}
+
+	// The lists a weapon number has to be named in, as far as a test can reach
+	// them. The two beam lists have no accessor, so the script looks at the
+	// source for those (tools/ci/raillaser.sh) - a number missing from one of
+	// them is silent, and silence is what let this ship without a bolt.
+	RAILLASER_CHECK(playermgrGetModelOfWeapon(WEAPON_RAILLASER) == MODEL_CHRLASER, "a body holding one holds the Moonraker's model rather than nothing");
+	RAILLASER_CHECK(playermgrGetModelOfWeapon(WEAPON_LASER) == MODEL_CHRLASER, "and that answer is the Moonraker's own, not the default");
 
 	RAILLASER_CHECK(challengeIsFeatureUnlocked(g_MpWeapons[MPWEAPON_RAILLASER].unlockfeature), "nothing has to be unlocked for it");
 	RAILLASER_CHECK(mpCanSpawnWithWeapon(&g_MpWeapons[MPWEAPON_RAILLASER]), "a spawn can hand it out");

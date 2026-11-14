@@ -28,7 +28,9 @@ thing being scaled, one of which was exactly full; the two bit-level formats
 that grow by one bit and one byte; where a charge gate can sit that costs no
 ammunition, whose charge field it runs on, the two other writers of that field
 that come near it, and the damage multiplier that must not be widened along
-with it.
+with it; and the whitelists a new number has to be named in, which fail not by
+crashing but by drawing nothing at all - the sweep is every `case` of the gun you
+are modelled on.
 
 Start Armed, one gun or two: why the pair is its own setting rather than
 `Mod.Akimbo`; why keeping the values 0/1/2 is what made the rename free; the
@@ -829,13 +831,49 @@ effects before eventually crashing"*. The Mauler enters that window rarely; a
 gun that charges on every press and on every aborted one enters it constantly.
 If a crash ever lands in `audioPostEvent` off a charge loop, that is the place.
 
+### The lists a number has to be named in
+
+The gun fired for a week with nothing in the air, and the row's `flags2` were not
+the reason: **the beam is created from a whitelist**, not from the row. In
+`bgunCreateFx()` (`bondgun.c`) a `switch (weaponHost(weaponnum))` names every gun
+that gets `beamCreateForHand()`, and a number it does not name draws nothing -
+`LASERBEAM`, `CROSSBEAM` and `LASERFLIGHT` on the row change nothing at all.
+Nothing is logged, nothing crashes, and the shot still does its damage, so the
+only sign is a bolt that is not there. Three siblings of the same shape, each
+found by the same sweep - `grep -rn "case WEAPON_LASER:" src/game`, then decide
+every switch that names the gun you are modelled on:
+
+- `chraction.c`'s `makebeam` switch, `default: makebeam = false` - what **other
+  players** see trailing from a body. Ours joins beside the Moonraker's.
+- `playermgrGetModelOfWeapon()`, whose `default:` is
+  `weapon <= WEAPON_PSYCHOSISGUN ? MODEL_CHRSNIPERRIFLE : -1`. Everything this
+  fork appends is past `WEAPON_PSYCHOSISGUN`, so the default for a fork number is
+  **-1: a body holding nothing**. Named with `MODEL_CHRLASER`, which is the same
+  model the `g_MpWeapons[]` row already hands out - and that row is not what this
+  switch reads, so a correct row and an invisible gun went together happily.
+- `currentPlayerGetSight()`, `default: SIGHT_DEFAULT`. Ours joins `SIGHT_ZOOM`,
+  where the AR34 whose zoom it copies already sits.
+- The equip-sound switch in `bondgun.c`, silent by default: a gun drawn without a
+  sound. Named beside the Moonraker's `SFX_PICKUP_LASER`.
+
+Left out on purpose: `chraction.c`'s accuracy-taper list (simulants cannot have
+the gun), `training.c`'s mission-help ids (no mission hands it out), and
+`botinv.c`'s preference row. Worth knowing while you are in there: the mod hooks
+alongside these - `g_ModWeaponSight[]`, `g_ModWeaponBeamTexture[]` - are bounded
+by `MODRULES_NUMWEAPONS` 256, so a number this fork appends is still inside a
+mod's reach, unlike the weapon-number-keyed `CX`/`RX` files.
+
+This is the fixed-array trap from `CLAUDE.md` in `switch` form, with one
+difference that makes it worse: an array read past its bound crashes, and a
+whitelist omission draws nothing.
+
 ### What the gate sees
 
 `tools/ci/raillaser.sh` runs `--test-raillaser` (`raillaserSelfTest()`, in
 `port/src/raillaser.c`, which is also where `raillaserOwn()`,
 `raillaserCharge60()`, `raillaserChargeFull()`, `raillaserChargeRate60()` and
 `raillaserCharging()` live so that `bondgun.c` has a handful of one-line hooks
-instead of a weapon number sprinkled down it). 44 checks: the row through the
+instead of a weapon number sprinkled down it). 46 checks: the row through the
 accessors the game itself uses (`bgunGetAmmoTypeForWeapon()`,
 `bgunGetAmmoCapacityForWeapon()`, `aimsettings->flags`, the name id, the absent
 `WEAPONFLAG_AICANUSE` and `WEAPONFLAG3_FREESHOTS`), the number's neighbours by
@@ -844,9 +882,15 @@ literal index, `NUM_GE_WEAPONS == 41`, `WEAPON_IS_GE()` both ways and
 full fires, spent holds, and the rate fills it in the length the gun says),
 `weaponChargesLikeMauler()` three ways, `WEAPONFLAG2_CHARGEABLE` set and
 `WEAPONFLAG3_CHARGEBEAM` absent, neither of the two other writers of the charge
-field asked for, the shot's sound equal to the Mauler's charged shot's, and a
-setup block written and read at version 6 next to a version 5 block read at 81
-bits.
+field asked for, the shot's sound equal to the Mauler's charged shot's,
+`playermgrGetModelOfWeapon()` giving the Moonraker's model rather than the -1 its
+default reserves for a fork number, and a setup block written and read at version
+6 next to a version 5 block read at 81 bits.
+
+The two beam whitelists have no accessor, so the script greps for the number
+sitting beside the Moonraker in each and says which one fell out. That is a text
+check, and it is the honest shape for a failure that writes nothing: a missing
+bolt has no log line to grep and no stack to symbolise.
 
 The rows themselves - `invitem_raillaser`, `invfunc_raillaser_charge`,
 `invammo_raillaser` - have **no declarations outside `invitems.c`**, so the test

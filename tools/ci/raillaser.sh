@@ -9,8 +9,7 @@
 # over the model and the shot's pitched-down voice all read the one field that
 # machine fills, hand->matmot1.
 #
-# Two of its three traps are invisible from the row, which is what the gate is
-# for. GoldenEye's block used to run to the end of the weapon enum, so a number
+# The first two are invisible from the row. GoldenEye's block used to run to the end of the weapon enum, so a number
 # appended to it was read as a 42nd GoldenEye gun - g_GeWeaponHosts[] indexed
 # one past itself, and a segfault in langAddPortText() on the way out of a
 # constructor (constants.h anchors NUM_GE_WEAPONS, data.h bounds WEAPON_IS_GE).
@@ -22,10 +21,18 @@
 # fires itself - and with the Combat Simulator's rows found where a saved setup
 # names them.
 #
-# A third trap is worth a check for the same reason: hand->matmot1 is per-hand
-# scratch, and two other writers come near this gun - the Moonraker's stream and
+# A third is that hand->matmot1 is per-hand scratch, and two other writers come
+# near this gun - the Moonraker's stream and
 # the shotgun's starburst. Neither is asked for by this row, and either would
 # fight the charge invisibly, so both are asserted (bondgun.c).
+#
+# A fourth is a whitelist: the beam a player sees is created only
+# for the numbers bgunCreateFx() names, the one other players see only for those
+# chraction.c's makebeam names, and a number absent from either draws nothing -
+# no log line, no crash. Those two lists have no accessor, so the script looks at
+# the source for them, and says so; the body's held model has an accessor and is
+# checked by the test, which is where the same omission left a player holding
+# nothing at all (playermgrGetModelOfWeapon answers -1 past WEAPON_PSYCHOSISGUN).
 #
 # What it does not reach is the feel. That the charge loop stops on a release
 # and starts again at the bottom of its pitch, that the colour and the shot's
@@ -81,5 +88,18 @@ grep -E "^ERROR" "$LOG" && {
 	echo "raillaser: an error line came out of a passing run"
 	exit 1
 }
+
+# The beam whitelists, by adjacency: the Rail-Laser has to sit beside the
+# Moonraker in each, and dropping out of one is what makes the bolt vanish.
+between=$(grep -A1 "case WEAPON_LASER:" "$ROOT/src/game/bondgun.c" | grep -c "case WEAPON_RAILLASER:")
+if [ "$between" -lt 2 ]; then
+	echo "raillaser: bondgun.c names the Rail-Laser in $between of the 2 lists it must (bgunCreateFx's beam, and the equip sound)"
+	exit 1
+fi
+between=$(grep -A1 "case WEAPON_LASER:" "$ROOT/src/game/chraction.c" | grep -c "case WEAPON_RAILLASER:")
+if [ "$between" -lt 1 ]; then
+	echo "raillaser: chraction.c's makebeam no longer names the Rail-Laser, so other players see no tracer"
+	exit 1
+fi
 
 echo "raillaser: as expected"

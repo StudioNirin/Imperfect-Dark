@@ -839,7 +839,11 @@ s32 playermgrGetModelOfWeapon(s32 weapon)
 	case WEAPON_FARSIGHT:         model = MODEL_CHRZ2020; break;
 	case WEAPON_SNIPERRIFLE:      model = MODEL_CHRSNIPERRIFLE; break;
 	case WEAPON_CROSSBOW:         model = MODEL_CHRCROSSBOW; break;
-	case WEAPON_LASER:            model = MODEL_CHRLASER; break;
+	case WEAPON_LASER:
+	case WEAPON_RAILLASER:         model = MODEL_CHRLASER; break;
+		// Not in the default: that answers -1 for anything past WEAPON_PSYCHOSISGUN,
+		// which is the whole of this fork's block, so a number appended there is a
+		// body holding nothing until it is named beside its own model.
 	case WEAPON_COMBATKNIFE:      model = MODEL_CHRKNIFE; break;
 	case WEAPON_TRANQUILIZER:     model = MODEL_CHRDRUGGUN; break;
 	case WEAPON_PSYCHOSISGUN:     model = MODEL_CHRDRUGGUN; break;

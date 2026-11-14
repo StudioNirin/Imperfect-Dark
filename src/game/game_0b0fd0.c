@@ -867,6 +867,7 @@ u32 currentPlayerGetSight(void)
 	case WEAPON_K7AVENGER:
 	case WEAPON_AR34:
 	case WEAPON_SUPERDRAGON:
+	case WEAPON_RAILLASER:
 		return SIGHT_ZOOM;
 	case WEAPON_MAULER:
 	case WEAPON_REAPER:

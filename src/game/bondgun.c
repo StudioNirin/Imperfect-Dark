@@ -3969,6 +3969,7 @@ s32 bgunTickIncChangeGun(struct handweaponinfo *info, s32 handnum, struct hand *
 #endif
 					break;
 				case WEAPON_LASER:
+				case WEAPON_RAILLASER:
 					sndStart(var80095200, SFX_PICKUP_LASER, 0, -1, -1, -1, -1, -1);
 					break;
 				case WEAPON_COMBATKNIFE:
@@ -9744,6 +9745,11 @@ void bgunCreateFx(struct hand *hand, s32 handnum, struct weaponfunc *funcdef, s3
 			hand->numfires++;
 			return;
 		case WEAPON_LASER:
+		case WEAPON_RAILLASER:
+			// A whitelist, not a fallback: a number this switch does not name
+			// draws nothing in the air at all, however many beam flags its row sets
+			// - which is how a Rail-Laser with the Moonraker's beam flags fired for
+			// a week without a bolt.
 			hand->numfires++;
 			beamCreateForHand(handnum);
 			break;

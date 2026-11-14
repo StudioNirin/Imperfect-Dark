@@ -12817,6 +12817,7 @@ void chrTickShoot(struct chrdata *chr, s32 handnum)
 			case WEAPON_FARSIGHT:
 			case WEAPON_TRANQUILIZER:
 			case WEAPON_LASER:
+			case WEAPON_RAILLASER:
 			case WEAPON_PP9I:
 			case WEAPON_CC13:
 			case WEAPON_KL01313:
