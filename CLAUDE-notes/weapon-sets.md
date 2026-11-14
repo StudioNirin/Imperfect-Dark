@@ -685,7 +685,21 @@ that is neither Perfect Dark's nor GoldenEye's. The weapon list calls it
 **Moonrailer** - one string, `s_RailLaserName` in `raillaserInit()` - while the
 code keeps Rail-Laser through the enum, the ammo type, this file and the gate, so
 `grep Moonrailer` finds the text and nothing else. The gate pins both halves, in
-case a copy of the enum's name ever lands in the list. Nothing about the row in
+case a copy of the enum's name ever lands in the list.
+
+It is **not** in the built-in multiplayer weapon sets (`mpconfigs.c`'s five), and
+that is a decision rather than an omission: a stock preset should not roll a gun
+whose numbers are still moving. It reaches a player through a custom `CX` set, an
+`RX` group, or the Combat Simulator's list, where it is the last unlocked row.
+Neither does any stage's item table name it - a mission cannot hand out a number
+the ROM never had - and no guard carries one, since `g_ModAlarmGuns[]` is the pool
+a guard is drawn from and the gun has no `WEAPONFLAG_AICANUSE` either. Its
+discharge plays the Mauler's charged-shot animation (`invanim_mauler_shoot`) and
+fires with its sound, both pinned by comparing against
+`g_Weapons[WEAPON_MAULER]->functions[FUNC_SECONDARY]` rather than by literal, so
+the pair is one machine's output and cannot drift from it. The Moonraker's own
+function has no fire animation at all, which is why the hand sat still on a
+discharge until it was given one. Nothing about the row in
 `invitems.c` shows where the bodies are buried, and two of the three traps cost
 a detour.
 

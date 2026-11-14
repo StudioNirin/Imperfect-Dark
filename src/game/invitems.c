@@ -4326,7 +4326,10 @@ struct weaponfunc_shootsingle invfunc_raillaser_charge = {
 	0, // unused
 	0, // ammoindex: invammo_raillaser
 	&invnoisesettings_default,
-	NULL, // fire animation
+	invanim_mauler_shoot, // fire animation: the Mauler's charged shot's, which is
+		// the discharge this gun's charge stands in for - the Moonraker's own shot
+		// has none, so holding a charge and releasing it into a shot had no hand in
+		// it at all
 	0, // flags
 	&invrecoilsettings_default,
 	0, // recoverytime60
