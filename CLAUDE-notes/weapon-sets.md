@@ -956,6 +956,63 @@ above disproves - and the row never had `CAN_DUAL_WIELD` anyway. Those came from
 reading the donor's GoldenEye tables hours earlier and carrying their field names
 into Perfect Dark's. The notes were not wrong; only the message was.
 
+### Can it be reached at all: the wheel, the cycle, and the gadget tests
+
+The gun fired for days before anyone tried to *select* it, because none of this is
+driven by `g_Weapons[]` - it is driven by enumerations that stop inside the ROM's own
+number space, so a fork number is absent **by construction**, silently, with no model
+and no log involved.
+
+- `INV_CYCLEABLE()` (`src/include/constants.h:198`) decides whether next/previous
+  weapon stops at an item: `weaponnum < NUM_CYCLEABLE_WEAPONS` (45) plus four
+  spelled-out GoldenEye clauses. Read by `invChooseCycleForwardWeapon()` and
+  `...BackWeapon()` (`src/game/inv.c:1034`, `:1114`) and by the cheat's step
+  (`inv.c:608`). A number past both ranges is never selectable by the cycle.
+- `amAssignWeaponSlots()` (`src/game/activemenu.c:790`, `:821`) decides which inventory
+  items get a slot in the radial ring - the fork calls that the weapon wheel
+  (`port/src/gehud.c:699`). Its filter is `weaponnum <= WEAPON_DISGUISE41 ||
+  weaponHost(weaponnum) != weaponnum`, plus three gadgets named by hand. **GoldenEye's
+  guns pass the second half for free** - their host is a Perfect Dark weapon - which is
+  why this never bit before a fork gun of our own existed: hosting yourself admits
+  nothing.
+- `bgunIsCycleItem()` (`src/game/bondgun.c:7566`) is the inverse trap: `weaponHost(n) >
+  WEAPON_PSYCHOSISGUN` means "gadget", so a fork gun is classed as one and the wheel
+  steps *backwards* off it to the pair it was drawn from - the exact behaviour the F3
+  note at `bondgun.c:7556` (Surface II, the detonator) exists to prevent, met again
+  from the other side.
+
+Name `WEAPON_IS_FORK(weaponnum)` (`src/include/data.h`, beside `WEAPON_IS_GE()`) at such
+sites rather than inventing a bound each time: it is `>= WEAPON_GE_TASER + 1 && <
+NUM_WEAPONS`, bounded below by the end of GoldenEye's block rather than by
+`WEAPON_RAILLASER` so that the *next* number appended is included too - which is the
+point - and above by the count, which is one past the last number that exists. It is
+`(false)` on the branch of `data.h` where `weaponHost()` is identity. `INV_CYCLEABLE`
+spells the bounds out instead of calling the macro: a header naming GoldenEye's numbers
+is not guaranteed to have the `weaponHost()` half of the seam, and that macro expands in
+three files.
+
+**Still not named, all of them silent rather than fatal** - the sweep that found them is
+worth repeating whenever the next number is appended: `menuGetWeaponModelConfig()`'s
+`gunconfig[][5]` (`src/game/mainmenu.c:3850`, bounds-checked, so the picture is framed by
+its own box rather than a measured one); `var8006aa94pf[]` (`src/game/propobj.c:18845`,
+the pickup message's name and determiner, `{ 0 }`-terminated so nothing overruns);
+`bgunAutoSwitchWeapon()`'s lists (`bondgun.c:7850`) - it is never switched to
+automatically; `g_GeAllGuns[]` and `invAllGunsGives()` (`inv.c:385`, `:561`, both
+`<= WEAPON_PSYCHOSISGUN`) - the All-Guns cheat does not give it; `bgunIsPairGun()`
+(`bondgun.c:7147`) so no Akimbo pair; and two loops in `port/src/xblamesh.c` (`:5870`,
+`:5935`) so its mesh borrows no reflection or sheen.
+
+**Two of those are ammunition-type arrays, and they are live bugs rather than cosmetic
+gaps.** `g_AmmoTypeWeapons[AMMOTYPE_ECM_MINE + 1]` (`src/game/propobj.c:19446`) has no
+`AMMOTYPE_RAIL` row and `ammotypeGetWeapon()` bounds-checks it, so **a Rail ammo pickup
+can never hand out the gun with it** (`ammoHandlePickup()`, `:19535`). And `bool
+ammotypesheld[33]` (`src/game/player.c:760`, indexed behind `<= AMMOTYPE_ECM_MINE`) has
+no room for 0x21 at all: the type is never recorded as held, and the zeroing loop at
+`:778` skips it on the co-op respawn path. `g_ModPickupQty` and the mod's ammo setters
+(`port/src/mod.c:1071`, `:1504`) reject the type too, so a mod cannot name it. The ones
+that *were* grown are `s32 ammoheldarr[NUM_AMMOTYPES]` and the `g_AmmoTypes[]` row - the
+difference between a cap somebody widened and one nobody looked at.
+
 ### What the gate sees
 
 `tools/ci/raillaser.sh` runs `--test-raillaser` (`raillaserSelfTest()`, in
@@ -974,8 +1031,9 @@ full fires, spent holds, and the rate fills it in the length the gun says),
 field asked for, the shot's sound equal to the Mauler's charged shot's, that the
 reload names **no** animation rather than another gun's, that `posx` is positive and
 `WEAPONFLAG_ONEHANDED` is off, `playermgrGetModelOfWeapon()` giving the Moonraker's
-model rather than the -1 its default reserves for a fork number, and a setup block
-written and read at version
+model rather than the -1 its default reserves for a fork number, `INV_CYCLEABLE()` on
+the gun itself with `WEAPON_IS_FORK()` false for the Moonraker's and GoldenEye's
+numbers, and a setup block written and read at version
 6 next to a version 5 block read at 81 bits.
 
 The two beam whitelists have no accessor, so the script greps for the number

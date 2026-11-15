@@ -270,9 +270,31 @@ static inline s32 weaponHost(s32 weaponnum)
 // this fork's Rail-Laser (WEAPON_RAILLASER) now that there is one after
 // WEAPON_GE_TASER - and NUM_WEAPONS is a count, not a bound, in any case
 #define WEAPON_IS_GE(weaponnum) ((weaponnum) >= WEAPON_GE_FIRST && (weaponnum) <= WEAPON_GE_TASER)
+
+/**
+ * Whether a number is this fork's own rather than the ROM's or GoldenEye's.
+ *
+ * The mirror of WEAPON_IS_GE for the other side of the same seam, and the reason
+ * it exists is that a great many tests in the game ask "is this a weapon?" by
+ * naming the end of the stock table - `weaponnum <= WEAPON_DISGUISE41`,
+ * `<= WEAPON_PSYCHOSISGUN`, `> WEAPON_PSYCHOSISGUN` - and a number appended past
+ * GoldenEye's block answers every one of them the wrong way, silently. Those
+ * sites cannot all be fixed at once, but each one that is fixed should say what
+ * it means instead of inventing a bound: WEAPON_RAILLASER hosts itself, so the
+ * `weaponHost(weaponnum) != weaponnum` half that lets GoldenEye's guns through
+ * admits nothing here.
+ *
+ * Bounded below by the end of GoldenEye's block rather than by the start of the
+ * fork's, because there is no fork block - one number was appended, and a
+ * `>= WEAPON_RAILLASER` bound would quietly include the next one appended after
+ * it, which is the point. Bounded above by NUM_WEAPONS, which is a count and so
+ * is one past the last number that exists.
+ */
+#define WEAPON_IS_FORK(weaponnum) ((weaponnum) >= WEAPON_GE_TASER + 1 && (weaponnum) < NUM_WEAPONS)
 #else
 #define weaponHost(weaponnum) (weaponnum)
 #define WEAPON_IS_GE(weaponnum) (false)
+#define WEAPON_IS_FORK(weaponnum) (false)
 #endif
 extern u32 *g_TvCmdlists[TVCMDLIST_36 + 1];
 extern s16 g_AmmoTypeWeapons[AMMOTYPE_ECM_MINE + 1];

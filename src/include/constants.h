@@ -195,7 +195,13 @@ s32 langpackIsCjk(void);
 // ITEM_TASER and ITEM_TANKSHELLS come just before it): a driver who switched
 // to a gun in the tank switches back to the shells the same way (F3
 // 20260929-062621). The shells are only in the inventory while he drives.
-#define INV_CYCLEABLE(weaponnum) ((weaponnum) < NUM_CYCLEABLE_WEAPONS || ((weaponnum) >= WEAPON_GE_FIRST && (weaponnum) < WEAPON_GE_FIRST + NUM_GE_GUNS) || (weaponnum) == WEAPON_GE_DETONATOR || (weaponnum) == WEAPON_GE_TANKSHELLS || ((weaponnum) >= WEAPON_GE_EXTRA1 && (weaponnum) <= WEAPON_GE_TASER))
+// And this fork's own numbers, which are past the stock table and past
+// GoldenEye's block, so none of the clauses above reaches them. Written with the
+// bounds spelled out rather than as WEAPON_IS_FORK() from data.h: this is a macro
+// used in three files, and a header that has GoldenEye's numbers to name does not
+// necessarily have the weaponHost() side of the seam - see that macro's comment for
+// why the bound is what it is.
+#define INV_CYCLEABLE(weaponnum) ((weaponnum) < NUM_CYCLEABLE_WEAPONS || ((weaponnum) >= WEAPON_GE_FIRST && (weaponnum) < WEAPON_GE_FIRST + NUM_GE_GUNS) || (weaponnum) == WEAPON_GE_DETONATOR || (weaponnum) == WEAPON_GE_TANKSHELLS || ((weaponnum) >= WEAPON_GE_EXTRA1 && (weaponnum) <= WEAPON_GE_TASER) || ((weaponnum) > WEAPON_GE_TASER && (weaponnum) < NUM_WEAPONS))
 #else
 #define INV_CYCLEABLE(weaponnum) ((weaponnum) < NUM_CYCLEABLE_WEAPONS)
 #endif

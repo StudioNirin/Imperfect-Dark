@@ -7564,6 +7564,14 @@ static bool bgunIsCycleItem(s32 weaponnum)
 	}
 #endif
 
+	// A fork gun is a gun, not a gadget. It hosts itself, so the test below would
+	// class it with the detonator and the wheel would step back off it to the pair it
+	// was drawn from - the very thing this function exists to avoid, found again from
+	// the other side (F3 20260929-100000, Surface II).
+	if (WEAPON_IS_FORK(weaponnum)) {
+		return false;
+	}
+
 	return weaponHost(weaponnum) > WEAPON_PSYCHOSISGUN;
 }
 

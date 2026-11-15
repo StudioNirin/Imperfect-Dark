@@ -221,6 +221,15 @@ void raillaserSelfTest(void)
 	RAILLASER_CHECK(gun->posx > 0.0f, "it sits right of the crosshair, as every gun but the wrist Laser does");
 	RAILLASER_CHECK(!(gun->flags & WEAPONFLAG_ONEHANDED), "it is held with two hands, as a rifle is");
 
+	// Reachable at all. The cycle and the wheel both decide by enumerating the stock
+	// table and GoldenEye's block, and a number past both is absent by construction
+	// rather than by a missing model - which is what a player sees as "it is not in
+	// the wheel". The negatives are here so that the predicate added for this is
+	// pinned to this, and not to everything the stock tests happen to miss.
+	RAILLASER_CHECK(INV_CYCLEABLE(WEAPON_RAILLASER), "next/previous weapon stops at it");
+	RAILLASER_CHECK(!WEAPON_IS_FORK(WEAPON_LASER) && !WEAPON_IS_FORK(WEAPON_GE_MOONRAKER),
+		"and only this fork's numbers are called its own, not the ROM's or GoldenEye's");
+
 	// Where the mesh is put in the hand. It is placed where GoldenEye places its
 	// Moonraker, which means asking a GoldenEye row - fpFitFrom in gebean.c - and a
 	// borrowed ask that comes back empty is the same wrong-place failure it replaced,
