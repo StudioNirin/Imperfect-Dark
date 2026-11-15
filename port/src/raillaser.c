@@ -15,6 +15,7 @@
 #include "game/playermgr.h"
 #include "gebean.h"
 #include "geguns.h"
+#include "game/botact.h"
 #include "game/mplayer/mplayer.h"
 #include "system.h"
 #include "raillaser.h"
@@ -278,6 +279,32 @@ void raillaserSelfTest(void)
 	RAILLASER_CHECK(g_MpWeapons[MPWEAPON_RAILLASER].weaponnum == WEAPON_RAILLASER, "and the Rail-Laser's row is the one past it");
 	RAILLASER_CHECK(NUM_MPWEAPONS == MPWEAPON_RAILLASER + 1, "and is the last row there is");
 	RAILLASER_CHECK(g_MpWeapons[MPWEAPON_RAILLASER].priammotype == AMMOTYPE_RAIL, "its hand-out names the Rail-Laser's ammunition");
+
+	// botFindPickup() (src/game/bot.c) keeps a stack array per ammunition type, and a
+	// simulant aborting is what found that they were sized by a literal 33 - the count
+	// from before this gun existed. botactGetAmmoTypeByFunction() answers with any type
+	// the game knows, so every type the game knows must fit the tables bots index by it.
+	// Walking the whole gun table rather than just ours, because the next type to be
+	// appended will not be ours, and a stack array has no name to grep for.
+	{
+		s32 worst = 0;
+		s32 bad = -1;
+		s32 w;
+
+		for (w = 0; w < NUM_WEAPONS; w++) {
+			s32 t = botactGetAmmoTypeByFunction(w, FUNC_PRIMARY);
+
+			if (t > worst) {
+				worst = t;
+			}
+			if (t >= NUM_AMMOTYPES) {
+				bad = w;
+			}
+		}
+		RAILLASER_CHECK(bad < 0, "no gun's ammunition type is past the arrays a bot indexes by it");
+		RAILLASER_CHECK(worst == AMMOTYPE_RAIL, "the Rail-Laser's type is the highest there is, so it is the one that found the bound");
+		RAILLASER_CHECK(botactGetAmmoTypeByFunction(WEAPON_RAILLASER, FUNC_PRIMARY) == AMMOTYPE_RAIL, "a bot sees the Moonrailer as needing Rail ammunition");
+	}
 
 	// Offered to a player, and where a page puts it. The pages index the
 	// unlocked rows rather than the table, so this walks them the way one does -

@@ -45,6 +45,14 @@
 # afterwards and writes no files of its own: the run is on its own savedir.
 set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+
+# The other gates accumulate a status and leave at the end; this file has always left at
+# the first bad thing, so fail() leaves the same way. Written down because the first five
+# checks written against it here reported nothing whatever: a fail() that was never
+# defined prints "command not found", the script goes on, and the gate says "as
+# expected". An undefined helper fails open, which is the one thing a gate must never do
+# - the checks looked like coverage and were none. Every other gate defines fail().
+fail() { echo "raillaser: $*"; exit 1; }
 BUILD=${BUILD:-$ROOT/build}
 BIN=${BIN:-$BUILD/pd.x86_64}
 OUT=${OUT:-$BUILD/raillaser-out}
@@ -156,6 +164,20 @@ if [ "$between" -lt 2 ]; then
 	echo "raillaser: a weapon spot or a Randomizer crate stopped asking for the floor model ($between of 2)"
 	exit 1
 fi
+
+# botFindPickup() indexes two stack arrays by ammunition type, and they were sized by a
+# literal 33 - the count from before the Rail-Laser - so a simulant scanning a dropped
+# Moonrailer wrote one past both and the stack canary aborted the process
+# (__stack_chk_fail). It crashed at stage start with a simulant present and never alone,
+# because only a bot runs that scan. Sized from NUM_AMMOTYPES now, and the write is
+# bounded as well, because the index comes from a function that answers with any type
+# the game has. types.h's ammoheldarr carries the same note from the commit that added
+# the type: that sweep stopped at the arrays with names, and a stack array has none.
+grep -qF 'struct prop *ammoproplist[NUM_AMMOTYPES]' "$ROOT/src/game/bot.c" || fail "botFindPickup's per-ammo-type array is not NUM_AMMOTYPES wide"
+grep -qF 'f32 ammodistlist[NUM_AMMOTYPES]' "$ROOT/src/game/bot.c" || fail "botFindPickup's ammo distances are not NUM_AMMOTYPES wide"
+grep -qF 'ammoproplist[33]' "$ROOT/src/game/bot.c" && fail "a bot's ammo-type array is sized by the pre-Rail-Laser count again"
+grep -qF 'ammotype < ARRAYCOUNT(ammoproplist)' "$ROOT/src/game/bot.c" || fail "a bot's ammo type indexes those arrays unbounded"
+grep -qF 'ammoheldarr[NUM_AMMOTYPES]' "$ROOT/src/include/types.h" || fail "a player's held-ammo array is not NUM_AMMOTYPES wide"
 
 # What a stage says, both halves of what the gun is wearing. The pickup line is the
 # only report a state whose file is 0 gets - such a state is legal and draws nothing,

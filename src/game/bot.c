@@ -2357,8 +2357,15 @@ struct prop *botFindPickup(struct chrdata *chr, s32 criteria)
 	s32 scores2[NUM_MPWEAPONSLOTS];
 	struct prop *weapproplist[NUM_MPWEAPONSLOTS];
 	f32 weapdistlist[NUM_MPWEAPONSLOTS];
-	struct prop *ammoproplist[33];
-	f32 ammodistlist[33];
+	// NUM_AMMOTYPES and not a literal 33: 33 was the count before this fork's
+	// Rail-Laser, and AMMOTYPE_RAIL is 0x21, so a bot walking toward a dropped
+	// Moonrailer wrote one element past both of these and the canary caught it -
+	// __stack_chk_fail, a bot match and an abort(). types.h's ammoheldarr carries the
+	// same note from the commit that added the type; these two were missed because the
+	// sweep looked for tables indexed by the thing being widened and stopped at the
+	// ones with names. A stack array has no name to grep for.
+	struct prop *ammoproplist[NUM_AMMOTYPES];
+	f32 ammodistlist[NUM_AMMOTYPES];
 	struct invitem *invitems[NUM_MPWEAPONSLOTS];
 	s32 i;
 	s32 j;
@@ -2439,7 +2446,10 @@ struct prop *botFindPickup(struct chrdata *chr, s32 criteria)
 
 					ammotype = botactGetAmmoTypeByFunction(weapon->weaponnum, FUNC_PRIMARY);
 
-					if (ammotype > 0 && rngRandom() % 16) {
+					// Bounded as well as sized, because this index comes from a function
+					// that answers with any ammunition type the game knows, and the cost of
+					// being one behind here is a smashed stack rather than a wrong score.
+					if (ammotype > 0 && ammotype < ARRAYCOUNT(ammoproplist) && rngRandom() % 16) {
 						if (ammoproplist[ammotype] == NULL || sqdist1 < ammodistlist[ammotype] || rngRandom() % 16 == 0) {
 							ammoproplist[ammotype] = prop;
 							ammodistlist[ammotype] = sqdist1;

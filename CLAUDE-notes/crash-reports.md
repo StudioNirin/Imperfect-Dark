@@ -496,3 +496,38 @@ Why the address is in the game: an email the player sends is a report this fork
 does receive today, and the alternative - a button that appears to work - is how a
 player ends up believing a crash was reported when it went to a host that will
 never show it to us.
+
+## A SIGABRT is a different question from a SIGSEGV, and its libc frames answer it
+
+**Digest:** signal 6 with `__fortify_fail`/`__stack_chk_fail` in it is a stack buffer
+overrun caught by the canary, and the libc offsets are worth `addr2line`-ing as eagerly
+as the game's; what that shape looked like on a bot's pickup scan; and a gate whose
+`fail()` was never defined, which is a check that cannot fail.
+
+`SIGNAL: 6` aborts on its own terms, and the usual move - symbolise the game frames only -
+throws away the half that identifies the bug. `abort()` reached through
+`__stack_chk_fail` → `__fortify_fail` is the stack canary: a local array was written past
+its end somewhere in the reporting function, and nothing is corrupted in the heap yet.
+`abort()` through `malloc_printerr`/`_int_free` is a heap metadata problem, which is a
+different hunt entirely. So `addr2line -e /usr/lib/libc.so.6 0x15a3c2 0x15b666` next to
+the game's offsets, before reading any code.
+
+A live example, the Moonrailer (patchnotes 90): the report's game frames were
+`botFindPickup` → `botTickUnpaused` → `botTick`, and the libc frames were the canary.
+`botFindPickup()` indexes two locals by *ammunition type*, and they were declared
+`[33]` - the count from before this fork added `AMMOTYPE_RAIL` at `0x21`, one past the
+end. The tell in the player's words was that it crashed **at stage start whenever a
+simulant was in the game, and never when they were alone**: only a bot runs a pickup
+scan, so the loop that overruns only runs for one. The function was named, the array was
+three lines away, and the number that indexed it was added in an earlier commit of the
+same batch.
+
+**A check that cannot fail is not a check, and it looks exactly like a check that
+passed.** Writing those gate lines I used `|| fail "..."` in `tools/ci/raillaser.sh`,
+which never defined `fail()`: bash printed `fail: command not found` to stderr, the
+script went on, and the gate ended with `as expected` and exit 0. Five checks, all of
+them decorative, and the only reason it surfaced is that I put the bug back to see whether
+the gate noticed. So, before trusting a new check, **make it fail on purpose**, and when
+a gate script gains a helper, `grep -cE '^fail\(\)'` the file - the other 24 gates under
+`tools/ci/` define `fail()` and accumulate a status; this one leaves at the first bad
+thing, and a helper that fails open is the one thing a gate must not be.

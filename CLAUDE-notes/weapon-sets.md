@@ -1028,7 +1028,34 @@ no room for 0x21 at all: the type is never recorded as held, and the zeroing loo
 that *were* grown are `s32 ammoheldarr[NUM_AMMOTYPES]` and the `g_AmmoTypes[]` row - the
 difference between a cap somebody widened and one nobody looked at.
 
+**And a third one, which this sweep missed, ended a match with an abort.**
+`botFindPickup()` (`src/game/bot.c`) declares `struct prop *ammoproplist[33]` and
+`f32 ammodistlist[33]` on the **stack** and indexes them by
+`botactGetAmmoTypeByFunction()` with no bound, so a bot heading for a dropped Moonrailer
+wrote one element past both and the stack canary caught it. It is the same error as
+`ammoheldarr`, in the same batch, and `ammoheldarr` even carries a comment saying "not
+33, since the fork's Rail-Laser's AMMOTYPE_RAIL" - so the rule was known and applied
+where somebody was already editing the line. **The sweep stopped at the tables with
+names**, and a stack local has none. So grep the *number* as well as the enum
+(`grep -rn "\[33\]" src/`): a hard-coded old count does not contain the word AMMOTYPE and
+answers to no search for it. Now sized from `NUM_AMMOTYPES` with the write bounded too,
+because that index comes from a function which answers with any type the game has and
+being one behind there costs a smashed stack, not a wrong score. In a crash report the
+signature is signal 6 with `__stack_chk_fail`/`__fortify_fail` among the libc frames
+(crash-reports.md), and from the player's side it was "crashes at the start when there is
+a simulant in the game" - which is the whole diagnosis, since only a bot runs a pickup
+scan. `--test-raillaser` now walks every weapon through that function and asserts its
+type fits, and asserts ours is the highest type there is, which is why not one stock gun
+could ever have tripped this.
+
 ### What the gate sees
+
+One warning about editing that gate: it uses a `fail()` helper, and for a while
+`raillaser.sh` was the only gate under `tools/ci/` that *called* one without defining it.
+Bash answered `fail: command not found`, carried on, and printed `as expected` with exit
+0 - five checks that could not have failed, looking exactly like five checks that passed.
+Put a check in and then break the code on purpose to watch it report. The other 24 gates
+define `fail()` and accumulate a status; this one leaves at the first bad thing.
 
 `tools/ci/raillaser.sh` runs `--test-raillaser` (`raillaserSelfTest()`, in
 `port/src/raillaser.c`, which is also where `raillaserOwn()`,
