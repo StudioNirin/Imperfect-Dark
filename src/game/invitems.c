@@ -4340,10 +4340,16 @@ struct weaponfunc_shootsingle invfunc_raillaser_charge = {
 	0, // unused
 	0, // ammoindex: invammo_raillaser
 	&invnoisesettings_default,
-	invanim_mauler_shoot, // fire animation: the Mauler's charged shot's, which is
-		// the discharge this gun's charge stands in for - the Moonraker's own shot
-		// has none, so holding a charge and releasing it into a shot had no hand in
-		// it at all
+	NULL, // fire animation: none, and it has to be none. An animation belongs to a
+		// model, not to a gun, and the model in this hand is the Moonraker's, which
+		// has two animations of its own - equip and unequip - and no shot, which is why
+		// invfunc_laser_pulse and invfunc_laser_stream name none either. Naming the
+		// Mauler's charged-shot animation here made every first trigger press twist the
+		// gun through 90 degrees and back: the hand's gun is posed by the Moonraker's
+		// bones and ANIM_GUN_MAULER_SHOOT moves the Mauler's, which are not the same
+		// joints in the same places - the reload had the same lesson (invammo_raillaser)
+		// and port/src/geguns.c:2091 has it on the record. A shot animation for this gun
+		// means a first-person model of its own, not a borrowed one.
 	0, // flags
 	&invrecoilsettings_default,
 	0, // recoverytime60

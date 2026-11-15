@@ -324,9 +324,13 @@ void raillaserSelfTest(void)
 			g_Weapons[WEAPON_MAULER]->functions[FUNC_SECONDARY];
 
 		RAILLASER_CHECK(ours->shootsound == mauler->shootsound, "it fires with the sound of the Mauler's full charge");
-		RAILLASER_CHECK(ours->base.fire_animation != NULL
-				&& ours->base.fire_animation == mauler->base.fire_animation,
-			"and its discharge plays the Mauler's charged-shot animation, not the Moonraker's none");
+		// Asked the other way until a player watched the gun twist through 90 degrees
+		// on the first press: an animation belongs to a model, not to a gun, and the
+		// model in this hand is the Moonraker's, whose bones are not the Mauler's.
+		// Pinned as NULL so the borrowed animation is not reached for again - a shot
+		// animation here means a first-person model of this gun's own.
+		RAILLASER_CHECK(ours->base.fire_animation == NULL,
+			"its shot animates nothing, as the only model under it has no shot animation");
 		// The Mauler's charged shot scales its damage by the charge that took it
 		// (game_0b0fd0.c: damage *= unk063a / 3 + 1, unk063a being matmot1 * 10).
 		// This gun's is a fixed Farsight-class kill and takes none of that, so

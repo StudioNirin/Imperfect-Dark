@@ -920,6 +920,28 @@ watch's own laser all use it - and the engine's lower/raise path takes it from t
 (`bondgun.c:1971`), with the noise from `SFX_RELOAD_DEFAULT` unless
 `WEAPONFLAG2_NORELOADSOUND` is set on the row.
 
+**The same trap in its purest form: a bare animation id, no script at all.** The
+row's `fire_animation` was `invanim_mauler_shoot` - the Mauler's charged-shot
+animation, chosen on purpose so the discharge had a hand in it, since the Moonraker's
+own shot has none. Every first trigger press twisted the gun through 90 degrees and
+back. `ANIM_GUN_MAULER_SHOOT` is the Mauler model's animation data, and the hand's gun
+here is posed by the Moonraker's bones, which are not the same joints in the same
+places; the id is legal, the model is wrong, and nothing validates it. `NULL` is the
+answer - `invfunc_laser_pulse` and `invfunc_laser_stream` both name none, which is how
+this model has always shot. A shot animation for this gun means a first-person model of
+its own.
+
+So the rule, once: **an animation id is a claim about the model in the hand, not about
+the gun.** It appears in two places on a row - the item's equip/unequip and a
+function's `fire_animation` - and in an ammo row's `reload_animation`, where the script
+carries that model's part numbers as well (above). Sweep all three whenever a fork gun
+stands on another gun's model.
+
+**Correction to `4d809eb6f`** ("The discharge plays the Mauler's shot"), also public
+and so not rewriteable: the animation half of that is what this bullet is about. The
+sound half stands - `SFX_805B` with `WEAPONFLAG2_CHARGEABLE` is a sound id and pitches
+with the charge in any model's hand.
+
 **A gate can pin a bug as firmly as it pins a fix.** The self-test asked for
 `reload_animation != NULL`, which is what made the borrowed script look like a
 decision instead of a guess; the player found the vanishing. When a check is really
