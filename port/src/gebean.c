@@ -656,6 +656,69 @@ static s32 gebeanWeaponOfFpRow(s32 fp)
 	return fp == FP_PD_RAILLASER ? WEAPON_RAILLASER : -1;
 }
 
+/**
+ * The one place in this family a player can move from the command line:
+ * `--raillaser-grip x,y,z` and `--raillaser-scale f`, nudging the Moonrailer's
+ * borrowed placement by a few units.
+ *
+ * It exists because what is left of a borrowed placement is a handful of units in
+ * a constant - the -53 was measured against a one-handed host pose and this gun is
+ * now held with two hands - and only the person holding the gun can see it. Behind
+ * an argument they converge in a few runs; without one they describe a picture to
+ * someone who cannot look at it, which is the slower loop and the one that ends in a
+ * guessed number, and guessed numbers are what this file is full of warnings about.
+ *
+ * Dev-only, and local-only: it changes this player's picture of one gun, like the
+ * look they pick with F6, and nothing about a match - the placement is a property of
+ * a mesh built on their own machine either way.
+ */
+static void fpMoonrailerTune(f32 *pos, f32 *scale)
+{
+	static s32 asked;
+	static s32 tuned;
+	static f32 nudge[3];
+	static f32 newscale;
+
+	if (!asked) {
+		const char *list = sysArgGetString("--raillaser-grip");
+		char *end;
+
+		for (s32 a = 0; list != NULL && *list != '\0' && a < 3; a++) {
+			nudge[a] = (f32)strtod(list, &end);
+			list = *end == ',' ? end + 1 : end;
+			tuned = 1;
+		}
+
+		list = sysArgGetString("--raillaser-scale");
+		if (list != NULL && *list != '\0') {
+			newscale = (f32)strtod(list, &end);
+			tuned = 1;
+		}
+
+		asked = 1;
+
+		if (tuned) {
+			sysLogPrintf(LOG_NOTE, "gebean: nudging the Moonrailer's place by %g, %g, %g (scale %g)",
+				nudge[0], nudge[1], nudge[2], newscale);
+		}
+	}
+
+	if (pos == NULL) {
+		return; // asked only to parse: the log above belongs to the parse, and waiting
+				// for the gun to be in a hand is the one thing a stage's log cannot show
+	}
+
+	if (tuned) {
+		for (s32 a = 0; a < 3; a++) {
+			pos[a] += nudge[a];
+		}
+
+		if (newscale > 0.0f) {
+			*scale = newscale;
+		}
+	}
+}
+
 static s32 fpSlot[ARRAYCOUNT(fpRows)];
 
 /**
@@ -1761,6 +1824,8 @@ static void gebeanGunsRefresh(void)
 		// instead of leaving the gun on Perfect Dark's model with nothing to say.
 		sysLogPrintf(LOG_NOTE, "gebean: the Moonrailer's first person is %s (file %d)",
 			slot ? fpRows[FP_PD_RAILLASER].file : "Perfect Dark's Laser", slot);
+
+		fpMoonrailerTune(NULL, NULL);
 	}
 
 	// and the guns there are no rows here for, the hack's own pistols and
@@ -13468,8 +13533,14 @@ static u8 *gebeanBuildFirstPerson(s32 fp, s32 original, struct modeldef *modelde
 
 		if (bm.numbones > 0 && rig.hasrest[0] && gegunsViewPlacement(placefp, own, host)) {
 			const s32 weapon = gebeanWeaponOfFpRow(fp);
+			f32 grip[3] = { fpGrip[fp].pos[0], fpGrip[fp].pos[1], fpGrip[fp].pos[2] };
+			f32 gscale = fpGrip[fp].scale;
 
-			scale = fpGrip[fp].scale;
+			if (fp == FP_PD_RAILLASER) {
+				fpMoonrailerTune(grip, &gscale);
+			}
+
+			scale = gscale;
 
 			// The host half of the answer is where the gun sits on the screen, and a
 			// borrowed placement answers with the *borrowed* gun's position, which is
@@ -13487,7 +13558,7 @@ static u8 *gebeanBuildFirstPerson(s32 fp, s32 original, struct modeldef *modelde
 			for (s32 a = 0; a < 3; a++) {
 				beanc[a] = bm.bind[0][a];
 				hostc[a] = rig.rest[0][a] + (own[a] - host[a]) * fpViewToModel[a] / FP_VIEW_SCALE
-					- fpGrip[fp].pos[a];
+					- grip[a];
 			}
 		} else {
 			// A placement the row asked for and did not get is not visible as a

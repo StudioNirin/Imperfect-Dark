@@ -15566,6 +15566,19 @@ the branch now logs a `LOG_WARNING` naming the row it asked, and the self-test c
 `gegunsViewPlacement()` on the borrowed index itself - the ask does not need the
 release installed, only its answer does.
 
+**What is left of a borrowed placement is a few units, and only the holder can see
+them.** The `-53` was measured against the host's one-handed idle pose and this gun is
+now held with two hands, so the mesh sits a little close to the arm. That is a
+constant, so it is nudged rather than guessed: `--raillaser-grip x,y,z` adds to the
+measured place and `--raillaser-scale f` replaces the scale, logged once as
+`gebean: nudging the Moonrailer's place by ...` on a stage load - eagerly, at the
+refresh and not at the first build, because the build waits for the gun to be in a
+hand and a stage log cannot show that. Local-only, like the F6 look: it is a property
+of a mesh built on that machine either way, and nothing about a match. The values that
+win belong in `fpGrip[FP_PD_RAILLASER]` afterwards, with the argument left in place for
+the next time a mesh needs measuring - there is no `--help` in this binary, so this
+paragraph is where the flags are written down.
+
 What proves it, since the shape of a gun in the hand is not a thing a test can
 say: `gebean: the Moonrailer's first person is GpdMoonrailerZ (file N)` on a stage
 load and on F6 - and `... is Perfect Dark's Laser (file 0)` when the release is not
