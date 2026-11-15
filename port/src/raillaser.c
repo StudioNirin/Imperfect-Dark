@@ -14,6 +14,7 @@
 #include "game/game_0b0fd0.h"
 #include "game/playermgr.h"
 #include "gebean.h"
+#include "geguns.h"
 #include "game/mplayer/mplayer.h"
 #include "system.h"
 #include "raillaser.h"
@@ -219,6 +220,21 @@ void raillaserSelfTest(void)
 	// is equipped, and ONEHANDED picks the arm set.
 	RAILLASER_CHECK(gun->posx > 0.0f, "it sits right of the crosshair, as every gun but the wrist Laser does");
 	RAILLASER_CHECK(!(gun->flags & WEAPONFLAG_ONEHANDED), "it is held with two hands, as a rifle is");
+
+	// Where the mesh is put in the hand. It is placed where GoldenEye places its
+	// Moonraker, which means asking a GoldenEye row - fpFitFrom in gebean.c - and a
+	// borrowed ask that comes back empty is the same wrong-place failure it replaced,
+	// since the build then falls back to the box centre without saying so. The ask
+	// does not depend on the release being installed; only its answer does.
+	{
+		f32 own[3];
+		f32 host[3];
+		const s32 place = WEAPON_GE_MOONRAKER - WEAPON_GE_FIRST;
+
+		RAILLASER_CHECK(GE_GUN_INDEX(place), "the row it borrows its placement from is a GoldenEye row, as that ask requires");
+		RAILLASER_CHECK(gegunsViewPlacement(place, own, host),
+			"and that row will answer, so the Moonrailer is placed and not merely boxed");
+	}
 	RAILLASER_CHECK(bgunGetAmmoTypeForWeapon(WEAPON_RAILLASER, FUNC_PRIMARY) == AMMOTYPE_RAIL, "its ammunition is the Rail-Laser's own type");
 	RAILLASER_CHECK(bgunGetAmmoCapacityForWeapon(WEAPON_RAILLASER, FUNC_PRIMARY) == 5, "five of them, which is its own type's capacity");
 	RAILLASER_CHECK(!(gun->flags & WEAPONFLAG_AICANUSE), "no simulant can be given it");

@@ -15532,11 +15532,39 @@ they map it here by hand. Of those, the one the look switch needs is
 `gebeanSwitchReloads()`, which has the `WEAPON_RAILLASER` case: without it F6 left
 the gun in the hand wearing the look you switched away from.
 
-**Its `fpGrip` entry is absent rather than tuned**, which is mode 0: box, then
-walked onto the host's own vertices - the case `fpRefinePlacement()` exists for,
-since here the host *is* the same gun. Mode 2 is not available (the placement call
-is `GE_GUN_INDEX`-guarded and fails closed), and if the fit reads wrong the fix is
-mode 0 or 1 with measured numbers, exactly as the Moonraker's row ended up.
+**It is placed where GoldenEye places its Moonraker, by borrowing that row's
+index.** Written first with no `fpGrip` entry at all - mode 0: its box, then walked
+onto the host's own vertices - and a tester found the gun **inside the arm**. Mode 0
+was never going to work for this shape and the reason is worth having: refinement
+walks the *box centre* onto the host's vertices, and the host is a wrist laser, so the
+middle of a long rifle lands at the hand and the barrel runs up the forearm. Fitting
+the box of a rifle to the vertices of a wrist laser is the one thing
+`fpRefinePlacement()` should not be asked to do.
+
+What the row needed already existed and had already been measured: the Moonraker's own
+`{ FP_OWNPLACE, { 0, 0, -53 }, 1/4.7 }`. The `GE_GUN_INDEX` guard is on the **index
+asked**, not on the row being fitted, so mode 2 is reachable for a non-GoldenEye row
+by asking a GoldenEye row - `fpFitFrom[]` says which, and
+`gebeanWeaponOfFpRow()` says which weapon a row belongs to, because no arithmetic
+reaches these rows from a `weaponnum` (WEAPON_RAILLASER - WEAPON_GE_FIRST is 41,
+past every table in the family).
+
+**Borrowing the placement means borrowing the wrong `host` unless you take it back.**
+The FP_OWNPLACE formula places the mesh by `own - host`, where `own` is GoldenEye's
+view position for the gun and `host` is where the gun sits on the screen - and the
+screen position is read off the *def of the row asked*, so a borrowed ask answers with
+the Moonraker's `posx`. The hand this mesh draws under is translated by **this** row's
+weapon's `posx` instead, so the subtraction has to cancel that one or the gun lands
+off to one side by the difference: 23.5 view units between the Moonraker's -12 and
+this row's 11.5 (the `-12` business is in weapon-sets.md). The `-53` pose correction
+and the 1/4.7 scale do carry over unchanged - same asset, same host, and the -53 is a
+measure of the host's idle pose, which is shared.
+
+A borrowed ask that comes back empty is invisible, because `beanc` and `hostc` still
+hold the box centre from above: the gun draws in the wrong place and says nothing, so
+the branch now logs a `LOG_WARNING` naming the row it asked, and the self-test calls
+`gegunsViewPlacement()` on the borrowed index itself - the ask does not need the
+release installed, only its answer does.
 
 What proves it, since the shape of a gun in the hand is not a thing a test can
 say: `gebean: the Moonrailer's first person is GpdMoonrailerZ (file N)` on a stage

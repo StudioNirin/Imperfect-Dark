@@ -628,6 +628,34 @@ static const struct gebeanrow fpRows[NUM_GE_GUNS + 1] = {
 	[FP_PD_RAILLASER] = FPROW("GpdMoonrailerZ", "gun/laser"),
 };
 
+/**
+ * Which row of this family a row's *placement* is asked of, or 0 to ask itself.
+ *
+ * Placement numbers are measured, not derived, and only GoldenEye's rows have any:
+ * `gegunsViewPlacement()` is guarded to GoldenEye's own indices, so it cannot be
+ * asked for FP_PD_RAILLASER even though that row wears a gun whose placement is
+ * known. Borrowing the index is what makes the question legal, and it is the
+ * honest answer for a gun that is deliberately wearing another's shape - the same
+ * asset on the same host, so the same measured place is the right place.
+ */
+static const s32 fpFitFrom[ARRAYCOUNT(fpRows)] = {
+	[FP_PD_RAILLASER] = WEAPON_GE_MOONRAKER - WEAPON_GE_FIRST,
+};
+
+/**
+ * The fork weapon a row of this family belongs to, or -1 for GoldenEye's rows.
+ *
+ * Needed because no arithmetic reaches these rows from a weapon number: the rows
+ * past GoldenEye's block are not `weaponnum - WEAPON_GE_FIRST` for any number
+ * (WEAPON_RAILLASER - WEAPON_GE_FIRST is 41, past every table in the family), so a
+ * row that has to ask something of its own weapon's definition - where that gun
+ * sits on the screen, say - has to be pointed at it here.
+ */
+static s32 gebeanWeaponOfFpRow(s32 fp)
+{
+	return fp == FP_PD_RAILLASER ? WEAPON_RAILLASER : -1;
+}
+
 static s32 fpSlot[ARRAYCOUNT(fpRows)];
 
 /**
@@ -883,6 +911,16 @@ static const struct fpgrip fpGrip[ARRAYCOUNT(fpRows)] = {
 	// hand off the bottom right of the view away from the blade (F3
 	// 20260927-011210, "disjointed hand model holding the knives").
 	[WEAPON_GE_THROWINGKNIFE   - WEAPON_GE_FIRST] = { FP_OWNPLACE, { 0.0f, 0.0f, 0.0f }, 1.0f / 4.7f, { 2, -1, 3 } },
+
+	// The Moonrailer: the Moonraker's asset on the Moonraker's host, so it is
+	// placed where the Moonraker is placed - the row above it in this table, asked
+	// through fpFitFrom below. It sat inside the arm with no entry at all, which is
+	// mode 0: its box walked onto the host's vertices, which puts the *middle* of a
+	// long gun at the hand and buries the barrel in the forearm. The -53 pose
+	// correction is the host's own measure (its idle pose holds its body 53 units
+	// along the barrel from its rest) and carries over with the asset and the host;
+	// scale is the release's.
+	[FP_PD_RAILLASER] = { FP_OWNPLACE, { 0.0f, 0.0f, -53.0f }, 1.0f / 4.7f },
 };
 
 /**
@@ -13426,14 +13464,38 @@ static u8 *gebeanBuildFirstPerson(s32 fp, s32 original, struct modeldef *modelde
 		f32 own[3];
 		f32 host[3];
 
-		if (bm.numbones > 0 && rig.hasrest[0] && gegunsViewPlacement(fp, own, host)) {
+		const s32 placefp = fpFitFrom[fp] ? fpFitFrom[fp] : fp;
+
+		if (bm.numbones > 0 && rig.hasrest[0] && gegunsViewPlacement(placefp, own, host)) {
+			const s32 weapon = gebeanWeaponOfFpRow(fp);
+
 			scale = fpGrip[fp].scale;
+
+			// The host half of the answer is where the gun sits on the screen, and a
+			// borrowed placement answers with the *borrowed* gun's position, which is
+			// another row's number. The hand this mesh is drawn under is translated by
+			// this row's weapon's (func0f0b131c, game_0b0fd0.c:178), so that is the one
+			// this subtraction has to cancel or the gun lands off to one side by the
+			// difference - 23.5 units for a row whose gun sits at 11.5 and whose
+			// placement came from a gun at -12.
+			if (placefp != fp && weapon >= 0) {
+				host[0] = g_Weapons[weapon]->posx;
+				host[1] = g_Weapons[weapon]->posy;
+				host[2] = g_Weapons[weapon]->posz;
+			}
 
 			for (s32 a = 0; a < 3; a++) {
 				beanc[a] = bm.bind[0][a];
 				hostc[a] = rig.rest[0][a] + (own[a] - host[a]) * fpViewToModel[a] / FP_VIEW_SCALE
 					- fpGrip[fp].pos[a];
 			}
+		} else {
+			// A placement the row asked for and did not get is not visible as a
+			// failure: the box centre computed above is still in beanc and hostc, so the
+			// gun draws, in the wrong place, and says nothing - which is how a row with
+			// no entry at all read as "the gun is inside the arm".
+			sysLogPrintf(LOG_WARNING, "gebean: row %d asked row %d for its placement and got none (bones %d, rest %d) - drawing it by its box",
+				fp, placefp, bm.numbones, rig.hasrest[0]);
 		}
 	} else if (usegrip && FP_PALM_MTX < nummatrices && rig.hasrest[FP_PALM_MTX]) {
 		// A gun placed by its grip: that point of Bean's gun onto the hand's
