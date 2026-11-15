@@ -51,6 +51,16 @@ bool raillaserCharging(f32 charge, s32 spent);
 bool weaponChargesLikeMauler(s32 weaponnum);
 
 /**
+ * The model a Rail-Laser lying on the floor, or held by a body, is drawn from:
+ * its own model state where the release's Moonraker is on it, and `fallback`
+ * where it is not. The Combat Simulator's weapon spots and the Randomizer's
+ * crates take their model out of the static `g_MpWeapons[]` row, which cannot
+ * name a runtime answer, so those two ask this after `gegunsFloorModel()` - the
+ * GoldenEye guns go through that first and are not touched here.
+ */
+s32 raillaserFloorModel(s32 weaponnum, s32 fallback);
+
+/**
  * The self-test (--test-raillaser): the row and what the game reads off it,
  * the weapon number against GoldenEye's block, the Combat Simulator's rows at
  * the indexes a saved setup names them by, the charge at its edges, and a

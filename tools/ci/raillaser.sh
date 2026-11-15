@@ -129,4 +129,37 @@ fi
 # above cannot reach, because the guns are refreshed on a stage load and on F6,
 # not at boot. The mesh's own fit logs next to it as "fpfit: row 25 ... scale".
 #	  gebean: the Moonrailer's first person is GpdMoonrailerZ (file N)
+# The floor and held copy. It is a model state (MODEL_PD_RAILLASER) with an alias
+# name of its own over the Laser's pickup file, mapped to the Moonraker's pickup row
+# so the mesh and its measured ground fit are borrowed by reference - and that borrow
+# is only valid because the Moonraker's row's host is the same FILE_PCHRLASER this
+# aliases (g_GeWeaponHosts[WEAPON_GE_MOONRAKER] is WEAPON_LASER), so a row that drifted
+# off that host would make the fit wrong and stay silent about it.
+# Once, not twice: it is one array whose address is the key, and a second literal
+# would be the bug - the pointer compare in gebeanPoolRowForFile() would then be
+# comparing against a different string. Asked for two at first, which the check
+# answered by failing on its own first run.
+grep -q '"PpdMoonrailerZ"' "$ROOT/port/src/gebean.c" || {
+	echo "raillaser: the Moonrailer's pickup alias name is gone"; exit 1; }
+grep -q 'name == s_PdMoonrailerProp' "$ROOT/port/src/gebean.c" || {
+	echo "raillaser: nothing maps the Moonrailer's pickup to a row, so its mesh is never built"; exit 1; }
+grep -q '+ (WEAPON_GE_MOONRAKER - WEAPON_GE_FIRST);' "$ROOT/port/src/gebean.c" || {
+	echo "raillaser: the Moonrailer's pickup no longer borrows the Moonraker's row, so its ground fit is gone"; exit 1; }
+grep -q '#define MODEL_PD_RAILLASER          (MODEL_GE_FIRST + NUM_GE_WEAPONS)' "$ROOT/src/include/constants.h" || {
+	echo "raillaser: MODEL_PD_RAILLASER is not derived from MODEL_GE_FIRST, and it moves with the version"; exit 1; }
+grep -q '_Static_assert(MODEL_PD_RAILLASER < MODEL_REMAKE_FIRST' "$ROOT/port/src/geguns.c" || {
+	echo "raillaser: nothing asserts the fork's model state is inside the range before the remake's"; exit 1; }
+# Both paths that put a gun on the floor from the static g_MpWeapons[] rows, and
+# neither of them is the one playermgrGetModelOfWeapon() answers for.
+between=$(grep -rc 'raillaserFloorModel(weapon->weaponnum' "$ROOT/src/game/setup.c" "$ROOT/src/game/modrandom.c" | awk -F: '{s+=$2} END {print s}')
+if [ "$between" -lt 2 ]; then
+	echo "raillaser: a weapon spot or a Randomizer crate stopped asking for the floor model ($between of 2)"
+	exit 1
+fi
+
+# What a stage says, both halves of what the gun is wearing. The pickup line is the
+# only report a state whose file is 0 gets - such a state is legal and draws nothing,
+# so an invisible pickup has no other line to look for.
+#	  gebean: the Moonrailer's first person is GpdMoonrailerZ (file N)
+#	  gebean: the Moonrailer's pickup is PpdMoonrailerZ (file N)
 echo "raillaser: as expected"

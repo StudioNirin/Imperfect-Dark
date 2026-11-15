@@ -15599,3 +15599,78 @@ walked one element off the end on each pass, and `fpWatchSlot[25]` abuts
 now. Adding a row to that family grows them, so check it whenever one is added: only
 the Moonrailer's fit was wrong by it, because `gegunsIsBorrowed()` was reading the
 Covert Modem's `borrowed[25]`.
+
+### The same gun on the floor: a model state, not a file (2026-11-14)
+
+**Digest:** a dropped or body-held copy is drawn from a *model state*, so the
+first-person alias cannot reach it; the release has a ground asset of its own, and
+GoldenEye's guns alias it separately from the hand one; the fork's own state at
+`MODEL_PD_RAILLASER`, why slot 41 is invisible to GoldenEye's loops, and why the
+borrowed ground fit is valid rather than lucky; and the two paths that put a gun on
+the floor, only one of which `playermgrGetModelOfWeapon()` answers for.
+
+A gun lying on the ground does not come from `hi_model`. That field is read by
+`weaponGetFileNum()` (`src/game/game_0b0fd0.c:553`) - the first-person hand and the
+menu picture - and by nothing on the ground path: `weaponCreateForPlayerDrop()` and
+every held-prop site ask `playermgrGetModelOfWeapon()` (`src/game/playermgr.c`), which
+for a non-GoldenEye number is a `switch (weaponHost(...))` over Perfect Dark's
+`MODEL_CHR*` list. So the Moonrailer wore the release's Moonraker in the hand and
+Perfect Dark's wrist laser on the floor, and no amount of first-person work could
+touch it.
+
+**The release carries a ground asset too, and GoldenEye's guns alias it under a
+second name.** `gegunstable.h`'s rows are `GUNROW(weapon, alias, source, perm, sign,
+scale, beancentre, n64centre)` and the Moonraker's source is **`prop/chrlaser`** - a
+third-person pickup, not `gun/laser`. So each GoldenEye gun has two aliases: the hand's
+(`GgeMoonrakerZL`, in `fpRows[]`) and the pickup's (`PchrgeMoonrakerZ`, in `gunRows[]`),
+and the pickup row carries a measured fit of Bean's prop onto the host's frame.
+
+**The fork's own state, and why slot 41 is safe.** `MODEL_PD_RAILLASER = MODEL_GE_FIRST
++ NUM_GE_WEAPONS` (`src/include/constants.h`): inside the range of states GoldenEye's
+code walks - `geguns.c` asserts that range ends before `MODEL_REMAKE_FIRST`, and the
+assert was extended for the extra slot - and outside every bound that asks whether an
+index is a GoldenEye gun's (`GE_GUN_INDEX`, `NUM_GE_WEAPONS`), which is exactly what
+makes it invisible to GoldenEye's own loops and to `gegunsHackPropsRefresh()`. Derived
+and never literal: `MODEL_GE_FIRST` is `0x1bb` on JPN and `0x1b9` elsewhere, so a
+hard-coded 0x1e2 is wrong for one of the three builds.
+
+Its alias is `PpdMoonrailerZ` over `g_ModelStates[MODEL_CHRLASER].fileid`, and
+`gebeanPoolRowForFile()` maps that name to **the Moonraker's row**, so the mesh, its
+scale and its ground fit arrive by reference rather than being copied or re-measured.
+**The borrow is valid rather than lucky**: that row's host is
+`playermgrGetModelOfWeapon(g_GeWeaponHosts[16])`, `g_GeWeaponHosts[WEAPON_GE_MOONRAKER]`
+is `WEAPON_LASER` (`invitems.c:6641`), so the frame `n64centre` was measured in *is*
+`FILE_PCHRLASER` - the file being aliased here. If a future edit moves that row's host,
+the fit silently goes wrong, which is why the gate pins the borrow by row index and not
+by a comment. Its own alias name rather than the Moonraker's, for the reason the
+first-person row has its own: the name is the key from file to row and holds one host,
+and `PchrgeMoonrakerZ` answers to the GoldenEye gun set, which a ROM hack's set
+repoints.
+
+**Two paths put a gun on the floor, and only one is `playermgrGetModelOfWeapon()`.**
+Drops, deaths and bodies go through that function. Weapon spots (`src/game/setup.c:850`)
+and Randomizer crates (`src/game/modrandom.c:876`) take the model out of the static
+`g_MpWeapons[]` row and then run it through `gegunsFloorModel()` - so a fix that names
+only the switch leaves a Combat Simulator spot and a crate wearing Perfect Dark's
+Laser. `g_MpWeapons[MPWEAPON_RAILLASER].model` stays the literal `MODEL_CHRLASER`:
+a static initialiser cannot name a runtime answer, and pointing it at
+`MODEL_PD_RAILLASER` would make the pickup invisible wherever the release is not
+installed. Hence `raillaserFloorModel()`, asked *after* `gegunsFloorModel()` so
+GoldenEye's guns are settled first.
+
+`playermgrGetModelOfWeapon()` has one answer, so the third-person **held** gun changes
+with the floor copy - which is how GoldenEye's guns behave too (one state, held and
+floor), and there is no per-call context to ask for less without a second accessor at
+every held-gun site. `geHeldOrigin[]`/`geHeldNudge[]`/`geHeldMuzzle[]` are keyed on
+`modelnum - MODEL_GE_FIRST`, so the new state gets no GoldenEye held nudge and keeps
+Perfect Dark's held position - probably right, since this gun's `posx` is Perfect
+Dark's, and untested.
+
+What proves it without a screen: `gebean: the Moonrailer's pickup is PpdMoonrailerZ
+(file N)` beside the first-person line, and a gun row whose mesh fails to build logs
+**nothing** - the `... HD failed ...` lines are the character and pool paths - so that
+line is the only report a state whose file is 0 gets, and such a state is legal and
+draws nothing. `--xbla-mesh-verbose` then shows the alias being filed. Verified here:
+pickup alias file 4033, first-person file 4034, no errors. Eyes only: the size, angle
+and resting height of the thing on the floor, and whether the held third-person look is
+wanted.

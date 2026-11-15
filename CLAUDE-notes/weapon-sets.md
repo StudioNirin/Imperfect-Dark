@@ -869,6 +869,21 @@ every switch that names the gun you are modelled on:
   **-1: a body holding nothing**. Named with `MODEL_CHRLASER`, which is the same
   model the `g_MpWeapons[]` row already hands out - and that row is not what this
   switch reads, so a correct row and an invisible gun went together happily.
+- **The same switch also decides what the gun looks like on the floor**, and that is a
+  different question from what it looks like in the hand: `hi_model` is read only by
+  `weaponGetFileNum()` (`src/game/game_0b0fd0.c:553`), the first-person hand and the
+  menu picture, while `weaponCreateForPlayerDrop()` and every held-prop site ask
+  `playermgrGetModelOfWeapon()`. So the Rail-Laser wore the release's Moonraker in the
+  hand and Perfect Dark's wrist laser on the ground until it was given a model state of
+  its own, `MODEL_PD_RAILLASER` (`src/include/constants.h`, derived from `MODEL_GE_FIRST`
+  because that moves with the version) - the whole of which is in ge-bean.md, "The same
+  gun on the floor". **And the switch is not the only path to the floor**: the Combat
+  Simulator's weapon spots (`src/game/setup.c:850`) and the Randomizer's crates
+  (`src/game/modrandom.c:876`) read the static `g_MpWeapons[].model` and pass it through
+  `gegunsFloorModel()`, so fixing the switch alone leaves a spot and a crate wearing the
+  old model - and that row's model column has to stay the literal `MODEL_CHRLASER`,
+  because a static initialiser cannot name a runtime answer and pointing it at the new
+  state makes the pickup invisible for every player without the release installed.
 - `currentPlayerGetSight()`, `default: SIGHT_DEFAULT`. Ours joins `SIGHT_ZOOM`,
   where the AR34 whose zoom it copies already sits.
 - The equip-sound switch in `bondgun.c`, silent by default: a gun drawn without a

@@ -839,8 +839,22 @@ s32 playermgrGetModelOfWeapon(s32 weapon)
 	case WEAPON_FARSIGHT:         model = MODEL_CHRZ2020; break;
 	case WEAPON_SNIPERRIFLE:      model = MODEL_CHRSNIPERRIFLE; break;
 	case WEAPON_CROSSBOW:         model = MODEL_CHRCROSSBOW; break;
-	case WEAPON_LASER:
-	case WEAPON_RAILLASER:         model = MODEL_CHRLASER; break;
+	case WEAPON_LASER:            model = MODEL_CHRLASER; break;
+	case WEAPON_RAILLASER:
+#ifndef PLATFORM_N64
+		// Where the release is installed this fork's gun wears the release's Moonraker
+		// on the floor and in a body's hand too, not only in the first-person hand -
+		// MODEL_PD_RAILLASER is its own model state, filled by gebeanGunsRefresh(), and
+		// without the release it is Perfect Dark's Laser as ever. Two things that are
+		// easy to get wrong here: MODEL_CHRLASER's own state is never touched, because
+		// the stock Laser shares it; and this function has one answer, so the held
+		// third-person gun changes with the floor copy, which is how GoldenEye's guns
+		// behave as well - there is no per-call context to ask for one without it.
+		model = g_ModelStates[MODEL_PD_RAILLASER].fileid ? MODEL_PD_RAILLASER : MODEL_CHRLASER;
+#else
+		model = MODEL_CHRLASER;
+#endif
+		break;
 		// Not in the default: that answers -1 for anything past WEAPON_PSYCHOSISGUN,
 		// which is the whole of this fork's block, so a number appended there is a
 		// body holding nothing until it is named beside its own model.

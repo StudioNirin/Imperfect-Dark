@@ -64,6 +64,7 @@
 #include "geslappers.h"
 #include "modborrow.h"
 #include "modloader.h"
+#include "raillaser.h"
 #include "net/net.h"
 #ifndef PLATFORM_N64
 #include "getank.h"
@@ -846,8 +847,13 @@ void setupPlaceWeapon(struct weaponobj *weapon, s32 cmdindex)
 				weapon->weaponnum = mpweapon->weaponnum;
 				weapon->base.modelnum = mpweapon->model;
 #ifndef PLATFORM_N64
-				// GoldenEye's own on the floor in its own look, as in its hand
-				weapon->base.modelnum = gegunsFloorModel(weapon->weaponnum, weapon->base.modelnum);
+				// GoldenEye's own on the floor in its own look, as in its hand; then
+				// this fork's own gun on its own model state, which the static row above
+				// cannot name - `g_MpWeapons[].model` is a literal, and pointing it at
+				// MODEL_PD_RAILLASER would make the pickup invisible wherever the release
+				// is not installed (raillaserFloorModel).
+				weapon->base.modelnum = raillaserFloorModel(weapon->weaponnum,
+						gegunsFloorModel(weapon->weaponnum, weapon->base.modelnum));
 #endif
 				weapon->base.extrascale = mpweapon->extrascale;
 				createweapon = mpweapon->hasweapon;

@@ -89,6 +89,19 @@ bool weaponChargesLikeMauler(s32 weaponnum)
 }
 
 /**
+ * The model a Rail-Laser on the floor is drawn from.
+ *
+ * One answer in one place: playermgrGetModelOfWeapon() already weighs this gun's
+ * own model state against Perfect Dark's Laser's, and reading g_ModelStates[] here
+ * would make a second place that knows which of the two is worn - the same reason
+ * the first-person check asks gebeanMoonrailerSlot() instead of looking at the file.
+ */
+s32 raillaserFloorModel(s32 weaponnum, s32 fallback)
+{
+	return raillaserOwn(weaponnum) ? playermgrGetModelOfWeapon(WEAPON_RAILLASER) : fallback;
+}
+
+/**
  * How long the trigger has to be held: one and a half seconds.
  *
  * In the same 60th-of-a-second base the charge itself counts in (the Mauler's
@@ -295,8 +308,22 @@ void raillaserSelfTest(void)
 	// them. The two beam lists have no accessor, so the script looks at the
 	// source for those (tools/ci/raillaser.sh) - a number missing from one of
 	// them is silent, and silence is what let this ship without a bolt.
-	RAILLASER_CHECK(playermgrGetModelOfWeapon(WEAPON_RAILLASER) == MODEL_CHRLASER, "a body holding one holds the Moonraker's model rather than nothing");
-	RAILLASER_CHECK(playermgrGetModelOfWeapon(WEAPON_LASER) == MODEL_CHRLASER, "and that answer is the Moonraker's own, not the default");
+	// On the floor and in a body's hand. Pinned as the either/or, because which of
+	// the two is worn depends on the release being installed and this test runs on
+	// machines with and without it; what is pinned is that the answer is one of them,
+	// that the two paths that put a gun on the floor agree, that the Moonraker's own
+	// answer is the plain one, and that no other gun is answered for - a fork number
+	// must not move a stock gun's model, and MODEL_CHRLASER is shared with it.
+	RAILLASER_CHECK(playermgrGetModelOfWeapon(WEAPON_RAILLASER) == MODEL_PD_RAILLASER
+			|| playermgrGetModelOfWeapon(WEAPON_RAILLASER) == MODEL_CHRLASER,
+		"a body holding one holds the release's Moonraker or Perfect Dark's Laser, by what is installed");
+	RAILLASER_CHECK(raillaserFloorModel(WEAPON_RAILLASER, MODEL_CHRSNIPERRIFLE)
+			== playermgrGetModelOfWeapon(WEAPON_RAILLASER),
+		"and a weapon spot or a crate puts it on the floor with the same answer");
+	RAILLASER_CHECK(raillaserFloorModel(WEAPON_MAULER, MODEL_CHRSNIPERRIFLE) == MODEL_CHRSNIPERRIFLE,
+		"and no other gun is answered for");
+	RAILLASER_CHECK(playermgrGetModelOfWeapon(WEAPON_LASER) == MODEL_CHRLASER,
+		"and the Moonraker's own model is unmoved by it");
 
 	RAILLASER_CHECK(challengeIsFeatureUnlocked(g_MpWeapons[MPWEAPON_RAILLASER].unlockfeature), "nothing has to be unlocked for it");
 	RAILLASER_CHECK(mpCanSpawnWithWeapon(&g_MpWeapons[MPWEAPON_RAILLASER]), "a spawn can hand it out");

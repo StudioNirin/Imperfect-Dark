@@ -58,6 +58,11 @@
 
 _Static_assert(MODEL_GE_FIRST + NUM_GE_WEAPONS <= MODEL_REMAKE_FIRST,
 		"a model state per GoldenEye gun, before the remake's models");
+// The slot immediately after GoldenEye's is this fork's own (MODEL_PD_RAILLASER,
+// filled by gebean.c): asserted here beside the range it lives in, because the
+// range's end is what both of them depend on and the version moves the base.
+_Static_assert(MODEL_PD_RAILLASER < MODEL_REMAKE_FIRST,
+		"and this fork's own state, after GoldenEye's and before the remake's");
 _Static_assert(MPWEAPON_GE_EXTRA1 - MPWEAPON_GE_FIRST == NUM_GE_GUNS
 		&& MPWEAPON_GE_SILVERPP7 - MPWEAPON_GE_EXTRA1 == NUM_GE_EXTRA
 		&& MPWEAPON_RAILLASER - MPWEAPON_GE_SILVERPP7 == NUM_GE_CHEATGUNS

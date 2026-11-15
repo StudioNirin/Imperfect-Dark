@@ -490,6 +490,20 @@ _Static_assert(ARRAYCOUNT(gunRows) == NUM_GE_GUNS, "a pickup row per GoldenEye g
 static s32 gunSlot[ARRAYCOUNT(gunRows)];
 
 /**
+ * The Moonrailer's copy on the floor and in a body's hand: an alias name of its
+ * own over Perfect Dark's Laser pickup file, mapped below to the Moonraker's
+ * pickup row, and held in the model state MODEL_PD_RAILLASER.
+ *
+ * A name, not the Moonraker's own PchrgeMoonrakerZ, for the same reason the
+ * first-person row has its own: the name is the key from file to row and it holds
+ * one host, and PchrgeMoonrakerZ answers to the GoldenEye gun set - which a ROM
+ * hack's gun set repoints (gegunsHackPropsRefresh()). Compared by pointer, like
+ * every other alias name here, so it is an array and not a literal in two places.
+ */
+static const char s_PdMoonrailerProp[] = "PpdMoonrailerZ";
+static s32 rlPropSlot;
+
+/**
  * The GoldenEye remake's props (its `models` block, MODEL_REMAKE_FIRST): each
  * of GoldenEye's own prop models, converted, with Bean's HD prop drawn on it
  * the way a pickup is (gebeanBuildRigid()), fitted offline on Bean's N64-look
@@ -1293,6 +1307,14 @@ static s32 gebeanPoolRowForFile(u16 fileid)
 		}
 	}
 
+	// The Moonrailer's pickup is the Moonraker's row - the mesh, its scale and its
+	// measured ground fit are that row's, by reference, and this one line is what
+	// says so. Nothing re-measures them, and nothing here could: the fit's frame is
+	// the host's own pickup file, which is exactly the file being aliased.
+	if (fileid == rlPropSlot && name == s_PdMoonrailerProp) {
+		return ARRAYCOUNT(rows) + ARRAYCOUNT(poolRows) + (WEAPON_GE_MOONRAKER - WEAPON_GE_FIRST);
+	}
+
 	for (s32 i = 0; i < ARRAYCOUNT(fpRows); i++) {
 		if (fpSlot[i] == fileid && name == fpRows[i].file) {
 			return ARRAYCOUNT(rows) + ARRAYCOUNT(poolRows) + ARRAYCOUNT(gunRows) + i;
@@ -1826,6 +1848,53 @@ static void gebeanGunsRefresh(void)
 			slot ? fpRows[FP_PD_RAILLASER].file : "Perfect Dark's Laser", slot);
 
 		fpMoonrailerTune(NULL, NULL);
+
+		// The same gun on the floor and in a body's hand, which is a different
+		// question and a different file. That copy is not drawn from hi_model at all -
+		// it is drawn from a model state, chosen by playermgrGetModelOfWeapon() - so it
+		// needs a state of its own, and the release's asset for it is not the
+		// first-person gun but the pickup, prop/chrlaser, which is what the Moonraker's
+		// own row names. So: alias the Laser's pickup file under a name of ours, map
+		// that name to the Moonraker's row, and the mesh and its measured ground fit
+		// arrive by reference.
+		{
+			const s32 hostmodel = playermgrGetModelOfWeapon(WEAPON_LASER);
+			struct modelstate *state = &g_ModelStates[MODEL_PD_RAILLASER];
+			s32 propfileid = 0;
+
+			// WEAPON_LASER, not WEAPON_RAILLASER: that answer is now the state being
+			// filled here, so asking it would read this line's own output back in.
+			if (hostmodel >= 0 && hostmodel < MODEL_GE_FIRST) {
+				propfileid = g_ModelStates[hostmodel].fileid;
+			}
+
+			rlPropSlot = 0;
+
+			if (bean && propfileid) {
+				const s32 alias = romdataRegisterAliasFile(s_PdMoonrailerProp, propfileid);
+
+				if (alias) {
+					rlPropSlot = alias;
+					propfileid = alias;
+				}
+			}
+
+			// A stage that loaded the other file keeps its own model; the next load
+			// takes the new one - the same rule as the states above, and for the same
+			// reason: a modeldef is cached against the file id it was read from.
+			if (state->fileid != propfileid) {
+				state->modeldef = NULL;
+			}
+
+			state->fileid = (u16)propfileid;
+			state->scale = hostmodel >= 0 && hostmodel < MODEL_GE_FIRST
+				? g_ModelStates[hostmodel].scale : 0x199;
+
+			// Named, because a state whose file is 0 is legal and draws nothing: a
+			// pickup that has gone invisible has no other line to look for.
+			sysLogPrintf(LOG_NOTE, "gebean: the Moonrailer's pickup is %s (file %d)",
+				rlPropSlot ? s_PdMoonrailerProp : "Perfect Dark's Laser", rlPropSlot);
+		}
 	}
 
 	// and the guns there are no rows here for, the hack's own pistols and

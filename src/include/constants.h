@@ -2504,6 +2504,16 @@ s32 langpackIsCjk(void);
 // Past the stock table: a model state for each of GoldenEye's guns, filled by
 // geguns.c. NUM_WEAPONS is further down; the count is written out and checked there.
 #define MODEL_GE_FIRST              (VERSION == VERSION_JPN_FINAL ? 0x1bb : 0x1b9)
+// One state past GoldenEye's, for this fork's own weapon when it is wearing a
+// release mesh on the floor and in a body's hand: filled by gebean.c's
+// gebeanGunsRefresh(), and answered by playermgrGetModelOfWeapon(). It is inside
+// the range of states GoldenEye's code walks - geguns.c asserts that range ends
+// before the remake's models - and outside every bound that asks whether an index
+// is a GoldenEye gun's (GE_GUN_INDEX, NUM_GE_WEAPONS), which is what makes it
+// invisible to GoldenEye's own loops. Derived and never literal: MODEL_GE_FIRST
+// moves with the version, and a saved setup or a hard-coded 0x1e2 would be wrong
+// for one of the three builds.
+#define MODEL_PD_RAILLASER          (MODEL_GE_FIRST + NUM_GE_WEAPONS)
 // And from a fixed number whatever the version, so a setup file can name
 // them: the GoldenEye remake's prop models, GoldenEye's model number plus
 // this, filled for a stage by its mod's `models` block (modloader.c). Room for

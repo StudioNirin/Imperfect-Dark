@@ -31,6 +31,7 @@
 #ifndef PLATFORM_N64
 #include "geguns.h"
 #include "langpack.h"
+#include "raillaser.h"
 #ifndef PLATFORM_N64
 #include "geroom.h"
 #include "gestan.h"
@@ -873,7 +874,12 @@ static void modRandomRollWeapons(struct modrandomlists *lists)
 			weapon->weaponnum = mpweapon->weaponnum;
 			weapon->base.modelnum = mpweapon->model;
 #ifndef PLATFORM_N64
-			weapon->base.modelnum = gegunsFloorModel(weapon->weaponnum, weapon->base.modelnum);
+			// As the Combat Simulator's spots do: the Randomizer deals weapons out of
+			// the same static rows, so the same answer is needed here, and a crate that
+			// agreed with the spots in one place and not the other is the kind of bug
+			// only a player on a stage would ever see.
+			weapon->base.modelnum = raillaserFloorModel(weapon->weaponnum,
+					gegunsFloorModel(weapon->weaponnum, weapon->base.modelnum));
 #endif
 			weapon->base.extrascale = mpweapon->extrascale;
 			break;
