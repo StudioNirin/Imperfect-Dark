@@ -204,7 +204,21 @@ void raillaserSelfTest(void)
 	RAILLASER_CHECK(gun->functions[FUNC_SECONDARY] == NULL, "it has one function: a zoom is the aim input here, not an alt-fire");
 	RAILLASER_CHECK(((struct weaponfunc *) gun->functions[FUNC_PRIMARY])->type == INVENTORYFUNCTYPE_SHOOT_SINGLE, "its shot is a single hitscan beam, not a projectile");
 	RAILLASER_CHECK(gun->ammos[FUNC_PRIMARY] != NULL && gun->ammos[FUNC_PRIMARY]->clipsize == 1, "one shot a magazine");
-	RAILLASER_CHECK(gun->ammos[FUNC_PRIMARY]->reload_animation != NULL, "and it has an animation to reload with");
+	// Asked the other way until a player told us otherwise: this check demanded a
+	// non-NULL reload animation, which is what made the borrowed Rocket Launcher's
+	// script look like the right answer - and its part toggles hid the gun mid-reload
+	// (src/game/invitems.c:invammo_raillaser). A gate that asserts a guess is worse
+	// than none, because it makes the guess look like a decision. What is pinned now
+	// is the decision: no animation of another gun's model. If this gun is ever given
+	// a model with a reload animation of its own, change this here and say so.
+	RAILLASER_CHECK(gun->ammos[FUNC_PRIMARY]->reload_animation == NULL,
+		"it reloads on the engine's own lower/raise, naming no other gun's model");
+
+	// How it is held, which is what the look of it comes down on. posx is the hand's
+	// camera-space x, so a negative one puts the gun left of the crosshair however it
+	// is equipped, and ONEHANDED picks the arm set.
+	RAILLASER_CHECK(gun->posx > 0.0f, "it sits right of the crosshair, as every gun but the wrist Laser does");
+	RAILLASER_CHECK(!(gun->flags & WEAPONFLAG_ONEHANDED), "it is held with two hands, as a rifle is");
 	RAILLASER_CHECK(bgunGetAmmoTypeForWeapon(WEAPON_RAILLASER, FUNC_PRIMARY) == AMMOTYPE_RAIL, "its ammunition is the Rail-Laser's own type");
 	RAILLASER_CHECK(bgunGetAmmoCapacityForWeapon(WEAPON_RAILLASER, FUNC_PRIMARY) == 5, "five of them, which is its own type's capacity");
 	RAILLASER_CHECK(!(gun->flags & WEAPONFLAG_AICANUSE), "no simulant can be given it");

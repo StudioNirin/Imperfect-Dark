@@ -4316,7 +4316,21 @@ struct inventory_ammo invammo_raillaser = {
 	AMMOTYPE_RAIL,
 	CASING_NONE,
 	1, // clip size: one charged shot, and then the reload
-	invanim_rocketlauncher_reload, // the Rocket Launcher's, until it has its own
+	NULL, // no reload animation, and not for want of looking for one.
+		// The Laser's model has exactly two animations of its own - equip and
+		// unequip (animations.h) - so there is no reload animation that exists for
+		// the model this gun stands on, and naming another gun's was wrong twice
+		// over: the Rocket Launcher's script played the Rocket Launcher's animation
+		// on this model, and toggled MODELPART_ROCKETLAUNCHER_ROCKET by frame, which
+		// on a Laser-shaped model is part of the gun itself - so the whole gun went
+		// away mid-reload. port/src/geguns.c:2143 writes down this exact class ("the
+		// host's part commands name the host's parts, which on GoldenEye's model are
+		// other things entirely") and has a crash on its record. NULL is what the
+		// PP90, the CC13 and the watch's own laser do, and the reload then takes the
+		// engine's lower/raise path (bondgun.c:1971), which is the one the GoldenEye
+		// rows are sent down for the same reason (bgunWantsLoweredReload). The
+		// reload's noise comes from SFX_RELOAD_DEFAULT (bondgun.c:2092), which is why
+		// WEAPONFLAG2_NORELOADSOUND stayed off this row.
 	0, // flags
 };
 
@@ -4359,7 +4373,13 @@ struct weapon invitem_raillaser = {
 	NULL, // sec ammo
 	&invaimsettings_raillaser,
 	3, // muzzlez: the Moonraker's, the same model under it
-	-12, // posx
+	11.5f, // posx: the AR34's, and deliberately not the Laser's -12. That is the
+		// only negative posx in this file - every other gun is 0 to 35 - and posx is
+		// not a model offset but the hand's camera-space x (func0f0b131c,
+		// src/game/game_0b0fd0.c:178, read at src/game/bondgun.c:9851), so a gun with
+		// a negative one is drawn left of the crosshair and reads as held in the left
+		// hand even though it is equipped in the right slot. The Moonraker is a wrist
+		// laser and is meant to sit there; this is not.
 	-12.7, // posy
 	-21.5, // posz
 	1, // sway
@@ -4378,7 +4398,16 @@ struct weapon invitem_raillaser = {
 	// which must not be taken for the Mauler's charge beam: that is
 	// WEAPONFLAG3_CHARGEBEAM, which would draw the beam as the Mauler's rather
 	// than the Moonraker's bolt (gunfx.c).
-	WEAPONFLAG_ONEHANDED | WEAPONFLAG_00000040 | WEAPONFLAG_TRACKTIMEUSED | WEAPONFLAG_00000400 | WEAPONFLAG_00002000 | WEAPONFLAG_00008000 | WEAPONFLAG_HASHANDS | WEAPONFLAG_DONTCOUNTSHOTS | WEAPONFLAG_04000000,
+	//
+	// And ONEHANDED is off, which is the one flag here chosen by the player rather
+	// than by the code: WEAPONFLAG_ONEHANDED is what decides the arm set (the held
+	// pose at src/game/player.c:9205-9237, and a body's grip at
+	// src/game/chraction.c:1508), and leaving it on gave this gun the Laser's
+	// one-handed wrist hold, which is the hold the Moonraker is drawn with and is
+	// why the release's mesh looked like it was inside the arm. Every two-handed row
+	// is one without this flag and without DUALFLIP, which is what makes them
+	// centred and never mirrored.
+	WEAPONFLAG_00000040 | WEAPONFLAG_TRACKTIMEUSED | WEAPONFLAG_00000400 | WEAPONFLAG_00002000 | WEAPONFLAG_00008000 | WEAPONFLAG_HASHANDS | WEAPONFLAG_DONTCOUNTSHOTS | WEAPONFLAG_04000000,
 	WEAPONFLAG2_NOWALLHIT | WEAPONFLAG2_LASERHIT | WEAPONFLAG2_LASERBEAM | WEAPONFLAG2_CROSSBEAM | WEAPONFLAG2_LASERFLIGHT | WEAPONFLAG2_BOTLIMITLESS | WEAPONFLAG2_CHARGEABLE, // flags2
 	0, // unequipped reload index
 	SFX_PICKUP_LASER, // pickup sound: the Moonraker's, until it has its own

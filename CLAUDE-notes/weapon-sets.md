@@ -885,13 +885,62 @@ This is the fixed-array trap from `CLAUDE.md` in `switch` form, with one
 difference that makes it worse: an array read past its bound crashes, and a
 whitelist omission draws nothing.
 
+### Where it is held, and what it may not borrow
+
+Three more things the row got wrong in ways no test could see, all found by a
+player looking at it.
+
+**`posx` is where the gun sits on the screen, not on the model, and the Moonraker is
+this file's one exception.** The row's `posx/posy/posz` reach the hand as its
+camera-space translation (`func0f0b131c`, `src/game/game_0b0fd0.c:171`, read at
+`src/game/bondgun.c:9851`), and `invitem_laser`'s `-12` is **the only negative `posx`
+in `invitems.c`** - every other gun sits 0 to 35, and GoldenEye's own `geOwnPos[]`
+(`port/src/geguns.c:1992`) is all positive. A gun copied from the Moonraker therefore
+draws left of the crosshair and reads as "held in the left hand", which is a
+misdiagnosis worth pre-empting: the hands are two slots (`HAND_RIGHT 0`, `HAND_LEFT
+1`) and the primary always goes in the right one (`src/game/player.c:1111-1143`), so
+`HAND_LEFT` means a *second* gun, and `struct weapon` names a hand nowhere.
+`WEAPONFLAG_ONEHANDED` is what picks the arm set (the held pose at
+`src/game/player.c:9205-9237`, a body's grip at `src/game/chraction.c:1508`); a
+two-handed row is one without it and without `WEAPONFLAG_DUALFLIP`, which is why
+rifles are centred and never mirrored.
+
+**Do not name another gun's animation for a model that has never had one, because
+the script carries that gun's part numbers too.** The Moonraker's model has exactly
+two animations, equip and unequip, and no reload - it never needed one. Filling the
+Rail-Laser's `reload_animation` with `invanim_rocketlauncher_reload` was wrong twice
+over: it played the Rocket Launcher's animation on a Laser-shaped model, and its
+`showpart`/`hidepart` on `MODELPART_ROCKETLAUNCHER_ROCKET` toggled a part id that on
+this model is part of the gun - so **the gun vanished mid-reload**. The class is on
+the record with a crash at `port/src/geguns.c:2143` ("the host's part commands name
+the host's parts, which on GoldenEye's model are other things entirely"), and it is
+the same reasoning that sends the GoldenEye rows' reloads through
+`bgunWantsLoweredReload()`. NULL is the stock answer - the PP90, the CC13 and the
+watch's own laser all use it - and the engine's lower/raise path takes it from there
+(`bondgun.c:1971`), with the noise from `SFX_RELOAD_DEFAULT` unless
+`WEAPONFLAG2_NORELOADSOUND` is set on the row.
+
+**A gate can pin a bug as firmly as it pins a fix.** The self-test asked for
+`reload_animation != NULL`, which is what made the borrowed script look like a
+decision instead of a guess; the player found the vanishing. When a check is really
+"I did not want this field empty", say so in its message and name the alternative
+that is actually correct.
+
+**Correction to `41783f6df`'s commit message**, which is public and cannot be
+rewritten: it names `leftmodel` and `heldmodel` fields that do not exist here
+(`struct weapon`, `src/include/types.h:3325`, has no hand-model field) and says
+`WEAPONFLAG2_CAN_DUAL_WIELD` "is what puts it in the LEFT hand", which the paragraph
+above disproves - and the row never had `CAN_DUAL_WIELD` anyway. Those came from
+reading the donor's GoldenEye tables hours earlier and carrying their field names
+into Perfect Dark's. The notes were not wrong; only the message was.
+
 ### What the gate sees
 
 `tools/ci/raillaser.sh` runs `--test-raillaser` (`raillaserSelfTest()`, in
 `port/src/raillaser.c`, which is also where `raillaserOwn()`,
 `raillaserCharge60()`, `raillaserChargeFull()`, `raillaserChargeRate60()` and
 `raillaserCharging()` live so that `bondgun.c` has a handful of one-line hooks
-instead of a weapon number sprinkled down it). 46 checks: the row through the
+instead of a weapon number sprinkled down it). 49 checks: the row through the
 accessors the game itself uses (`bgunGetAmmoTypeForWeapon()`,
 `bgunGetAmmoCapacityForWeapon()`, `aimsettings->flags`, the name id, the absent
 `WEAPONFLAG_AICANUSE` and `WEAPONFLAG3_FREESHOTS`), the number's neighbours by
@@ -900,9 +949,11 @@ literal index, `NUM_GE_WEAPONS == 41`, `WEAPON_IS_GE()` both ways and
 full fires, spent holds, and the rate fills it in the length the gun says),
 `weaponChargesLikeMauler()` three ways, `WEAPONFLAG2_CHARGEABLE` set and
 `WEAPONFLAG3_CHARGEBEAM` absent, neither of the two other writers of the charge
-field asked for, the shot's sound equal to the Mauler's charged shot's,
-`playermgrGetModelOfWeapon()` giving the Moonraker's model rather than the -1 its
-default reserves for a fork number, and a setup block written and read at version
+field asked for, the shot's sound equal to the Mauler's charged shot's, that the
+reload names **no** animation rather than another gun's, that `posx` is positive and
+`WEAPONFLAG_ONEHANDED` is off, `playermgrGetModelOfWeapon()` giving the Moonraker's
+model rather than the -1 its default reserves for a fork number, and a setup block
+written and read at version
 6 next to a version 5 block read at 81 bits.
 
 The two beam whitelists have no accessor, so the script greps for the number
