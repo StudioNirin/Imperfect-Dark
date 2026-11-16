@@ -32,6 +32,18 @@ with it; and the whitelists a new number has to be named in, which fail not by
 crashing but by drawing nothing at all - the sweep is every `case` of the gun you
 are modelled on.
 
+Three later rounds: the pickup message and the pickup sound are switches over the
+ammo type, so a new type has to be named in three of them or the message reads
+"Picked up ." and the pickup is silent; an arena's multi-ammo crate is nineteen
+pairs by the cartridge's command size, so a type past the nineteenth is not
+stockable there and the gun's own pickup carries it instead; and the "live bugs"
+that were checked at the call site and were not - `g_AmmoTypeWeapons[]` (only
+ammo types that are a whole weapon, and a floor gun never reads it),
+`ammotypesheld[33]` (guarded, so the type is excluded rather than overrun), and
+`g_ModPickupQty` (a mod's table, which can only name stock types). Akimbo was on
+the same list and works, with no `DUALFLIP`: the two-handed rifle arms are
+authored for a right-handed gun across the body.
+
 Start Armed, one gun or two: why the pair is its own setting rather than
 `Mod.Akimbo`; why keeping the values 0/1/2 is what made the rename free; the
 ammount rule and the mines' exception to it, and the hidden tick that still
@@ -1013,20 +1025,42 @@ its own box rather than a measured one); `var8006aa94pf[]` (`src/game/propobj.c:
 the pickup message's name and determiner, `{ 0 }`-terminated so nothing overruns);
 `bgunAutoSwitchWeapon()`'s lists (`bondgun.c:7850`) - it is never switched to
 automatically; `g_GeAllGuns[]` and `invAllGunsGives()` (`inv.c:385`, `:561`, both
-`<= WEAPON_PSYCHOSISGUN`) - the All-Guns cheat does not give it; `bgunIsPairGun()`
-(`bondgun.c:7147`) so no Akimbo pair; and two loops in `port/src/xblamesh.c` (`:5870`,
-`:5935`) so its mesh borrows no reflection or sheen.
+`<= WEAPON_PSYCHOSISGUN`) - the All-Guns cheat does not give it; and two loops in
+`port/src/xblamesh.c` (`:5870`, `:5935`) so its mesh borrows no reflection or sheen.
 
-**Two of those are ammunition-type arrays, and they are live bugs rather than cosmetic
-gaps.** `g_AmmoTypeWeapons[AMMOTYPE_ECM_MINE + 1]` (`src/game/propobj.c:19446`) has no
-`AMMOTYPE_RAIL` row and `ammotypeGetWeapon()` bounds-checks it, so **a Rail ammo pickup
-can never hand out the gun with it** (`ammoHandlePickup()`, `:19535`). And `bool
-ammotypesheld[33]` (`src/game/player.c:760`, indexed behind `<= AMMOTYPE_ECM_MINE`) has
-no room for 0x21 at all: the type is never recorded as held, and the zeroing loop at
-`:778` skips it on the co-op respawn path. `g_ModPickupQty` and the mod's ammo setters
-(`port/src/mod.c:1071`, `:1504`) reject the type too, so a mod cannot name it. The ones
-that *were* grown are `s32 ammoheldarr[NUM_AMMOTYPES]` and the `g_AmmoTypes[]` row - the
-difference between a cap somebody widened and one nobody looked at.
+**Akimbo was listed here as "no Akimbo pair" (`bgunIsPairGun()`, `bondgun.c:7147`) and
+that was wrong twice.** Akimbo does not ask `bgunIsPairGun()`: it asks `modCanAkimbo()`
+(`modoptions.c:842`), which is "is this a gun" plus GoldenEye's `gegunsNeverPairs()`, and
+a Rail-Laser passes both. The tester confirmed it: it holds in either hand. So the row
+carries no `WEAPONFLAG_DUALFLIP`, and that is **correct** - the flip mirrors a model into
+the left hand, and every gun that carries it is a pistol held with one arm pose in both.
+This row is held with the two-handed rifle arms (`ONEHANDED` off), whose left-hand pose is
+authored for a right-handed gun brought across the body; the AR34, the sniper rifle and
+the Slayer are drawn unmirrored there too (`bgunLeftHandSkipsFlip()`'s note). Akimbo is
+centred by hand position alone (`func0f0b131c`), and a mirrored mesh would have its
+ejection side and its lettering reading backwards while the arms posing it did not. The
+comment on the row used to say the gun "is not one to hold one in each hand", which was
+never tested; it now says what is true.
+
+**Two of those are ammunition-type arrays, and neither is the live bug it looks
+like.** `g_AmmoTypeWeapons[AMMOTYPE_ECM_MINE + 1]` (`src/game/propobj.c:19446`) has no
+`AMMOTYPE_RAIL` row, and that is correct rather than a gap: the table is for ammo
+types that *are a whole weapon* (a grenade pickup gives you the grenade), and its
+only caller is `ammoHandlePickup()` (`:19544`). A gun on the floor reaches the player
+through `invGiveWeaponsByProp()` in the `OBJTYPE_WEAPON` case, which never consults
+it - which is why stock leaves `AMMOTYPE_PISTOL`..`AMMOTYPE_RIFLE` at 0. **Nothing to
+add, and a row would be wrong.** `bool ammotypesheld[33]` (`src/game/player.c:760`)
+has no room for 0x21 either, but its loop is guarded by
+`ammotype <= AMMOTYPE_ECM_MINE` (`:771`), so the type is simply excluded from the
+co-op / mission-respawn bookkeeping that zeroes unheld types. Not a fault; the
+hardening is to size it by `NUM_AMMOTYPES` and drop the guard, so the next appended
+type is not excluded by an upper bound nobody re-read. `g_ModPickupQty` and the mod's
+ammo setters (`port/src/mod.c:1071`, `:1504`) reject the type too, and that is also
+right: those are a **mod's** code's tables, and a mod can only name ammo types that
+existed in the stock ROM's. A native fork gun does not go through modconfig, so
+nothing here is a bug. The ones that *were* grown are `s32 ammoheldarr[NUM_AMMOTYPES]`
+and the `g_AmmoTypes[]` row. This paragraph used to call the first two live bugs;
+both were checked at the call site and were not.
 
 **And a third one, which this sweep missed, ended a match with an abort.**
 `botFindPickup()` (`src/game/bot.c`) declares `struct prop *ammoproplist[33]` and
@@ -1047,6 +1081,37 @@ a simulant in the game" - which is the whole diagnosis, since only a bot runs a 
 scan. `--test-raillaser` now walks every weapon through that function and asserts its
 type fits, and asserts ours is the highest type there is, which is why not one stock gun
 could ever have tripped this.
+
+### The pickup message, and the crate that held nothing (2026-11-15)
+
+A tester's one line - "picking up rail ammo seems to say 'picked up .'" - was the whole
+report, and it named two bugs that neither a build nor a gate could see.
+
+**The message.** `ammotypeGetPickupName()` and `ammotypeGetDeterminer()`
+(`src/game/propobj.c`) are switches over the ammo type, and neither had an
+`AMMOTYPE_RAIL` case. A type with no case appends nothing: no name from the first, no
+"a"/"some" from the second, and the plural "s" is skipped too, so the message came out
+as exactly `Picked up .`. `ammotypePlayPickupSound()` was missing the same case, so the
+pickup was **silent** as well - the one pickup class with no sound at all. The name is
+`langAddPortText("rail charge")`, the golden bullet's own route
+(`AMMOTYPE_GOLDENGUN`), because no language file has a string for a type the ROM never
+had. The rule: a new ammo type has to be named in **three** switches, and the failure
+is a message that reads like a formatting bug, which is why it invites a hunt in the
+string code rather than in the enum.
+
+**The crate.** Every multiplayer weapon spot is followed by two multi-ammo crates
+(`mp_setup*.c`), and `setupCreateProps()` stocks the crate beside a spot from the
+spot's own `priammotype` - but only while `priammotype < 20`. An arena's crate is
+nineteen `{ modelnum, quantity }` pairs, one an ammo type minus one, and that length is
+the cartridge's command size (`props.h`'s `ammocratemulti`, `setupGetCmdLength()`), so
+it is **not** ours to widen: the converter's generated crates are nineteen pairs, the
+netcode copies them, and a mod's data table counts them. `AMMOTYPE_RAIL` is 0x21, so the
+guard dropped it silently and the crates beside a Moonrailer spot held nothing at all -
+no ammo, no message, nothing to see. The write is now bounded by `ARRAYCOUNT(crate->slots)`
+rather than a hand-typed 20, and says so through `LOG_WARNING` when a spot names a type
+the crate cannot carry. The ammunition then comes from the gun's own pickup, which is
+the same answer the Laser and the Moonraker already have (no ammunition type of their
+own), so the spot is stocked either way.
 
 ### What the gate sees
 

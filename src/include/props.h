@@ -86,6 +86,15 @@
 	0xffff0000, 0xffff0000, 0xffff0000, 0xffff0000, \
 	0xffff0000, 0xffff0000, 0xffff0000, 0xffff0000, \
 	0xffff0000, 0xffff0000, 0xffff0000,
+// The slot array above is the cartridge's: nineteen pairs, one an ammo type
+// minus one, and this macro's size is what setupGetCmdLength() reports for
+// OBJTYPE_MULTIAMMOCRATE. A type past the nineteenth - this fork's
+// AMMOTYPE_RAIL, 0x21 - has no slot in a built-in arena's crate, and the
+// converter's copies and a mod's data table count nineteen too, so do not
+// widen this to NUM_AMMOTYPES - 1. setup.c's writer is bounded by the array
+// rather than by the type for that reason, and says what a spot then does
+// without a crate. A Rail-Laser's ammunition reaches a player through the
+// gun's own pickup either way (propPickupByPlayer(), OBJTYPE_WEAPON).
 
 #define shield(scale, model, pad, flags, flags2, flags3, maxdamage) \
 	_generic_object(0x15, scale, model, pad, flags, flags2, flags3, maxdamage), \

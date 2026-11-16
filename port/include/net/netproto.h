@@ -942,7 +942,20 @@
  *     the cloaks on; was 0), u8 rocket (protocol 33: 1 while the player
  *     flies a Slayer rocket, VISIONMODE_SLAYERROCKET; was 0), u8 0, u16
  *     rocketid, u16 rocketgen (protocol 33: that rocket's entity; were 0),
- *     then the movement state (protocol 5; struct netmove, netsnap.h), the
+ *     then the movement state (protocol 5; struct netmove, netsnap.h),
+ *
+ *     NOT YET WIDENED, and a known gap: that ammoheld[] is still the ROM's 33
+ *     (NETLP_NUMAMMO, netsnap.h), so AMMOTYPE_RAIL (0x21) is outside it. The
+ *     loops that fill and read it stop short of the new type, which means a
+ *     client never reconciles its own rail reserve against the host's on the
+ *     stable-stretch path (netents.c), and a migrating host does not carry it
+ *     (netmigrate.c). It is invisible rather than wrong - the field is simply
+ *     not compared - and the type is still sent as part of the gun the player
+ *     holds. Widening it is a protocol change: the block's size and every
+ *     offset after byte 68 move, the delta codec's baseline changes shape with
+ *     it, and a mismatched pair would desync rather than refuse, so it needs
+ *     NET_PROTOCOL_VERSION bumped past 36 with the lobby gates re-run. Not
+ *     done here because it is a release-scale change, not a bug fix. the
  *     player after command lastcmd, from which the client replays the
  *     commands after it (netpredict.c): f32 speedtheta, speedverta,
  *     speedthetacontrol, speedsideways, speedstrafe, speedforwards,

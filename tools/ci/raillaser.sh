@@ -179,6 +179,28 @@ grep -qF 'ammoproplist[33]' "$ROOT/src/game/bot.c" && fail "a bot's ammo-type ar
 grep -qF 'ammotype < ARRAYCOUNT(ammoproplist)' "$ROOT/src/game/bot.c" || fail "a bot's ammo type indexes those arrays unbounded"
 grep -qF 'ammoheldarr[NUM_AMMOTYPES]' "$ROOT/src/include/types.h" || fail "a player's held-ammo array is not NUM_AMMOTYPES wide"
 
+# The pickup message. A type with no case in ammotypeGetPickupName() and
+# ammotypeGetDeterminer() appends nothing, so the message for a Rail ammo pickup
+# read "Picked up ." - no name, no determiner, and no plural - and its pickup was
+# silent, because ammotypePlayPickupSound() had no case either. All three switches
+# are over every type the game has now, and the name is a port text like the
+# golden bullet's, since no language file has one for a type the ROM never had.
+grep -qF 'case AMMOTYPE_RAIL:        textnum = ammotypeRailText();' "$ROOT/src/game/propobj.c" || fail "the Rail ammo pickup has no name again"
+grep -qF 'static u16 ammotypeRailText(void)' "$ROOT/src/game/propobj.c" || fail "the Rail ammo pickup's name has no port text helper"
+grep -A60 'void ammotypeGetDeterminer' "$ROOT/src/game/propobj.c" | grep -qF 'case AMMOTYPE_RAIL' || fail "the Rail ammo pickup has no determiner, so the message is 'Picked up .'"
+grep -A40 'void ammotypePlayPickupSound' "$ROOT/src/game/propobj.c" | grep -qF 'case AMMOTYPE_RAIL' || fail "a Rail ammo pickup makes no sound"
+
+# An arena's multi-ammo crate has nineteen slots, one an ammo type minus one, and
+# that is the cartridge's command size (props.h, setupGetCmdLength()) - it is not
+# ours to widen, and the converter's generated crates are nineteen pairs too. A
+# weapon spot whose type has no slot therefore stocks nothing:
+# AMMOTYPE_RAIL is 0x21, so the old `type < 20` guard dropped it silently and the
+# crates beside a Rail-Laser spot were empty. The writer is bounded by the array
+# and says so; the gun's own pickup carries the ammunition instead.
+grep -qF 'mpweapon->priammotype <= (s32)ARRAYCOUNT(crate->slots)' "$ROOT/src/game/setup.c" || fail "a weapon spot's primary ammo type is not bounded by the crate's slots"
+grep -qF 'mpweapon->secammotype <= (s32)ARRAYCOUNT(crate->slots)' "$ROOT/src/game/setup.c" || fail "a weapon spot's secondary ammo type is not bounded by the crate's slots"
+grep -qF 'mpweapon->priammotype < 20' "$ROOT/src/game/setup.c" && fail "the crate's slot bound is the old hand-typed 20 again"
+
 # What a stage says, both halves of what the gun is wearing. The pickup line is the
 # only report a state whose file is 0 gets - such a state is legal and draws nothing,
 # so an invisible pickup has no other line to look for.

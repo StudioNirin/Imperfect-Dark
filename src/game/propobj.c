@@ -19152,6 +19152,19 @@ void ammotypeGetDeterminer(char *dst, s32 ammotype, s32 qty)
 			determiner_some = true;
 		}
 		break;
+	case AMMOTYPE_RAIL:
+		// "a rail charge", as any other rounds a gun loads. The fork's own
+		// type (constants.h), and the reason this switch is a switch over
+		// every type the game has rather than over the stock ones: a type
+		// with no case here gives no determiner, and the pickup message then
+		// reads "Picked up ." (ammotypeGetPickupName() below has the other
+		// half of it).
+		if (qty == 1) {
+			determiner_a = true;
+		} else {
+			determiner_some = true;
+		}
+		break;
 	case AMMOTYPE_TOKEN:
 		if (qty == 1) {
 			determiner_the = true;
@@ -19194,6 +19207,28 @@ void ammotypeGetDeterminer(char *dst, s32 ammotype, s32 qty)
 	}
 }
 #endif
+
+/**
+ * A text id for the fork's own ammo type, which no language file has.
+ *
+ * A type the ROM never had has no string in any bank, and every type needs
+ * one here: a case absent from ammotypeGetPickupName() below and from
+ * ammotypeGetDeterminer() above appends nothing, so the pickup message came
+ * out as "Picked up ." for a Rail ammo pickup - no name, no determiner, and
+ * no plural. The golden bullet's own words are added the same way
+ * (ammotypeGetPickupName(), AMMOTYPE_GOLDENGUN). 0 when the port text bank
+ * (512) is full, which leaves the message as it was rather than crashing.
+ */
+static u16 ammotypeRailText(void)
+{
+	static u16 text;
+
+	if (!text) {
+		text = langAddPortText("rail charge");
+	}
+
+	return text;
+}
 
 #if VERSION < VERSION_PAL_BETA
 void ammotypeGetPickupName(char *dst, s32 ammotype2, s32 qty)
@@ -19248,6 +19283,7 @@ void ammotypeGetPickupName(char *dst, s32 ammotype2, s32 qty)
 		case AMMOTYPE_PLASTIQUE:    textnum = L_PROPOBJ_039; break; // "plastique"
 		case AMMOTYPE_CLOAK:        textnum = L_PROPOBJ_048; break; // "cloaking device"
 		case AMMOTYPE_BOOST:        textnum = L_PROPOBJ_049; break; // "boost pill"
+		case AMMOTYPE_RAIL:        textnum = ammotypeRailText(); break; // "rail charge"
 		}
 
 		if (textnum >= 0) {
@@ -19310,6 +19346,10 @@ void ammotypePlayPickupSound(u32 ammotype)
 	case AMMOTYPE_CLOAK:
 	case AMMOTYPE_BOOST:
 	case AMMOTYPE_TOKEN:
+	case AMMOTYPE_RAIL:
+		// The fork's own type: rounds a gun loads, so the ammunition sound
+		// rather than a mine's or a knife's. Without a case here the pickup
+		// was silent - the one pickup class with no sound at all.
 		objPlayPickupSfx(SFX_PICKUP_AMMO);
 		break;
 	case AMMOTYPE_REMOTE_MINE:

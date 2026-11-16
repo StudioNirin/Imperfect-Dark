@@ -2948,6 +2948,20 @@ in their own sections' notes.
   LEFT given, not held; `--net-test-give-host` the host's own player too,
   and every 300 ticks "slot N at tick T holds R/L"), `--net-test-cheats
   HEX` (this machine's own bank 0). netpredicttest `hands` and `cheats`.
+- **The local block's `ammoheld[]` is still the ROM's 33 (2026-11-15).**
+  `NETLP_NUMAMMO` (`netsnap.h:196`) sizes the wire array, and
+  `AMMOTYPE_RAIL` is 0x21, so the type is outside it. The loops that fill
+  and read it all cap at `NETLP_NUMAMMO` and compare with
+  `i < ARRAYCOUNT(p->ammoheldarr)`, so they simply stop short: the effect
+  is that a client's own rail reserve is never reconciled against the
+  host's on the stable-stretch path (`netents.c:2119`), and a migrating
+  host does not carry it (`netmigrate.c:757`). Silent rather than wrong -
+  nothing is compared, so nothing disagrees - and the gun itself still
+  travels as the weapon in hand. Widening it is a **protocol** change, not
+  a bug fix: `NETLP_SIZE`, every offset after byte 68, and the delta
+  codec's baseline all move, and a mismatched pair would desync rather
+  than refuse, so it wants `NET_PROTOCOL_VERSION` past 36 and the lobby
+  gates re-run. `netproto.h`'s layout comment says so at the field.
 - **Explosions online (030750)**: measured on a host with gdb on
   `chrDamage(explosion)`: the same rocket blast 100 units from the host's
   player and from a client's gives 18.0 on the first frame and 110-114 in

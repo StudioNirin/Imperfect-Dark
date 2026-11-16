@@ -4395,15 +4395,26 @@ struct weapon invitem_raillaser = {
 	L_GUN_047, // name: ditto
 	L_GUN_150, // manufacturer: the Moonraker's
 	L_GUN_189, // description: the Moonraker's
-	// The Moonraker's flags, less three: AICANUSE and DUALFLIP, because no
-	// simulant has the charge logic a Rail-Laser needs and it is not a gun to
-	// hold one in each hand, and WEAPONFLAG2_NORELOADSOUND and
+	// The Moonraker's flags, less AICANUSE, because no simulant has the charge
+	// logic a Rail-Laser needs, and WEAPONFLAG2_NORELOADSOUND and
 	// WEAPONFLAG3_FREESHOTS, because it does reload and it does run out. Plus the
 	// Mauler's CHARGEABLE, which is read in one place - the shot's voice is
 	// pitched down by hand->matmot1, the field this gun's charge fills - and
 	// which must not be taken for the Mauler's charge beam: that is
 	// WEAPONFLAG3_CHARGEBEAM, which would draw the beam as the Mauler's rather
 	// than the Moonraker's bolt (gunfx.c).
+	//
+	// DUALFLIP is off, which is right for this gun rather than an omission: the
+	// flip is what mirrors a model into the left hand, and every gun that carries
+	// it is a pistol held with the same arm pose in both. This row is held with
+	// the two-handed rifle arms (ONEHANDED is off), whose left-hand pose is
+	// authored for a right-handed gun brought across the body - the AR34, the
+	// sniper rifle and the Slayer are drawn unmirrored there for the same reason
+	// (bgunLeftHandSkipsFlip()'s note). Akimbo works without it: the pair is
+	// centred by hand position alone (func0f0b131c), and a mirrored mesh would
+	// have its ejection side and its lettering reading backwards while the arms
+	// it is posed by did not. The comment here used to say the gun "is not one to
+	// hold one in each hand"; that was never tested, and it is wrong.
 	//
 	// And ONEHANDED is off, which is the one flag here chosen by the player rather
 	// than by the code: WEAPONFLAG_ONEHANDED is what decides the arm set (the held

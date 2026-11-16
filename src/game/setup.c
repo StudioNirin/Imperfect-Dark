@@ -2528,12 +2528,32 @@ void setupCreateProps(s32 stagenum)
 							struct mpweapon *mpweapon = mpGetMpWeaponByLocation(g_SetupCurMpLocation);
 							ammoqty = mpweapon->priammoqty;
 
-							if (mpweapon->priammotype > 0 && mpweapon->priammotype < 20) {
+							// Bounded by the array and not by a hand-typed 19, because the
+							// array is the ROM's own command size (props.h): nineteen pairs,
+							// one an ammo type minus one, and a type past the nineteenth has
+							// no slot in an arena's crate at all. This fork's AMMOTYPE_RAIL is
+							// 0x21, so the old `type < 20` guard dropped it silently and the
+							// crate beside a Rail-Laser's weapon spot held nothing. Where
+							// a spot names a type the crate cannot carry, the gun's own pickup
+							// gives the ammunition instead - the same answer as the Laser and
+							// the Moonraker, which have no ammunition type of their own.
+							if (mpweapon->priammotype > 0
+									&& mpweapon->priammotype <= (s32)ARRAYCOUNT(crate->slots)) {
 								crate->slots[mpweapon->priammotype - 1].quantity = ammoqty;
 							}
 
-							if (mpweapon->secammotype > 0 && mpweapon->secammotype < 20) {
+							if (mpweapon->secammotype > 0
+									&& mpweapon->secammotype <= (s32)ARRAYCOUNT(crate->slots)) {
 								crate->slots[mpweapon->secammotype - 1].quantity = mpweapon->secammoqty;
+							}
+
+							if (mpweapon->priammotype > (s32)ARRAYCOUNT(crate->slots)
+									|| mpweapon->secammotype > (s32)ARRAYCOUNT(crate->slots)) {
+								sysLogPrintf(LOG_WARNING,
+										"setup: weapon spot at location %d wants ammo type %d/%d in a crate of %d slots; "
+										"the gun's own pickup carries it",
+										g_SetupCurMpLocation, mpweapon->priammotype, mpweapon->secammotype,
+										(s32)ARRAYCOUNT(crate->slots));
 							}
 						}
 
