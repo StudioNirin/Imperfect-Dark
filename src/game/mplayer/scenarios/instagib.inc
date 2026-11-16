@@ -3,7 +3,7 @@
  *
  * A free-for-all or team deathmatch where every player spawns with a
  * Moonrailer (Rail-Laser) with unlimited ammunition and a faster charge
- * time - half a second instead of the gun's own one and a half. No
+ * time - a tenth of a second instead of the gun's own one and a half. No
  * weapons are placed on the map, and every kill scores one point.
  *
  * The scenario itself stays minimal; the rest of the mode lives where
@@ -23,7 +23,7 @@ extern struct menudialogdef g_ExtGameOptionsMenuDialog;
 
 /**
  * The charge time in 60ths of a second. Default is TICKS(90), the
- * Rail-Laser's own length; Instagib sets TICKS(30). Declared in
+ * Rail-Laser's own length; Instagib sets TICKS(6). Declared in
  * scenarios.c, and what raillaserCharge60() answers with.
  */
 extern s32 g_InstagibCharge60;
@@ -190,7 +190,7 @@ void instaInit(void)
 		g_MpSetup.weapons[i] = MPWEAPON_NONE;
 	}
 
-	g_InstagibCharge60 = TICKS(30);
+	g_InstagibCharge60 = TICKS(6);
 }
 
 /**
@@ -213,7 +213,7 @@ void instaReadSave(struct savebuffer *buffer, u8 version)
 	// A file or a room that names a charge outside the slider's clamp
 	// still has to leave a gun that can charge.
 	if (g_InstagibCharge60 < 5 || g_InstagibCharge60 > 240) {
-		g_InstagibCharge60 = TICKS(30);
+		g_InstagibCharge60 = TICKS(6);
 	}
 }
 

@@ -110,7 +110,7 @@ s32 raillaserFloorModel(s32 weaponnum, s32 fallback)
  * own g_Vars.lvupdate60freal), so it keeps its length above 60 fps.
  *
  * Normally TICKS(90) (1.5s), but the Instagib scenario overrides this to
- * TICKS(30) (0.5s) via g_InstagibCharge60 for a faster, snappier feel.
+ * TICKS(6) (0.1s) via g_InstagibCharge60 for a faster, snappier feel.
  */
 extern s32 g_InstagibCharge60;
 

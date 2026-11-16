@@ -10737,7 +10737,20 @@ void bgunTickMaulerCharge(void)
 				f32 speed = 0.5f + hand->matmot1 / 3.0f + sinf(g_20SecIntervalFrac * M_PI * 32.0f) * 0.03f;
 
 				if (hand->matmot1 < 0.1f || !charging) {
+					// audioStop only starts the decay: the handle reaches NULL
+					// when the audio thread removes the state after the sample's
+					// release, and the restart gate above wants a NULL. Hold the
+					// trigger through fast charges - every press of the Rail-
+					// Laser's, at any of its lengths - and the next charge began
+					// while the last shot's stopped state still stood in the
+					// handle's way, so the loop started once and then went
+					// silent for as long as the trigger kept its rhythm. Retire
+					// the handle at the stop, the way the prop sound channels
+					// do (propsnd.c); the removal checks the pointer before it
+					// writes zero through it, so a newer sound is left alone,
+					// and the still-decaying old one is on its way out anyway.
 					audioStop(hand->audiohandle);
+					hand->audiohandle = NULL;
 				} else {
 					audioPostEvent(hand->audiohandle, AL_SNDP_PITCH_EVT, *(s32 *)&speed);
 				}

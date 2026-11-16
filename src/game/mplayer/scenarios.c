@@ -42,7 +42,7 @@
 /**
  * The Rail-Laser's charge time in 60ths of a second while the Instagib
  * scenario is active. Default is TICKS(90) (1.5s, the gun's normal charge);
- * Instagib sets it to TICKS(30) (0.5s). Checked by raillaserCharge60() in
+ * Instagib sets it to TICKS(6) (0.1s). Checked by raillaserCharge60() in
  * port/src/raillaser.c so the charge rate can vary by scenario without a
  * per-hand field.
  */
