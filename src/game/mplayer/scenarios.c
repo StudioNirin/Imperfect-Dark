@@ -38,6 +38,15 @@
 #include "lib/collision.h"
 #include "data.h"
 #include "types.h"
+
+/**
+ * The Rail-Laser's charge time in 60ths of a second while the Instagib
+ * scenario is active. Default is TICKS(90) (1.5s, the gun's normal charge);
+ * Instagib sets it to TICKS(30) (0.5s). Checked by raillaserCharge60() in
+ * port/src/raillaser.c so the charge rate can vary by scenario without a
+ * per-hand field.
+ */
+s32 g_InstagibCharge60 = TICKS(90);
 #ifndef PLATFORM_N64
 #include "modloader.h"
 #include "gexplus.h"
@@ -180,6 +189,7 @@ MenuItemHandlerResult menuhandlerMpSlowMotion(s32 operation, struct menuitem *it
 #include "scenarios/kingofthehill.inc"
 #include "scenarios/hackthatmac.inc"
 #include "scenarios/popacap.inc"
+#include "scenarios/instagib.inc"
 
 // Define the scenario callbacks
 struct mpscenario g_MpScenarios[] = {
@@ -256,6 +266,18 @@ struct mpscenario g_MpScenarios[] = {
 		ctcGetMaxTeams,
 		ctcIsRoomHighlighted,
 		ctcHighlightRoom,
+	}, {
+		&g_InstaOptionsMenuDialog,
+		instaInit,
+		NULL,
+		NULL,
+		instaTick,
+		NULL,
+		NULL,
+		instaCalculatePlayerScore,
+		NULL,
+		NULL,
+		NULL,
 	},
 };
 
@@ -267,7 +289,22 @@ struct mpscenariooverview g_MpScenarioOverviews[] = {
 	{ L_MPMENU_249, L_MPMENU_256, MPFEATURE_SCENARIO_PAC, false }, // "Pop a Cap", "Pop"
 	{ L_MPMENU_250, L_MPMENU_257, MPFEATURE_SCENARIO_KOH, true  }, // "King of the Hill", "Hill"
 	{ L_MPMENU_251, L_MPMENU_258, MPFEATURE_SCENARIO_CTC, true  }, // "Capture the Case", "Capture"
+	{ 0, 0, 0, false }, // "Instagib", "Instagib" - patched at runtime by instaInitNames()
 };
+
+/**
+ * Patch the Instagib scenario name and short name with port text IDs.
+ * Called once at startup so the scenario menu shows the right text.
+ */
+static void instaInitNames(void)
+{
+	static bool done = false;
+	if (done) return;
+	done = true;
+
+	g_MpScenarioOverviews[MPSCENARIO_INSTAGIB].name = langAddPortText("Instagib\n");
+	g_MpScenarioOverviews[MPSCENARIO_INSTAGIB].shortname = langAddPortText("Instagib\n");
+}
 
 /**
  * While the options dialog is open, check if another player has changed the
@@ -337,6 +374,8 @@ MenuItemHandlerResult scenarioScenarioMenuHandler(s32 operation, struct menuitem
 	s32 i;
 	s32 count = 0;
 	bool teamgame = true;
+
+	instaInitNames();
 
 #ifndef PLATFORM_N64
 	// GE Plus: GoldenEye's scenarios, one group (gexplus.c)

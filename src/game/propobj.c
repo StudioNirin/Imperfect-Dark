@@ -19845,6 +19845,16 @@ s32 propPickupByPlayer(struct prop *prop, bool showhudmsg)
 		return TICKOP_NONE;
 	}
 
+	// Instagib: no weapon or ammo pickups. The scenario sets all weapon
+	// slots to MPWEAPON_NONE so nothing spawns, but this guards against
+	// any leftover pickups in converted maps or mods.
+	if (g_MpSetup.scenario == MPSCENARIO_INSTAGIB) {
+		if (obj->type == OBJTYPE_WEAPON || obj->type == OBJTYPE_AMMOCRATE
+				|| obj->type == OBJTYPE_MULTIAMMOCRATE) {
+			return TICKOP_NONE;
+		}
+	}
+
 	// Suppress HUD pickup messages during cutscenes (e.g. items given at
 	// mission start via aiGiveObjectToChr)
 	if (g_Vars.in_cutscene)

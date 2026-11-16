@@ -17,6 +17,7 @@
 #include "geguns.h"
 #include "game/botact.h"
 #include "game/mplayer/mplayer.h"
+#include "game/mplayer/scenarios.h"
 #include "system.h"
 #include "raillaser.h"
 
@@ -103,14 +104,19 @@ s32 raillaserFloorModel(s32 weaponnum, s32 fallback)
 }
 
 /**
- * How long the trigger has to be held: one and a half seconds.
+ * How long the trigger has to be held.
  *
  * In the same 60th-of-a-second base the charge itself counts in (the Mauler's
  * own g_Vars.lvupdate60freal), so it keeps its length above 60 fps.
+ *
+ * Normally TICKS(90) (1.5s), but the Instagib scenario overrides this to
+ * TICKS(30) (0.5s) via g_InstagibCharge60 for a faster, snappier feel.
  */
+extern s32 g_InstagibCharge60;
+
 s32 raillaserCharge60(void)
 {
-	return TICKS(90);
+	return g_InstagibCharge60;
 }
 
 f32 raillaserChargeFull(void)
@@ -358,7 +364,8 @@ void raillaserSelfTest(void)
 	// The charge, at its edges. It rides hand->matmot1, the field the Mauler's
 	// cues already read, so its full is the Mauler's 5 and its rate is whatever
 	// fills that in the gun's own length.
-	RAILLASER_CHECK(raillaserCharge60() == TICKS(90), "the charge is one and a half seconds");
+	RAILLASER_CHECK(raillaserCharge60() == g_InstagibCharge60, "the charge time reads the scenario override");
+	RAILLASER_CHECK(g_InstagibCharge60 == TICKS(90), "the default charge is one and a half seconds");
 	RAILLASER_CHECK(raillaserChargeFull() == 5.0f, "it fills to the Mauler's own full, so its cues land with the Mauler's");
 	{
 		f32 ticks = raillaserChargeFull() / raillaserChargeRate60();

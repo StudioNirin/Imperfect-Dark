@@ -56,6 +56,7 @@ struct menudialogdef g_MpSaveSetupNameMenuDialog;
 extern struct menudialogdef g_ManageSettingsDialog;
 extern struct menudialogdef g_FilemgrFileSavedMenuDialog;
 extern struct menudialogdef g_FilemgrErrorMenuDialog;
+extern struct menuitem g_MpAdvancedSetupMenuItems[];
 
 #ifndef PLATFORM_N64
 extern s32 g_MpWeaponSetNum;
@@ -7974,6 +7975,13 @@ MenuDialogHandlerResult menudialogMpGameSetup(s32 operation, struct menudialogde
 	if (operation == MENUOP_OPEN) {
 		g_Vars.mpsetupmenu = MPSETUPMENU_ADVSETUP;
 		g_Vars.usingadvsetup = true;
+
+		// Instagib: disable the Weapons tab since the loadout is fixed.
+		if (g_MpSetup.scenario == MPSCENARIO_INSTAGIB) {
+			g_MpAdvancedSetupMenuItems[3].flags |= MENUITEMFLAG_ALWAYSDISABLED;
+		} else {
+			g_MpAdvancedSetupMenuItems[3].flags &= ~MENUITEMFLAG_ALWAYSDISABLED;
+		}
 
 		// Quick Start only holds a simulant *count*; the slots themselves are
 		// not created until mpStartMatch(). Advanced Setup lists slots, and

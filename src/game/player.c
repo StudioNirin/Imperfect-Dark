@@ -1287,6 +1287,17 @@ static void playerSpawnWeapons(void)
 		bool akimbo = modSpawnIsAkimbo(mpweapon->weaponnum);
 		const bool spawnmaxed = modSpawnWantsMaxAmmo();
 
+		// Instagib: spawn with the Moonrailer regardless of the weapon
+		// slot, since the scenario clears all slots to MPWEAPON_NONE.
+		if (g_MpSetup.scenario == MPSCENARIO_INSTAGIB) {
+			invGiveSingleWeapon(WEAPON_RAILLASER);
+			g_Vars.currentplayer->spawnweaponnums[HAND_LEFT] = WEAPON_NONE;
+			g_Vars.currentplayer->spawnweaponnums[HAND_RIGHT] = WEAPON_RAILLASER;
+			bgunEquipWeapon2(HAND_LEFT, WEAPON_NONE);
+			bgunEquipWeapon2(HAND_RIGHT, WEAPON_RAILLASER);
+			return;
+		}
+
 		invGiveSingleWeapon(mpweapon->weaponnum);
 
 		if (akimbo) {
