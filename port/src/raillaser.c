@@ -454,6 +454,52 @@ void raillaserSelfTest(void)
 
 	memcpy(g_MpWeaponSetRandomFilters, keep, sizeof(keep));
 
+	// The scenario field's width, which is the Instagib mode's other half.
+	// Three bits held the six modes the ROM shipped with and nothing more;
+	// Instagib is the seventh, so MPSETUP_VERSION_SCENARIO16 reads and writes
+	// the field four wide and older files stay read at three (mplayer.c).
+	// Instagib at 6 fits both widths, so the round trip here is that the newer
+	// width keeps it; the width itself shows in the file list's header parse,
+	// which reads the same field without decoding the setup - a 15 is 15 at
+	// four bits and a wrapped 7 at three, and getting that pair the wrong way
+	// round is a saved-setup list naming a mode the room does not have.
+	{
+		s32 keepsenario = g_MpSetup.scenario;
+		char namebuf[MPSETUP_MAXNAME + 1];
+		u16 numsims;
+		u16 stagenum;
+		u16 scenarionum;
+
+		g_MpSetup.scenario = MPSCENARIO_INSTAGIB;
+		savebufferClear(&written);
+		mpsetupfileSaveWad(&written, MPSETUP_VERSION_LATEST);
+		savebufferClear(&readback);
+		memcpy(readback.bytes, written.bytes, MPSETUP_BLOCKSIZE);
+		mpsetupfileLoadWad(&readback, MPSETUP_VERSION_LATEST);
+		RAILLASER_CHECK(g_MpSetup.scenario == MPSCENARIO_INSTAGIB, "a version 7 setup keeps Instagib");
+
+		g_MpSetup.scenario = 15; // the field's top, past any mode there is
+		savebufferClear(&written);
+		mpsetupfileSaveWad(&written, MPSETUP_VERSION_SCENARIO16);
+		mpsetupfileGetOverview((char *)written.bytes, namebuf, &numsims, &stagenum, &scenarionum, MPSETUP_VERSION_SCENARIO16);
+		RAILLASER_CHECK(scenarionum == 15, "the file list reads the wider field four wide, to its top");
+		mpsetupfileGetOverview((char *)written.bytes, namebuf, &numsims, &stagenum, &scenarionum, MPSETUP_VERSION_RAILLASER);
+		RAILLASER_CHECK(scenarionum == 7, "and an older file's three, which wrap the same bits to 7");
+
+		// Past the modes there are, the load says so out loud rather than
+		// indexing the tables past their end - which is what the same bits
+		// did before this guard, at both widths.
+		g_MpSetup.scenario = 7;
+		savebufferClear(&written);
+		mpsetupfileSaveWad(&written, MPSETUP_VERSION_SCENARIO16);
+		savebufferClear(&readback);
+		memcpy(readback.bytes, written.bytes, MPSETUP_BLOCKSIZE);
+		mpsetupfileLoadWad(&readback, MPSETUP_VERSION_SCENARIO16);
+		RAILLASER_CHECK(g_MpSetup.scenario == MPSCENARIO_COMBAT, "a scenario with no mode behind it loads as Combat");
+
+		g_MpSetup.scenario = keepsenario;
+	}
+
 	if (failed) {
 		sysLogPrintf(LOG_NOTE, "raillaser test: %d of %d checks failed", failed, checks);
 	} else {

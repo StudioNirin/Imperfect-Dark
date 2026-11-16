@@ -4732,8 +4732,9 @@ s32 netRefuseMatchStart(void)
 		return 1;
 	}
 
-	// every Combat Simulator scenario is online (phase 7a, netscen.c)
-	if (s_Role == NETROLE_HOST && (g_MpSetup.scenario < MPSCENARIO_COMBAT || g_MpSetup.scenario > MPSCENARIO_CAPTURETHECASE)) {
+	// every Combat Simulator scenario is online (phase 7a, netscen.c): the guard
+	// says no to a number with no mode behind it, whatever the count is today
+	if (s_Role == NETROLE_HOST && (g_MpSetup.scenario < MPSCENARIO_COMBAT || g_MpSetup.scenario >= NUM_MPSCENARIOS)) {
 		sysLogPrintf(LOG_NOTE, "net: refused to start a net match with scenario %d", g_MpSetup.scenario);
 		snprintf(s_NoticeText, sizeof(s_NoticeText), "%s", "This scenario cannot be played online.");
 		g_NetNoticePending = 1;

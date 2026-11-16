@@ -201,6 +201,33 @@ grep -qF 'mpweapon->priammotype <= (s32)ARRAYCOUNT(crate->slots)' "$ROOT/src/gam
 grep -qF 'mpweapon->secammotype <= (s32)ARRAYCOUNT(crate->slots)' "$ROOT/src/game/setup.c" || fail "a weapon spot's secondary ammo type is not bounded by the crate's slots"
 grep -qF 'mpweapon->priammotype < 20' "$ROOT/src/game/setup.c" && fail "the crate's slot bound is the old hand-typed 20 again"
 
+# Instagib bends three things outside the gun itself, and each is a line a
+# later edit can quietly undo. The ammunition: it is ticked per player in
+# bgunTick (the cheat system cannot carry a scenario's rule across a level
+# load, instagib.inc says why), and the spawn fills it too, so the first
+# frame is not bare. The list's order: the menu walks g_ScenarioListOrder
+# and the "-Teamwork-" header starts at the teamonly flags, so a scenario
+# id never moves and a stored setup never reads wrong - the guards that
+# used to name the last ROM scenario are NUM_MPSCENARIOS wide now, which
+# is also what lets Instagib be played online at all. And the saved setup:
+# the scenario field is three bits until MPSETUP_VERSION_SCENARIO16 and
+# four after, at both readers (mpsetupfileLoadWad, mpsetupfileGetOverview)
+# - if one grew without the other, the file list and the loaded room would
+# read the same bytes as two different modes.
+grep -qF 'g_MpSetup.scenario == MPSCENARIO_INSTAGIB' "$ROOT/src/game/bondgun.c" || fail "Instagib stopped ticking its ammunition - the Moonrailer will fire itself empty"
+grep -qF 'bgunSetAmmoQuantity(AMMOTYPE_RAIL, bgunGetAmmoCapacityForWeapon(WEAPON_RAILLASER, FUNC_PRIMARY));' "$ROOT/src/game/player.c" || fail "the Instagib spawn stopped filling the Moonrailer"
+grep -qF 'cheatActivate(CHEAT_UNLIMITEDAMMO)' "$ROOT/src/game/mplayer/scenarios/instagib.inc" && fail "Instagib reached for the unlimited-ammo cheat again - it dies at cheatsReset() on level load"
+grep -qF 'g_ScenarioListOrder[]' "$ROOT/src/game/mplayer/scenarios.c" || fail "the scenario menu walks the id order again, and Instagib is under the wrong header"
+grep -qF 'ARRAYCOUNT(g_MpScenarioOverviews) == NUM_MPSCENARIOS' "$ROOT/src/game/mplayer/scenarios.c" || fail "nothing pins the scenario tables' widths to NUM_MPSCENARIOS"
+grep -qF 'scenario > MPSCENARIO_CAPTURETHECASE' "$ROOT/port/src/net/netrules.c" && fail "the net rules guard names the last ROM scenario again - it rejects Instagib online"
+grep -qF 'scenario > MPSCENARIO_CAPTURETHECASE' "$ROOT/port/src/net/netsession.c" && fail "the host guard names the last ROM scenario again - it refuses to start Instagib online"
+between=$(grep -c 'MPSETUP_VERSION_SCENARIO16 ? 4 : 3' "$ROOT/src/game/mplayer/mplayer.c")
+if [ "$between" -lt 3 ]; then
+	echo "raillaser: the scenario field grew at $between of its 3 widths (load, save, and the overview parse) - one of them is still three bits"
+	exit 1
+fi
+grep -qF 'scenario > 7' "$ROOT/port/src/mpsetups.c" || fail "mpsetupLiveVersion no longer notices a scenario past the 3-bit field - such a setup would be written unreadable"
+
 # What a stage says, both halves of what the gun is wearing. The pickup line is the
 # only report a state whose file is 0 gets - such a state is legal and draws nothing,
 # so an invisible pickup has no other line to look for.

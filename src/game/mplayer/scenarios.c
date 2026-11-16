@@ -271,13 +271,20 @@ struct mpscenario g_MpScenarios[] = {
 		instaInit,
 		NULL,
 		NULL,
-		instaTick,
+		NULL,
 		NULL,
 		NULL,
 		instaCalculatePlayerScore,
 		NULL,
 		NULL,
 		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		instaReadSave,
+		instaWriteSave,
 	},
 };
 
@@ -292,6 +299,14 @@ struct mpscenariooverview g_MpScenarioOverviews[] = {
 	{ 0, 0, 0, false }, // "Instagib", "Instagib" - patched at runtime by instaInitNames()
 };
 
+// Both tables are indexed by scenario id, so a row added to one and not the
+// other is an index into the wrong mode's callbacks - or past the end. The
+// menu's order below is separate; these widths are not.
+_Static_assert(ARRAYCOUNT(g_MpScenarios) == NUM_MPSCENARIOS,
+		"g_MpScenarios is indexed by scenario id: NUM_MPSCENARIOS has to be its width");
+_Static_assert(ARRAYCOUNT(g_MpScenarioOverviews) == NUM_MPSCENARIOS,
+		"g_MpScenarioOverviews is indexed by scenario id: NUM_MPSCENARIOS has to be its width");
+
 /**
  * Patch the Instagib scenario name and short name with port text IDs.
  * Called once at startup so the scenario menu shows the right text.
@@ -305,6 +320,25 @@ static void instaInitNames(void)
 	g_MpScenarioOverviews[MPSCENARIO_INSTAGIB].name = langAddPortText("Instagib\n");
 	g_MpScenarioOverviews[MPSCENARIO_INSTAGIB].shortname = langAddPortText("Instagib\n");
 }
+
+// The menu's own order of the scenarios. The list walks this rather than the
+// tables' indices, so a row selects the scenario g_ScenarioListOrder[i] names
+// and not i: the ids are what saved setups, challenge records and the rooms'
+// rules carry, and renumbering one to suit a menu would read every old file
+// wrong. Everything that is free for all comes first, so the "-Teamwork-"
+// header can start where the visible rows stop being free-for-all ones (the
+// handler computes it from the teamonly flags) - and a new mode is three
+// lines: a row in each table and a name here, with no group boundary to
+// chase and no stored scenario number to move.
+static const s8 g_ScenarioListOrder[] = {
+	MPSCENARIO_COMBAT,
+	MPSCENARIO_HOLDTHEBRIEFCASE,
+	MPSCENARIO_HACKERCENTRAL,
+	MPSCENARIO_POPACAP,
+	MPSCENARIO_INSTAGIB,
+	MPSCENARIO_KINGOFTHEHILL,
+	MPSCENARIO_CAPTURETHECASE,
+};
 
 /**
  * While the options dialog is open, check if another player has changed the
@@ -359,18 +393,9 @@ char *mpMenuTextScenarioName(struct menuitem *item)
 	return g_StringPointer;
 }
 
-struct scenariogroup {
-	s32 startindex;
-	u16 textid;
-};
-
 MenuItemHandlerResult scenarioScenarioMenuHandler(s32 operation, struct menuitem *item, union handlerdata *data)
 {
-	struct scenariogroup groups[] = {
-		{ 0, L_MPMENU_244 }, // "Free for All!"
-		{ 4, L_MPMENU_245 }, // "-Teamwork-"
-	};
-
+	s32 p;
 	s32 i;
 	s32 count = 0;
 	bool teamgame = true;
@@ -413,7 +438,11 @@ MenuItemHandlerResult scenarioScenarioMenuHandler(s32 operation, struct menuitem
 
 	switch (operation) {
 	case MENUOP_GETOPTIONCOUNT:
-		for (i = 0; i < ARRAYCOUNT(g_MpScenarioOverviews); i++) {
+		// Every loop below walks g_ScenarioListOrder and counts or names the
+		// rows that pass, so the list's rows are the menu's order while the
+		// scenario a row selects stays the id the file and the room carry.
+		for (p = 0; p < ARRAYCOUNT(g_ScenarioListOrder); p++) {
+			i = g_ScenarioListOrder[p];
 			if (challengeIsFeatureUnlocked(g_MpScenarioOverviews[i].requirefeature)
 					&& (teamgame || g_MpScenarioOverviews[i].teamonly == false)) {
 				count++;
@@ -423,7 +452,8 @@ MenuItemHandlerResult scenarioScenarioMenuHandler(s32 operation, struct menuitem
 		data->list.value = count;
 		break;
 	case MENUOP_GETOPTIONTEXT:
-		for (i = 0; i < ARRAYCOUNT(g_MpScenarioOverviews); i++) {
+		for (p = 0; p < ARRAYCOUNT(g_ScenarioListOrder); p++) {
+			i = g_ScenarioListOrder[p];
 			if (challengeIsFeatureUnlocked(g_MpScenarioOverviews[i].requirefeature)
 					&& (teamgame || g_MpScenarioOverviews[i].teamonly == false)) {
 				if (count == data->list.value) {
@@ -436,7 +466,8 @@ MenuItemHandlerResult scenarioScenarioMenuHandler(s32 operation, struct menuitem
 
 		break;
 	case MENUOP_SET:
-		for (i = 0; i < ARRAYCOUNT(g_MpScenarioOverviews); i++) {
+		for (p = 0; p < ARRAYCOUNT(g_ScenarioListOrder); p++) {
+			i = g_ScenarioListOrder[p];
 			if (challengeIsFeatureUnlocked(g_MpScenarioOverviews[i].requirefeature)
 					&& (teamgame || g_MpScenarioOverviews[i].teamonly == false)) {
 				if (count == data->list.value) {
@@ -451,7 +482,8 @@ MenuItemHandlerResult scenarioScenarioMenuHandler(s32 operation, struct menuitem
 		scenarioInit();
 		break;
 	case MENUOP_GETSELECTEDINDEX:
-		for (i = 0; i < ARRAYCOUNT(g_MpScenarioOverviews); i++) {
+		for (p = 0; p < ARRAYCOUNT(g_ScenarioListOrder); p++) {
+			i = g_ScenarioListOrder[p];
 			if (challengeIsFeatureUnlocked(g_MpScenarioOverviews[i].requirefeature)
 					&& (teamgame || g_MpScenarioOverviews[i].teamonly == false)) {
 				if (i == g_MpSetup.scenario) {
@@ -465,18 +497,42 @@ MenuItemHandlerResult scenarioScenarioMenuHandler(s32 operation, struct menuitem
 
 		break;
 	case MENUOP_GETOPTGROUPCOUNT:
-		data->list.value = 2;
+		// Two headers only where a row the list will show is a team game's.
+		// The flags say which rows those are - the old code named King of the
+		// Hill and Capture the Case here, which was true only while those were
+		// the only team games and the only modes past the boundary.
+		data->list.value = 1;
 
-		if (!teamgame || (!challengeIsFeatureUnlocked(MPFEATURE_SCENARIO_KOH) && !challengeIsFeatureUnlocked(MPFEATURE_SCENARIO_CTC))) {
-			data->list.value--;
+		if (teamgame) {
+			for (p = 0; p < ARRAYCOUNT(g_ScenarioListOrder); p++) {
+				i = g_ScenarioListOrder[p];
+				if (g_MpScenarioOverviews[i].teamonly
+						&& challengeIsFeatureUnlocked(g_MpScenarioOverviews[i].requirefeature)) {
+					data->list.value = 2;
+					break;
+				}
+			}
 		}
 		break;
 	case MENUOP_GETOPTGROUPTEXT:
-		return (uintptr_t)langGet(groups[data->list.value].textid);
+		return (uintptr_t)langGet(data->list.value > 0 ? L_MPMENU_245 : L_MPMENU_244);
 	case MENUOP_GETGROUPSTARTINDEX:
-		for (i = 0; i < groups[data->list.value].startindex; i++) {
-			if (challengeIsFeatureUnlocked(g_MpScenarioOverviews[i].requirefeature)
-					&& (teamgame || g_MpScenarioOverviews[i].teamonly == false)) {
+		// The second header starts above the first team game's row: the visible
+		// rows before that boundary, counted the way the list counts them. A
+		// stored start index was a scenario number, which the fork's modes past
+		// the ROM's six would have fallen under the wrong header.
+		if (data->list.value > 0) {
+			for (p = 0; p < ARRAYCOUNT(g_ScenarioListOrder); p++) {
+				i = g_ScenarioListOrder[p];
+				if (!challengeIsFeatureUnlocked(g_MpScenarioOverviews[i].requirefeature)
+						|| (!teamgame && g_MpScenarioOverviews[i].teamonly)) {
+					continue;
+				}
+
+				if (g_MpScenarioOverviews[i].teamonly) {
+					break;
+				}
+
 				count++;
 			}
 		}
@@ -507,7 +563,11 @@ MenuItemHandlerResult menuhandlerMpOpenOptions(s32 operation, struct menuitem *i
  */
 void scenarioReadSave(struct savebuffer *buffer, u8 version)
 {
-	if (g_MpScenarios[g_MpSetup.scenario].readsavefunc) {
+	// The field a scenario arrives from can name modes the tables do not hold
+	// - it always could (three bits, six modes) - and indexing by one reads
+	// the wrong mode's callback or past the table. The bits are skipped, which
+	// is what a mode with no callback of its own gets.
+	if (g_MpSetup.scenario < NUM_MPSCENARIOS && g_MpScenarios[g_MpSetup.scenario].readsavefunc) {
 		g_MpScenarios[g_MpSetup.scenario].readsavefunc(buffer, version);
 	} else {
 		u8 sz = version > 0 ? 32 : 8;
@@ -525,7 +585,9 @@ void scenarioReadSave(struct savebuffer *buffer, u8 version)
  */
 void scenarioWriteSave(struct savebuffer *buffer)
 {
-	if (g_MpScenarios[g_MpSetup.scenario].writesavefunc) {
+	// Same reach guard as the read: a number past the tables writes the empty
+	// word a mode with no bits of its own writes, so the layout holds either way.
+	if (g_MpSetup.scenario < NUM_MPSCENARIOS && g_MpScenarios[g_MpSetup.scenario].writesavefunc) {
 		g_MpScenarios[g_MpSetup.scenario].writesavefunc(buffer);
 	} else {
 		savebufferOr(buffer, 0, 32);

@@ -2,24 +2,29 @@
  * Instagib
  *
  * A free-for-all or team deathmatch where every player spawns with a
- * Moonrailer (Rail-Laser) with unlimited ammo and a faster charge time
- * (0.5s instead of 1.5s). No weapons are placed on the map. Each kill
- * scores one point.
+ * Moonrailer (Rail-Laser) with unlimited ammunition and a faster charge
+ * time - half a second instead of the gun's own one and a half. No
+ * weapons are placed on the map, and every kill scores one point.
  *
- * The scenario is intentionally minimal: it reuses Combat's scoring and
- * team logic, and only overrides the weapon loadout, ammo, and charge
- * rate.
+ * The scenario itself stays minimal; the rest of the mode lives where
+ * the rules it bends already live:
+ *
+ * - the Moonrailer in the hands at spawn is playerSpawnWeapons()
+ *   (player.c), which asks the scenario rather than the weapon slots,
+ *   since the slots are all empty here by design;
+ * - the ammunition that never runs out is the per-player tick in
+ *   bgunTick() (bondgun.c), not a cheat - the cheat system cannot carry
+ *   this across a match start (see instaInit);
+ * - the charge time is raillaserCharge60() (port/src/raillaser.c)
+ *   reading g_InstagibCharge60 instead of its own constant.
  */
-
-#include "game/cheats.h"
 
 extern struct menudialogdef g_ExtGameOptionsMenuDialog;
 
 /**
- * The charge time in 60ths of a second. Default is TICKS(90) (1.5s),
- * which is the Rail-Laser's normal charge. Instagib sets this to
- * TICKS(30) (0.5s). Declared in scenarios.c and checked by
- * raillaserCharge60() in port/src/raillaser.c.
+ * The charge time in 60ths of a second. Default is TICKS(90), the
+ * Rail-Laser's own length; Instagib sets TICKS(30). Declared in
+ * scenarios.c, and what raillaserCharge60() answers with.
  */
 extern s32 g_InstagibCharge60;
 
@@ -30,10 +35,22 @@ MenuItemHandlerResult menuhandlerInstagibCharge(s32 operation, struct menuitem *
 		data->slider.value = g_InstagibCharge60;
 		break;
 	case MENUOP_SET:
-		g_InstagibCharge60 = (u8)data->slider.value;
+		// Five ticks is a third of a frame's breath shorter than the
+		// charge can be read at all, and four seconds stops being a
+		// charge and becomes a held trigger with a name on it.
+		if (data->slider.value < 5) {
+			data->slider.value = 5;
+		} else if (data->slider.value > 240) {
+			data->slider.value = 240;
+		}
+		g_InstagibCharge60 = data->slider.value;
 		break;
 	case MENUOP_GETSLIDERLABEL:
-		sprintf(data->slider.label, langGet(L_MPWEAPONS_023), data->slider.value / 60); // "%ds/Point"
+		// Not L_MPWEAPONS_023's "%ds/point": this mode's default is half
+		// a second, and whole seconds would say "0s/point" for it. The
+		// dialog is literal text anyway - no language file names a mode
+		// the ROM never had.
+		sprintf(data->slider.label, "%.1fs/point\n", data->slider.value / 60.0f);
 		break;
 	}
 
@@ -150,45 +167,60 @@ struct menudialogdef g_InstaOptionsMenuDialog = {
 };
 
 /**
- * Set up the Instagib scenario. Called once at the start of a match.
+ * Set up the Instagib scenario: on picking the mode, on loading a setup
+ * that names it, and on a client taking a host's rules for it.
  *
- * - Forces the Moonrailer as the starting weapon (g_DefaultWeapons[0]).
- * - Disables all map weapon spawns (g_MpSetup.weapons[] = MPWEAPON_NONE).
- * - Activates CHEAT_UNLIMITEDAMMO so the Rail-Laser never runs dry.
- * - Sets g_InstagibCharge60 to TICKS(30) (0.5s) for the faster charge.
+ * - Clears all six weapon slots, so no weapon spawn is placed anywhere.
+ *   The Moonrailer comes from playerSpawnWeapons(), not from a slot.
+ * - Sets the charge to its default. A setup or a host's rules that carry
+ *   the slider's value overwrite this right after (scenarioReadSave).
+ *
+ * The ammunition deliberately does NOT go through the cheat system here.
+ * Activating CHEAT_UNLIMITEDAMMO sets its bit, and then the level loads and
+ * cheatsReset() (lv.c) zeroes the active banks on its way in - the cheat is
+ * gone before the first frame of the match. The top-up is ticked per player
+ * in bgunTick() (bondgun.c) instead, which is the right context for it
+ * anyway.
  */
 void instaInit(void)
 {
 	s32 i;
 
-	// No weapons on the map: clear all six weapon slots.
 	for (i = 0; i < NUM_MPWEAPONSLOTS; i++) {
 		g_MpSetup.weapons[i] = MPWEAPON_NONE;
 	}
 
-	// Equip every player with a Moonrailer at spawn.
-	g_DefaultWeapons[HAND_RIGHT] = WEAPON_RAILLASER;
-	g_DefaultWeapons[HAND_LEFT] = WEAPON_NONE;
-
-	// Unlimited ammo.
-	cheatActivate(CHEAT_UNLIMITEDAMMO);
-
-	// Faster charge.
 	g_InstagibCharge60 = TICKS(30);
 }
 
 /**
- * Called each tick while the Instagib scenario is active. Currently a no-op:
- * the charge time is enforced by raillaserCharge60() reading
- * g_InstagibCharge60, and the unlimited ammo is handled by the cheat system.
+ * The scenario's own bits, KOH's hill time's shape: 32 of them, in the
+ * saved setup after the scenario field (mpsetupfileSaveWad) and in the
+ * netplay rules message's scenario-bits word (netrules.c). The charge is
+ * the only thing here, and it has to travel: a client that never picked
+ * the mode would otherwise charge for a second and a half while its
+ * host fires twice as fast.
  */
-void instaTick(void)
+void instaWriteSave(struct savebuffer *buffer)
 {
+	savebufferOr(buffer, g_InstagibCharge60, 32);
+}
+
+void instaReadSave(struct savebuffer *buffer, u8 version)
+{
+	g_InstagibCharge60 = savebufferReadBits(buffer, 32);
+
+	// A file or a room that names a charge outside the slider's clamp
+	// still has to leave a gun that can charge.
+	if (g_InstagibCharge60 < 5 || g_InstagibCharge60 > 240) {
+		g_InstagibCharge60 = TICKS(30);
+	}
 }
 
 /**
- * Score calculation: one point per kill. Reuses the standard Combat scoring
- * (kill count minus deaths).
+ * Score: one point per kill, the way Combat counts them. The kill is
+ * already one point's worth on the way in; this is the row that says so
+ * rather than any of the scenario's other modes' arithmetic.
  */
 void instaCalculatePlayerScore(struct mpchrconfig *mpchr, s32 mpchrnum, s32 *score, s32 *deaths)
 {

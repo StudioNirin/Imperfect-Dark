@@ -184,7 +184,7 @@ void mpsetupfileSaveWad(struct savebuffer *buffer, u8 version);
 bool mpNeedsExtendedSims(void);
 bool mpNeedsSimStats(void);
 void mpResetBotStats(s32 botnum);
-void mpsetupfileGetOverview(char *arg0, char *filename, u16 *numsims, u16 *stagenum, u16 *scenarionum);
+void mpsetupfileGetOverview(char *arg0, char *filename, u16 *numsims, u16 *stagenum, u16 *scenarionum, u8 version);
 s32 mpsetupfileSave(s32 device, s32 filenum, u16 deviceserial);
 void func0f18e558(void);
 struct modeldef *func0f18e57c(s32 index, s32 *headnum);

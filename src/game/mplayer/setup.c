@@ -4465,7 +4465,7 @@ char *mpMenuTextMpconfigMarquee(struct menuitem *item)
 #endif
 
 		mpsetupfileGetOverview(g_MpSetupFile.setups[g_Menus[g_MpPlayerNum].mpsetup.slotindex].bytes,
-				filename, &numsims, &stagenum, &scenarionum);
+				filename, &numsims, &stagenum, &scenarionum, g_MpSetupFile.version);
 
 		for (i = 0; i < ARRAYCOUNT(g_MpArenas); i++) {
 			if (g_MpArenas[i].stagenum == stagenum) {
@@ -4474,7 +4474,7 @@ char *mpMenuTextMpconfigMarquee(struct menuitem *item)
 		}
 
 #if VERSION >= VERSION_NTSC_1_0
-		if (scenarionum <= 5 && arenanum != -1 && numsims >= 0 && filename[0] != '\0' && numsims <= MAX_BOTS) {
+		if (scenarionum < NUM_MPSCENARIOS && arenanum != -1 && numsims >= 0 && filename[0] != '\0' && numsims <= MAX_BOTS) {
 			// "%s:  Scenario: %s   Arena: %s    Simulants: %d"
 			sprintf(g_StringPointer, langGet(L_MPMENU_140),
 					filename,

@@ -3381,6 +3381,14 @@ s32 langpackIsCjk(void);
 #define MPSCENARIO_CAPTURETHECASE   5
 #define MPSCENARIO_INSTAGIB          6
 
+// Every scenario the two tables in scenarios.c hold, in neither case in menu
+// order (the menu has its own order there). Anything that asks whether a
+// scenario number is one the game has - the netplay guards, the setup file's
+// clamp - counts with this rather than naming the last id, so a new mode is
+// not a guard to remember to widen. scenarios.c asserts both tables are this
+// wide.
+#define NUM_MPSCENARIOS             7
+
 #define MPSETUPMENU_ADVSETUP 1
 #define MPSETUPMENU_GENERAL  2
 #define MPSETUPMENU_QUICKGO  3
@@ -5506,8 +5514,18 @@ enum weaponnum {
 // version byte is what says which (mpsetupfileSaveWad, mpsetupfileLoadWad).
 #define MPSETUP_VERSION_RAILLASER 6
 
+// File format version that stores the scenario in four bits rather than three.
+// Three bits held the six modes the ROM shipped with; the fork's Instagib is
+// the seventh and the modes after it do not fit a 3-bit field (mpsetupfileSaveWad,
+// mpsetupfileLoadWad). Everything after the field moves by one bit, so older
+// files stay read at their own width by their version byte, and the file only
+// rises to this version when the live setup or a stored one actually needs it
+// (mpsetupLiveVersion). Exporting a scenario past 7 down to an older version
+// cannot hold it, the way a modded stage id cannot fit the 7-bit field either.
+#define MPSETUP_VERSION_SCENARIO16 7
+
 // The newest format, which loses nothing of a live setup.
-#define MPSETUP_VERSION_LATEST MPSETUP_VERSION_RAILLASER
+#define MPSETUP_VERSION_LATEST MPSETUP_VERSION_SCENARIO16
 
 #endif
 

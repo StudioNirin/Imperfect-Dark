@@ -528,6 +528,16 @@ static void mpsetupReencodeBlocks(struct mpsetupfile *setupfile, u8 toversion, s
  */
 static u8 mpsetupLiveVersion(void)
 {
+	// A scenario past 7 does not fit the 3-bit field the versions before
+	// MPSETUP_VERSION_SCENARIO16 read it from, so a setup that has one of the
+	// modes that number cannot be held by an older file at all. Nothing today
+	// reaches it - Instagib is 6 - and that is the point: the file rises to the
+	// wider layout only when a mode actually makes it necessary, and the day
+	// the eighth and ninth modes land, it rises by itself.
+	if (g_MpSetup.scenario > 7) {
+		return MPSETUP_VERSION_LATEST;
+	}
+
 	// A curated list that deselected anything past the 64th row cannot be held
 	// by the u64 the older versions write (mpNeedsWideRandomFilters), and a slot
 	// the player made random is not in the older formats at all (mpNeedsSlotGroups)

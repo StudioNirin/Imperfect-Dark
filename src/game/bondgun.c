@@ -15042,6 +15042,17 @@ void bgunTickGameplay(bool triggeron)
 #endif
 			bgunGiveMaxAmmo(false);
 		}
+
+		// Instagib: the Moonrailer's ammunition, kept full. This cannot be the
+		// cheat above: cheatsReset() (lv.c) zeroes the active banks as the level
+		// loads, which is after a scenario's init would have set the bit, so the
+		// cheat never lives to see the match (instagib.inc). The tick is the
+		// right context anyway - it runs per player here, simulants included,
+		// and a scenario the player cannot have turned off is a rule, not a
+		// cheat.
+		if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_INSTAGIB) {
+			bgunSetAmmoQuantity(AMMOTYPE_RAIL, bgunGetAmmoCapacityForWeapon(WEAPON_RAILLASER, FUNC_PRIMARY));
+		}
 	}
 
 	bgunDecreaseNoiseRadius();

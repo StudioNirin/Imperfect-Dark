@@ -6388,7 +6388,15 @@ void mpsetupfileLoadWad(struct savebuffer *buffer, u8 version)
 	savebufferReadBits(buffer, 4);
 
 	g_MpSetup.stagenum = savebufferReadBits(buffer, 7);
-	g_MpSetup.scenario = savebufferReadBits(buffer, 3);
+	g_MpSetup.scenario = savebufferReadBits(buffer, version >= MPSETUP_VERSION_SCENARIO16 ? 4 : 3);
+
+	// A field this wide can name scenarios the game does not have - it always
+	// could (three bits and six modes), and the old code indexed past the
+	// tables for 6 and 7 without asking. A file that cannot name a scenario
+	// starts on Combat, which is the scenario that has no scenario bits.
+	if (g_MpSetup.scenario >= NUM_MPSCENARIOS) {
+		g_MpSetup.scenario = MPSCENARIO_COMBAT;
+	}
 
 	// version == 0 means we're only reading to convert, so no actions are needed
 	if (version > 0) {
@@ -6604,7 +6612,12 @@ void mpsetupfileSaveWad(struct savebuffer *buffer, u8 version)
 	// and its number is only good for the mod set that produced it anyway.
 	// Save Random in its place rather than a truncated id.
 	savebufferOr(buffer, g_MpSetup.stagenum < 0x80 ? g_MpSetup.stagenum : STAGE_MP_RANDOM, 7);
-	savebufferOr(buffer, g_MpSetup.scenario, 3);
+
+	// Four bits from MPSETUP_VERSION_SCENARIO16; a version that old cannot hold
+	// a scenario past 7, and truncates it as the stagenum above truncates - only
+	// a build that has those scenarios can write them in the first place, and
+	// mpsetupLiveVersion keeps such a setup's file on this version.
+	savebufferOr(buffer, g_MpSetup.scenario, version >= MPSETUP_VERSION_SCENARIO16 ? 4 : 3);
 
 	scenarioWriteSave(buffer);
 
@@ -6699,7 +6712,7 @@ void mpsetupfileSaveWad(struct savebuffer *buffer, u8 version)
 	}
 }
 
-void mpsetupfileGetOverview(char *arg0, char *filename, u16 *numsims, u16 *stagenum, u16 *scenarionum)
+void mpsetupfileGetOverview(char *arg0, char *filename, u16 *numsims, u16 *stagenum, u16 *scenarionum, u8 version)
 {
 	struct savebuffer buffer;
 
@@ -6709,7 +6722,7 @@ void mpsetupfileGetOverview(char *arg0, char *filename, u16 *numsims, u16 *stage
 
 	*numsims = savebufferReadBits(&buffer, 4);
 	*stagenum = savebufferReadBits(&buffer, 7);
-	*scenarionum = savebufferReadBits(&buffer, 3);
+	*scenarionum = savebufferReadBits(&buffer, version >= MPSETUP_VERSION_SCENARIO16 ? 4 : 3);
 }
 
 void func0f18e558(void)

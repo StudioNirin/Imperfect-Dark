@@ -1242,6 +1242,7 @@ static void playerSpawnWeapons(void)
 	// returns -1 here - handle this first before the normal spawn path.
 	if (g_MpSetup.scenario == MPSCENARIO_INSTAGIB) {
 		invGiveSingleWeapon(WEAPON_RAILLASER);
+		bgunSetAmmoQuantity(AMMOTYPE_RAIL, bgunGetAmmoCapacityForWeapon(WEAPON_RAILLASER, FUNC_PRIMARY));
 		g_Vars.currentplayer->spawnweaponnums[HAND_LEFT] = WEAPON_NONE;
 		g_Vars.currentplayer->spawnweaponnums[HAND_RIGHT] = WEAPON_RAILLASER;
 		bgunEquipWeapon2(HAND_LEFT, WEAPON_NONE);
