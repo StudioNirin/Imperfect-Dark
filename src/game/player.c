@@ -1237,6 +1237,18 @@ bool playerSpawnAnti(struct chrdata *hostchr, bool force)
  */
 static void playerSpawnWeapons(void)
 {
+	// Instagib: every player spawns with a Moonrailer. Clear slots already
+	// happened in instaInit() (weapons[] = MPWEAPON_NONE), so mpGetSpawnWeapon()
+	// returns -1 here - handle this first before the normal spawn path.
+	if (g_MpSetup.scenario == MPSCENARIO_INSTAGIB) {
+		invGiveSingleWeapon(WEAPON_RAILLASER);
+		g_Vars.currentplayer->spawnweaponnums[HAND_LEFT] = WEAPON_NONE;
+		g_Vars.currentplayer->spawnweaponnums[HAND_RIGHT] = WEAPON_RAILLASER;
+		bgunEquipWeapon2(HAND_LEFT, WEAPON_NONE);
+		bgunEquipWeapon2(HAND_RIGHT, WEAPON_RAILLASER);
+		return;
+	}
+
 	// GoldenEye's credits (Cuba): Bond starts unarmed (its StartWeapon record
 	// is ITEM_UNARMED) and the list hides the hands, but the body the camera
 	// circles holds the gun the hands hold - Start Armed's roll put one in his
@@ -1286,17 +1298,6 @@ static void playerSpawnWeapons(void)
 		struct mpweapon *mpweapon = &g_MpWeapons[spawnweapon];
 		bool akimbo = modSpawnIsAkimbo(mpweapon->weaponnum);
 		const bool spawnmaxed = modSpawnWantsMaxAmmo();
-
-		// Instagib: spawn with the Moonrailer regardless of the weapon
-		// slot, since the scenario clears all slots to MPWEAPON_NONE.
-		if (g_MpSetup.scenario == MPSCENARIO_INSTAGIB) {
-			invGiveSingleWeapon(WEAPON_RAILLASER);
-			g_Vars.currentplayer->spawnweaponnums[HAND_LEFT] = WEAPON_NONE;
-			g_Vars.currentplayer->spawnweaponnums[HAND_RIGHT] = WEAPON_RAILLASER;
-			bgunEquipWeapon2(HAND_LEFT, WEAPON_NONE);
-			bgunEquipWeapon2(HAND_RIGHT, WEAPON_RAILLASER);
-			return;
-		}
 
 		invGiveSingleWeapon(mpweapon->weaponnum);
 
