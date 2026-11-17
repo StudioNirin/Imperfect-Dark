@@ -155,7 +155,10 @@ clamped)
 	check "$C" "net: challenge 0: the host's verdict marked this machine's record at 4 players, completions\[3\] now 3$" "clamped: the client ticked the same human tier, not its sim-inflated player count"
 	;;
 sims)
-	run_case sims --net-test-challenge 14
+	# the challenge's sims play for real, so give the host a decisive score to
+	# make team 0 (which every player and sim shares) top the ranking - without
+	# it a sim can outscore the humans and flip the verdict to "not won"
+	run_case sims --net-test-challenge 14 --net-test-givekills 0,30,20
 	check "$H" "net: the room's challenge 14: [1-9][0-9]* sims on for 2 human players$" \
 		"sims: the challenge's ROM sims are on for the match"
 	# challenge 14's config is MPCONFIG_CHALLENGE15, stage 0x47 - not the
@@ -188,13 +191,30 @@ esac
 done
 
 # The confirm dialog's text is a UI string (no screenshot on this box, gdb
-# attach is blocked), so pin its source: the picker shows the chosen challenge's
-# own description, not boilerplate, through challengeLoad + its config.
-if grep -q 'challengeGetConfigDescription(cfg)' "$ROOT/port/src/netlobbymenu.c" \
-		&& grep -q 'challengeLoad(s_ChallengePickIndex' "$ROOT/port/src/netlobbymenu.c"; then
+# attach is blocked), so pin its source: the picker uses the stock DESCRIPTION
+# scrollable and loads the chosen challenge's config into training.mpconfig on
+# open - not a one-line label with boilerplate.
+if grep -q 'DESCRIPTION_MPCONFIG' "$ROOT/port/src/netlobbymenu.c" \
+		&& grep -q 'challengeLoad(s_ChallengePickIndex' "$ROOT/port/src/netlobbymenu.c" \
+		&& grep -q 'training.mpconfig = challengeLoad' "$ROOT/port/src/netlobbymenu.c"; then
 	pass "picker: the confirm dialog shows the challenge's own description"
 else
 	fail "picker: the confirm dialog does not show the challenge's description"
+fi
+
+# Late joiners must not change the difficulty: the sim count and the record
+# tier both come from the human count captured at H1, never from PLAYERCOUNT(),
+# and the sims are only enabled once there (a late join just gets the running
+# match's RULES). Pin that shape in source; the clamped case already proves the
+# tier follows the human count, not the 2-player PLAYERCOUNT() of the pair.
+NS=$ROOT/port/src/net/netsession.c
+if grep -q 'tier = s_MatchHumans;' "$NS" \
+		&& ! grep -q 'tier = s_End.numplayers;' "$NS" \
+		&& grep -q 'challengeSetSimulantsForNumPlayers(numplayers);' "$NS" \
+		&& [ "$(grep -c 'challengeSetSimulantsForNumPlayers(numplayers);' "$NS")" = 1 ]; then
+	pass "late join: the sims and tier come from the H1 human count, set once"
+else
+	fail "late join: the sims or tier are not pinned to the match's start count"
 fi
 
 exit $status

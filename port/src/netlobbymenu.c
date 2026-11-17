@@ -3296,25 +3296,26 @@ static MenuItemHandlerResult handlerChallengeSelect(s32 operation, struct menuit
 	return 0;
 }
 
-static char *netChallengePickText(struct menuitem *item)
-{
-	// a description is 200 chars plus the name - keep the whole thing
-	static char text[260];
-	static u8 cfgbuf[0x1ca];
-	struct mpconfigfull *cfg;
+// The confirm page shows the challenge's own description, as the stock
+// confirm does (menuitem.c's DESCRIPTION_MPCONFIG scrollable). That reader
+// takes g_Menus[g_MpPlayerNum].training.mpconfig, so load the picked challenge
+// there when the dialog opens. A static buffer keeps it alive for the dialog's
+// life; a one-line LABEL would clip the multi-line description and show only
+// the name.
+static u8 s_NetChallengePickCfg[0x1ca];
 
-	if (s_ChallengePickIndex >= 0) {
-		// the stock confirm page shows the challenge's own description
-		// (menuitem.c's DESCRIPTION_MPCONFIG); show the same one here, not
-		// boilerplate about the room, so the host knows what it is picking
-		cfg = challengeLoad(s_ChallengePickIndex, cfgbuf, sizeof(cfgbuf));
-		snprintf(text, sizeof(text), "%s\n%s", challengeGetName(s_ChallengePickIndex),
-				cfg ? challengeGetConfigDescription(cfg) : "");
-	} else {
-		snprintf(text, sizeof(text), "No challenge there.");
+static MenuDialogHandlerResult netChallengeConfirm(s32 operation, struct menudialogdef *dialogdef, union handlerdata *data)
+{
+	if (operation == MENUOP_OPEN) {
+		if (s_ChallengePickIndex >= 0) {
+			g_Menus[g_MpPlayerNum].training.mpconfig = challengeLoad(s_ChallengePickIndex, s_NetChallengePickCfg,
+					sizeof(s_NetChallengePickCfg));
+		} else {
+			g_Menus[g_MpPlayerNum].training.mpconfig = NULL;
+		}
 	}
 
-	return text;
+	return 0;
 }
 
 static MenuItemHandlerResult handlerChallengeAccept(s32 operation, struct menuitem *item, union handlerdata *data)
@@ -3381,11 +3382,11 @@ static struct menudialogdef s_NetChallengePickMenuDialog = {
 
 static struct menuitem s_NetChallengeConfirmItems[] = {
 	{
-		MENUITEMTYPE_LABEL,
+		MENUITEMTYPE_SCROLLABLE,
+		DESCRIPTION_MPCONFIG,
 		0,
-		MENUITEMFLAG_LESSLEFTPADDING | MENUITEMFLAG_SMALLFONT,
-		(uintptr_t)&netChallengePickText,
-		0,
+		0x0000007c,
+		PAL ? 0x41 : 0x37,
 		NULL,
 	},
 	{
@@ -3411,7 +3412,7 @@ static struct menudialogdef s_NetChallengeConfirmMenuDialog = {
 	MENUDIALOGTYPE_DEFAULT,
 	(uintptr_t)"Room's Challenge",
 	s_NetChallengeConfirmItems,
-	NULL,
+	netChallengeConfirm,
 	MENUDIALOGFLAG_LITERAL_TEXT,
 	NULL,
 };

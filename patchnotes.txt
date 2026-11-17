@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 94 2026-11-17
+Online Challenges: picking a challenge on a room's Settings page now shows the challenge's own description on the confirmation page, so you can see what it is before accepting.
+
 notes 93 2026-11-17
 Online Challenges: the challenge's own enemies and allies now turn up in the match, with the guns, arena and difficulty the challenge was built with. Before, the room played the arena but none of the sims spawned. Picking a challenge on the room's Settings page now shows what the challenge actually is instead of a note about records. The room's player count is used to tick off a completed challenge on every machine, so a challenge's sims can't make it count as more players than it was.
 
