@@ -44,6 +44,9 @@ s32 netStageBarrierHold(void);
 void netHostMatchEnded(void);
 // H10 mplayer.c mpEndMatch: a client takes the host's scores and awards
 void netClientApplyMatchEnd(void);
+// H9/H10 mplayer.c mpEndMatch, challenge locktype: the room's challenge is
+// judged and marked (the host at its own end, a client from the verdict)
+void netChallengeMatchEnded(void);
 // H11 ingame.c End Game: a client leaves the session
 void netClientLeave(void);
 // H12 pdmain.c after lvStop: the rules come off after a net match

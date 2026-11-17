@@ -455,6 +455,30 @@ struct netcoopsetup {
 	s32 anti;         // a counter-op mission (protocol 32): each member's side its room team, 0 agent and 1 counter-op
 };
 extern struct netcoopsetup g_NetCoopSetup;
+
+/**
+ * Online challenges: the multiplayer Challenge Mode for the room
+ * (PLANS-less plan of 2026-11-16, CLAUDE-notes save-format.md records).
+ * The host picks one challenge in Room Settings exactly as the Game
+ * dropdown picks a co-op mission; the match is then the stock offline
+ * challenge machine run by challengeApply() (src/game/challenge.c), with
+ * RULES carrying the challenge's setup like any other match and the
+ * challenge lock surviving the match (netsession.c). The host judges the
+ * completion from its own full view; every machine marks its own save's
+ * records when the host's verdict in MATCH_END says the challenge won.
+ */
+struct netchallengesetup {
+	s32 on;     // the room runs a challenge: the Game dropdown's own option
+	s32 index;  // the challenge in g_MpChallenges, as its picker shows it
+};
+extern struct netchallengesetup g_NetChallengeSetup;
+// Room Settings opened: the room's Game option was switched, and a challenge
+// room's Game switch back must give the host its own Combat Simulator setup
+// and lock back (the challenge's config wrote over them for the room)
+void netChallengeSetupSnapshot(void);
+// Leave the room: the same, whichever way the room ends. Safe to call when
+// nothing was kept
+void netChallengeSetupRestore(void);
 // Room Settings: a hash of the host's rules (the SYNC keys and Simulant AI), to see the Room Rules page changed one
 u32 netRulesSyncHash(void);
 // mainmenu.c Accept Mission in a net session: 1 handled (started, or refused with a notice)

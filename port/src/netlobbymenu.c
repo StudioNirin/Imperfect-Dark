@@ -2985,18 +2985,26 @@ static MenuItemHandlerResult handlerGame(s32 operation, struct menuitem *item, u
 	static char text[48];
 	char tag[16];
 	s32 n;
+	// 0 Combat Simulator, 1 Co-op Mission, 2 Counter-Op Mission (protocol
+	// 32: the members' room teams their sides), then each set's campaign,
+	// then (protocol 37) 3+n Challenge: a Combat Simulator room whose match
+	// is a stock offline Challenge Mode run (net.h's struct netchallengesetup)
+	const s32 challengeopt = gameOptions();
 
 	if (g_GexPlusMode) {
 		g_NetCoopSetup.on = 0;
 		g_NetCoopSetup.campaign = 0;
 		g_NetCoopSetup.anti = 0;
+
+		if (g_NetChallengeSetup.on) {
+			g_NetChallengeSetup.on = 0;
+			netChallengeSetupRestore();
+		}
 	}
 
-	// 0 Combat Simulator, 1 Co-op Mission, 2 Counter-Op Mission (protocol
-	// 32: the members' room teams their sides), then each set's campaign
 	switch (operation) {
 	case MENUOP_GETOPTIONCOUNT:
-		data->dropdown.value = gameOptions();
+		data->dropdown.value = g_GexPlusMode ? challengeopt : challengeopt + 1;
 		break;
 	case MENUOP_GETOPTIONTEXT:
 		if (data->dropdown.value == 0) {
@@ -3011,6 +3019,10 @@ static MenuItemHandlerResult handlerGame(s32 operation, struct menuitem *item, u
 			return (intptr_t)"Counter-Op Mission";
 		}
 
+		if (data->dropdown.value == challengeopt) {
+			return (intptr_t)"Challenge";
+		}
+
 		if (!netCoopGameTag(data->dropdown.value - 3, tag, sizeof(tag))) {
 			tag[0] = '\0';
 		}
@@ -3018,9 +3030,9 @@ static MenuItemHandlerResult handlerGame(s32 operation, struct menuitem *item, u
 		snprintf(text, sizeof(text), "%s Campaign", netCoopGameName(tag));
 		return (intptr_t)text;
 	case MENUOP_SET:
-		g_NetCoopSetup.on = data->dropdown.value >= 1 && !g_GexPlusMode;
+		g_NetCoopSetup.on = data->dropdown.value >= 1 && data->dropdown.value < challengeopt && !g_GexPlusMode;
 		g_NetCoopSetup.anti = data->dropdown.value == 2 && !g_GexPlusMode;
-		g_NetCoopSetup.campaign = data->dropdown.value >= 3 && !g_GexPlusMode;
+		g_NetCoopSetup.campaign = data->dropdown.value >= 3 && data->dropdown.value < challengeopt && !g_GexPlusMode;
 
 		if (g_NetCoopSetup.campaign) {
 			if (!netCoopGameTag(data->dropdown.value - 3, tag, sizeof(tag))) {
@@ -3029,11 +3041,29 @@ static MenuItemHandlerResult handlerGame(s32 operation, struct menuitem *item, u
 
 			snprintf(g_NetCoopSetup.game, sizeof(g_NetCoopSetup.game), "%s", tag);
 		}
+
+		// a challenge room: the host's own setup goes aside until the room
+		// ends (netlobby.c); the config itself waits for the room's own
+		// start (netSessionLobbyStartMatch), so the settings preview can
+		// show the challenge the room has not started yet
+		if (data->dropdown.value == challengeopt && !g_GexPlusMode) {
+			if (!g_NetChallengeSetup.on) {
+				netChallengeSetupSnapshot();
+			}
+
+			g_NetChallengeSetup.on = 1;
+		} else if (g_NetChallengeSetup.on) {
+			g_NetChallengeSetup.on = 0;
+			netChallengeSetupRestore();
+		}
+
 		break;
 	case MENUOP_GETSELECTEDINDEX:
 		data->dropdown.value = 0;
 
-		if (g_NetCoopSetup.on && g_NetCoopSetup.campaign) {
+		if (g_NetChallengeSetup.on && !g_GexPlusMode) {
+			data->dropdown.value = challengeopt;
+		} else if (g_NetCoopSetup.on && g_NetCoopSetup.campaign) {
 			for (n = 0; netCoopGameTag(n, tag, sizeof(tag)); n++) {
 				if (strcasecmp(tag, g_NetCoopSetup.game) == 0) {
 					data->dropdown.value = 3 + n;
@@ -3044,6 +3074,7 @@ static MenuItemHandlerResult handlerGame(s32 operation, struct menuitem *item, u
 		} else if (g_NetCoopSetup.on) {
 			data->dropdown.value = 1;
 		}
+
 		break;
 	}
 
@@ -3223,10 +3254,167 @@ static MenuItemHandlerResult handlerCoopFriendlyFire(s32 operation, struct menui
 	return 0;
 }
 
+/**
+ * The room's Challenge row (protocol 37): the host picks the challenge the
+ * room plays from the stock Combat Challenges list - the very rows and
+ * stars of the offline page, so the stars are this machine's records. What
+ * the other machines' own records look like the host cannot see, so the
+ * stars are a hint, not a promise: every machine marks its own save when
+ * the host's verdict says the room won (netChallengeMatchEnded). The list
+ * handler is the stock one's, except for the pick: the stock one hands the
+ * row to challengeSetCurrentBySlot, which would apply the challenge to
+ * this machine's live setup - the room's waits for its own start.
+ */
+static s32 s_ChallengePickIndex = -1;
+
+static struct menudialogdef s_NetChallengePickMenuDialog;
+static struct menudialogdef s_NetChallengeConfirmMenuDialog;
+
+static char *textChallengeName(struct menuitem *item)
+{
+	static char text[40];
+
+	if (!g_NetChallengeSetup.on) {
+		return "None";
+	}
+
+	snprintf(text, sizeof(text), "%s", challengeGetName(g_NetChallengeSetup.index));
+	return text;
+}
+
+static MenuItemHandlerResult handlerChallengeSelect(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_CHECKHIDDEN) {
+		return !g_NetChallengeSetup.on; // only when the Game row says Challenge
+	}
+
+	if (operation == MENUOP_SET) {
+		s_ChallengePickIndex = g_NetChallengeSetup.index;
+		menuPushDialog(&s_NetChallengePickMenuDialog);
+	}
+
+	return 0;
+}
+
+static char *netChallengePickText(struct menuitem *item)
+{
+	static char text[160];
+
+	if (s_ChallengePickIndex >= 0) {
+		snprintf(text, sizeof(text), "%s\nEveryone in the room plays it.\nA machine's own record ticks\nwhen the room wins it.",
+				challengeGetName(s_ChallengePickIndex));
+	} else {
+		snprintf(text, sizeof(text), "No challenge there.");
+	}
+
+	return text;
+}
+
+static MenuItemHandlerResult handlerChallengeAccept(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_SET && s_ChallengePickIndex >= 0) {
+		g_NetChallengeSetup.index = s_ChallengePickIndex;
+		sysLogPrintf(LOG_NOTE, "lobby: the room's challenge: %s", challengeGetName(s_ChallengePickIndex));
+	}
+
+	return 0;
+}
+
+static MenuItemHandlerResult handlerChallengeList(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_CHECKHIDDEN) {
+		return 0; // the stock list hides itself while its machine plays a challenge; the host is not playing
+	}
+
+	if (operation == MENUOP_SET) {
+		s32 slot = data->list.value;
+		s32 index;
+
+		// row -> challenge: the same availability walk challengeSetCurrentBySlot does
+		for (index = 0; index < (s32) ARRAYCOUNT(g_MpChallenges); index++) {
+			if (!challengeIsAvailableToAnyPlayer(index)) {
+				continue;
+			}
+
+			if (slot == 0) {
+				break;
+			}
+
+			slot--;
+		}
+
+		s_ChallengePickIndex = index < (s32) ARRAYCOUNT(g_MpChallenges) ? index : -1;
+		menuPushDialog(&s_NetChallengeConfirmMenuDialog);
+		return 0;
+	}
+
+	return mpChallengesListMenuHandler(operation, item, data);
+}
+
+static struct menuitem s_NetChallengePickItems[] = {
+	{
+		MENUITEMTYPE_LIST,
+		1,
+		MENUITEMFLAG_LIST_CUSTOMRENDER,
+		0x00000078,
+		0x0000004d,
+		handlerChallengeList,
+	},
+	{ MENUITEMTYPE_END },
+};
+
+static struct menudialogdef s_NetChallengePickMenuDialog = {
+	MENUDIALOGTYPE_DEFAULT,
+	L_MPMENU_050, // "Combat Challenges"
+	s_NetChallengePickItems,
+	NULL,
+	0,
+	NULL,
+};
+
+static struct menuitem s_NetChallengeConfirmItems[] = {
+	{
+		MENUITEMTYPE_LABEL,
+		0,
+		MENUITEMFLAG_LESSLEFTPADDING | MENUITEMFLAG_SMALLFONT,
+		(uintptr_t)&netChallengePickText,
+		0,
+		NULL,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG | MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Accept\n",
+		0,
+		handlerChallengeAccept,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG | MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Cancel\n",
+		0,
+		NULL,
+	},
+	{ MENUITEMTYPE_END },
+};
+
+static struct menudialogdef s_NetChallengeConfirmMenuDialog = {
+	MENUDIALOGTYPE_DEFAULT,
+	(uintptr_t)"Room's Challenge",
+	s_NetChallengeConfirmItems,
+	NULL,
+	MENUDIALOGFLAG_LITERAL_TEXT,
+	NULL,
+};
+
 static MenuItemHandlerResult handlerSetupPage(s32 operation, struct menuitem *item, struct menudialogdef *page)
 {
 	if (operation == MENUOP_CHECKHIDDEN) {
-		return g_NetCoopSetup.on;
+		// a co-op mission's and a challenge's rules come from the mission
+		// and the challenge, not from the Combat Simulator's pages
+		return g_NetCoopSetup.on || g_NetChallengeSetup.on;
 	}
 
 	if (operation == MENUOP_SET) {
@@ -3273,7 +3461,7 @@ static MenuItemHandlerResult handlerSetupSimulants(s32 operation, struct menuite
 static MenuItemHandlerResult handlerSetupOptions(s32 operation, struct menuitem *item, union handlerdata *data)
 {
 	if (operation == MENUOP_CHECKHIDDEN) {
-		return g_NetCoopSetup.on;
+		return g_NetCoopSetup.on || g_NetChallengeSetup.on;
 	}
 
 	return menuhandlerMpOpenOptions(operation, item, data);
@@ -3314,7 +3502,7 @@ static MenuItemHandlerResult handlerSetupLoad(s32 operation, struct menuitem *it
 static MenuItemHandlerResult handlerSetupSave(s32 operation, struct menuitem *item, union handlerdata *data)
 {
 	if (operation == MENUOP_CHECKHIDDEN) {
-		return g_NetCoopSetup.on;
+		return g_NetCoopSetup.on || g_NetChallengeSetup.on;
 	}
 
 	return menuhandlerMpSaveSettings(operation, item, data);
@@ -3435,6 +3623,7 @@ static MenuItemHandlerResult handlerSetupRules(s32 operation, struct menuitem *i
 
 #define NETLOBBY_SETUP_ITEMS \
 	{ MENUITEMTYPE_DROPDOWN, 0, MENUITEMFLAG_LITERAL_TEXT, (uintptr_t)"Game", 0, handlerGame }, \
+	{ MENUITEMTYPE_SELECTABLE, 0, 0, L_MPMENU_049, (uintptr_t)&textChallengeName, handlerChallengeSelect }, \
 	{ MENUITEMTYPE_SELECTABLE, 0, 0, L_MPMENU_019, (uintptr_t)&textScenario, handlerSetupScenario }, \
 	{ MENUITEMTYPE_SELECTABLE, 0, 0, L_MPMENU_021, 0, handlerSetupOptions }, \
 	{ MENUITEMTYPE_SELECTABLE, 0, 0, L_MPMENU_020, (uintptr_t)&textArena, handlerSetupArena }, \
@@ -5466,6 +5655,7 @@ static void forceTestTick(void)
 static struct mpsetup s_SettingsSetup;
 static struct mpbotconfig s_SettingsBots[MAX_BOTS];
 static struct netcoopsetup s_SettingsCoop;
+static struct netchallengesetup s_SettingsChallenge;
 static u32 s_SettingsExtra;
 
 /**
@@ -5510,6 +5700,7 @@ static MenuDialogHandlerResult dialogRoomSettings(s32 operation, struct menudial
 		memcpy(&s_SettingsSetup, &g_MpSetup, sizeof(s_SettingsSetup));
 		memcpy(s_SettingsBots, g_BotConfigsArray, sizeof(s_SettingsBots));
 		s_SettingsCoop = g_NetCoopSetup;
+		s_SettingsChallenge = g_NetChallengeSetup;
 		s_SettingsExtra = settingsExtra();
 		s_HostTeamTouched = 0;
 	}
@@ -5518,6 +5709,7 @@ static MenuDialogHandlerResult dialogRoomSettings(s32 operation, struct menudial
 		if (memcmp(&s_SettingsSetup, &g_MpSetup, sizeof(s_SettingsSetup)) != 0
 				|| memcmp(s_SettingsBots, g_BotConfigsArray, sizeof(s_SettingsBots)) != 0
 				|| memcmp(&s_SettingsCoop, &g_NetCoopSetup, sizeof(s_SettingsCoop)) != 0
+				|| memcmp(&s_SettingsChallenge, &g_NetChallengeSetup, sizeof(s_SettingsChallenge)) != 0
 				|| settingsExtra() != s_SettingsExtra) {
 			netLobbySendSettings();
 		}

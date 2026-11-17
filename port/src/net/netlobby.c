@@ -2443,16 +2443,21 @@ const char *netLobbyCompatText(s32 compat)
  * The arena as the session's stage key names it: a stock stage by number,
  * a Stage Loader map by its name and mod
  */
-static void lobbyStageKey(char *out, s32 size)
+static void lobbyStageKeyFor(s32 stagenum, char *out, s32 size)
 {
-	const char *dir = modloaderGetStageModDir(g_MpSetup.stagenum);
-	const char *map = dir ? modloaderGetStageMapName(g_MpSetup.stagenum) : NULL;
+	const char *dir = modloaderGetStageModDir(stagenum);
+	const char *map = dir ? modloaderGetStageMapName(stagenum) : NULL;
 
 	if (map) {
 		snprintf(out, size, "map:%s", map);
 	} else {
-		snprintf(out, size, "stage:%02x", g_MpSetup.stagenum);
+		snprintf(out, size, "stage:%02x", stagenum);
 	}
+}
+
+static void lobbyStageKey(char *out, s32 size)
+{
+	lobbyStageKeyFor(g_MpSetup.stagenum, out, size);
 }
 
 static void lobbyCleanName(const char *in, char *out, s32 size)
@@ -2539,6 +2544,37 @@ static s32 lobbySettingsJson(char *out, s32 size, s32 withcompat)
 		snprintf(extra, sizeof(extra), ",\"radar\":%d,\"friendly_fire\":%d%s", g_NetCoopSetup.radar ? 1 : 0,
 				g_NetCoopSetup.friendlyfire ? 1 : 0,
 				g_NetCoopSetup.anti && !g_NetCoopSetup.campaign ? ",\"counterop\":1" : "");
+	} else if (g_NetChallengeSetup.on) {
+		// a challenge room (net.h's struct netchallengesetup): the challenge
+		// as the scenario, and the arena its own config names - not the
+		// host's private setup, which is what its live g_MpSetup still holds
+		// until the room's first start applies the config (netsession.c)
+		static u8 cfgbuf[0x1ca];
+		struct mpconfigfull *cfg = challengeLoad(g_NetChallengeSetup.index, cfgbuf, sizeof(cfgbuf));
+		char cname[40];
+
+		lobbyCleanName(challengeGetName(g_NetChallengeSetup.index), cname, sizeof(cname));
+		snprintf(scenario, sizeof(scenario), "%s", cname);
+
+		if (cfg) {
+			s32 a;
+
+			snprintf(stage, sizeof(stage), "%s", "\n");
+
+			for (a = 0; a < (s32) ARRAYCOUNT(g_MpArenas); a++) {
+				if (g_MpArenas[a].stagenum == cfg->config.setup.stagenum) {
+					snprintf(stage, sizeof(stage), "%s", mpGetArenaName(a));
+					break;
+				}
+			}
+
+			lobbyStageKeyFor(cfg->config.setup.stagenum, key, sizeof(key));
+		} else {
+			snprintf(stage, sizeof(stage), "%s", "???");
+			lobbyStageKey(key, sizeof(key));
+		}
+
+		snprintf(extra, sizeof(extra), ",\"challenge\":%d", g_NetChallengeSetup.index);
 	} else {
 		lobbyCleanName(mpMenuTextArenaName(NULL), stage, 33);
 		lobbyCleanName(mpMenuTextScenarioShortName(NULL), scenario, 33);
@@ -3069,6 +3105,55 @@ void netLobbyCancelLaunch(void)
 	lobbyAction("launch", "{\"cancel\":true}");
 }
 
+/*
+ * Online challenges (net.h's struct netchallengesetup): the room's choice.
+ * A challenge room is a Combat Simulator room whose rules bring the
+ * challenge lock with them: the host runs the offline challenge machine at
+ * its own start of the match (challengeApply() writes its g_MpSetup, locks
+ * it and teams, src/game/challenge.c), RULES then carry that setup like any
+ * other match, and the host keeps the setup the room plays from until the
+ * room ends - which is why the host's own setup is put back by the restore
+ * below. g_NetCoopSetup's own (netcoop.c) stays off: a challenge is a match.
+ */
+struct netchallengesetup g_NetChallengeSetup = { 0, 0 };
+
+// The host's own setup as it stood before its room became a challenge's.
+// The challenge's config writes over g_MpSetup and the simulants for the
+// room's whole life (the host launches every match of it from them, and the
+// preview shows them), and netRulesRestore can only give back what the match
+// started with - the config. This is the one copy of what was before.
+static struct mpsetup s_ChallengeOwnSetup;
+static struct mpbotconfig s_ChallengeOwnBots[MAX_BOTS];
+static s32 s_ChallengeOwnLock;
+static s32 s_ChallengeOwnKept;
+
+void netChallengeSetupSnapshot(void)
+{
+	if (s_ChallengeOwnKept) {
+		return; // the room is already a challenge's: keep the first own copy
+	}
+
+	memcpy(&s_ChallengeOwnSetup, &g_MpSetup, sizeof(s_ChallengeOwnSetup));
+	memcpy(s_ChallengeOwnBots, g_BotConfigsArray, sizeof(s_ChallengeOwnBots));
+	s_ChallengeOwnLock = g_BossFile.locktype;
+	s_ChallengeOwnKept = 1;
+}
+
+void netChallengeSetupRestore(void)
+{
+	if (!s_ChallengeOwnKept) {
+		return;
+	}
+
+	memcpy(&g_MpSetup, &s_ChallengeOwnSetup, sizeof(g_MpSetup));
+	memcpy(g_BotConfigsArray, s_ChallengeOwnBots, sizeof(g_BotConfigsArray));
+	g_BossFile.locktype = s_ChallengeOwnLock;
+	g_MpChallengeIndex = 0;
+	g_MpCurrentChallengeConfig = NULL;
+	s_ChallengeOwnKept = 0;
+	sysLogPrintf(LOG_NOTE, "lobby: the host's own setup and lock are back from the challenge room's");
+}
+
 /**
  * Out of the room: the lobby is told (on the action thread), the poll
  * stops, and the room's session closes once no match is on the stage
@@ -3084,6 +3169,11 @@ void netLobbyLeave(void)
 
 	s_CreateMaxHumans = 0;
 	netCoopCampaignEnd();
+	// a challenge room's: the host's own setup and lock, over which the
+	// room's challenge config had written, and the room's word itself
+	// (a client's came from its RULES; both are this room's only)
+	g_NetChallengeSetup.on = 0;
+	netChallengeSetupRestore();
 
 	// LAN or Direct Connect: a host's room closes, a member's connection
 	// ends, with the session (below)

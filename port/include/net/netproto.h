@@ -230,7 +230,23 @@
 //    (WEAPON_RAILLASER, MPWEAPON_RAILLASER). It is appended, so every row
 //    below it keeps its number and only the tail of the array is new, but the
 //    blob is a different length, which is what a peer reads first.
-#define NET_PROTOCOL_VERSION 36
+// 37 (challenges in the online lobby): RULES gains u8 challengeon and u16
+//    challengeindex after the scenario bits - the room plays a multiplayer
+//    Challenge Mode run: the host applied the challenge's config and its
+//    lock (challengeApply, src/game/challenge.c) at the match's own start,
+//    and the field tells a client its locktype is the challenge's too (its
+//    challenge HUD, the scenario's own score-limit maths, and the end
+//    screen's judgement all read the locktype). MATCH_END gains u8 challenge
+//    (bit 0: the host judged it complete; bit 1: the room played it to the
+//    end screen at all) and u16 challengeindex after the scenario block:
+//    the host is the sole judge (its own players are the only ones its
+//    abort check can see, and its cheat banks its own), every machine
+//    adds its own abort and cheat view before marking, and every machine
+//    marks its own profile's record - the machine's first player's slot,
+//    numplayers clamped to the stock four (CLAUDE-notes/save-format.md
+//    "Challenge records"). The lobby's room settings gain "challenge":N
+//    for the room list.
+#define NET_PROTOCOL_VERSION 37
 
 #define NETMSG_CONNECT    1
 #define NETMSG_ACCEPT     2
@@ -447,6 +463,13 @@
  *                                 slot 4+k (chrslots keeps bits 0-3 humans,
  *                                 4-11 sims: the ROM/save layout)
  *   u32     scenario save bits    scenarioWriteSave()'s 32
+ *   u8      challengeon           (protocol 37) 1: the room plays a
+ *                                 multiplayer Challenge Mode run; the host
+ *                                 applied its config and lock before H1, so
+ *                                 everything above is the challenge's setup
+ *   u16     challengeindex        the challenge in g_MpChallenges (its
+ *                                 config is what the setup above came from;
+ *                                 its number marks the record)
  *   s32     weaponsetnum          g_MpWeaponSetNum
  *   str(17) weaponsetname         (protocol 34) the host's own name for it,
  *                                 "" when it is one of the game's sets
@@ -735,6 +758,23 @@
  *   u16     scenlen               NETSCEN_SIZE (protocol 7)
  *   bytes   scenario              the host's scenario block at the end (the
  *                                 SNAP block below), applied with the table
+ *   u8      challenge             (protocol 37) the host's verdict on a
+ *                                 challenge room's match: bit 0, the
+ *                                 challenge won - none of the players the
+ *                                 host can see aborted and team 0 is on
+ *                                 top (challengeIsCompleteForEndscreen,
+ *                                 the stock offline judgement), and the
+ *                                 host's cheat banks are zero (each
+ *                                 machine adds its own abort and cheat
+ *                                 view before it marks); bit 1, the room
+ *                                 played a challenge to this end screen at
+ *                                 all (the record's numplayers tier is the
+ *                                 numplayers above, clamped to the stock
+ *                                 four). Every machine marks its own
+ *                                 profile's record for the machine's first
+ *                                 player from this; a machine that dropped
+ *                                 before it hears the verdict marks nothing
+ *   u16     challengeindex        the challenge it judged, as RULES brought
  *
  * LOBBY (client -> host) - the client's match stage has stopped (its H12,
  * past its end screen) and it is back in the menus. The host sends RULES and

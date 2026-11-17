@@ -172,6 +172,8 @@ struct netrulesmsg {
 	u16 humanslotshi; // protocol 10: human slots 4-11 (g_MpHumanSlotsHi)
 	u8 weapons[NUM_MPWEAPONSLOTS];
 	u32 scenariobits;
+	u8 challengeon;               // protocol 37: a challenge room's match (net.h)
+	u16 challengeindex;
 	s32 weaponsetnum;
 	// protocol 34: the host's own name for that set, when it saved one. The
 	// number means nothing to a client whose list differs (netproto.h)
@@ -1026,6 +1028,12 @@ void netRulesWrite(struct netbuf *b, u32 matchid)
 	sb.bitpos = 0;
 	netBufWriteU32(b, (u32)savebufferReadBits(&sb, 32));
 
+	// a challenge room (protocol 37, net.h): the host applied the challenge's
+	// config above, so everything written before this line is its setup, and
+	// the pair tells the client its locktype and challenge HUD to match
+	netBufWriteU8(b, g_NetChallengeSetup.on ? 1 : 0);
+	netBufWriteU16(b, (u16) (g_NetChallengeSetup.on ? g_MpChallengeIndex : 0));
+
 	netBufWriteS32(b, g_MpWeaponSetNum);
 
 	// the name the player typed, not the row's CX: mark (mpweaponsets.c): a
@@ -1190,6 +1198,8 @@ s32 netRulesRead(struct netbuf *b)
 	}
 
 	s_NetRules.scenariobits = netBufReadU32(b);
+	s_NetRules.challengeon = netBufReadU8(b) ? 1 : 0;
+	s_NetRules.challengeindex = netBufReadU16(b);
 	s_NetRules.weaponsetnum = netBufReadS32(b);
 	netBufReadString(b, s_NetRules.weaponsetname, sizeof(s_NetRules.weaponsetname));
 	netTextPrintable(s_NetRules.weaponsetname, 1); // the font trusts this string
@@ -1299,7 +1309,8 @@ s32 netRulesRead(struct netbuf *b)
 	s_NetRules.cheats[0] = netBufReadU32(b);
 	s_NetRules.cheats[1] = netBufReadU32(b);
 
-	if (s_NetRules.scenario >= NUM_MPSCENARIOS || s_NetRules.timelimit > 60 || s_NetRules.scorelimit > 100) {
+	if (s_NetRules.scenario >= NUM_MPSCENARIOS || s_NetRules.timelimit > 60 || s_NetRules.scorelimit > 100
+			|| (s_NetRules.challengeon && s_NetRules.challengeindex >= (u16) ARRAYCOUNT(g_MpChallenges))) {
 		b->error = 1;
 	}
 
@@ -1641,8 +1652,22 @@ static void netRulesPut(const struct netrulesmsg *rules, s32 coop)
 		g_MaxExplosionsSetting = rules->maxexplosions;
 	}
 
-	// a challenge is never marked complete from a net match
-	if (g_BossFile.locktype == MPLOCKTYPE_CHALLENGE) {
+	// protocol 37: a challenge room. The client plays the match the host's
+	// challengeApply configured - RULES above carry that setup - so its
+	// locktype is the challenge's too: the challenge HUD's name line, the
+	// scenario's own challenge score-limit maths (mpCalculateTeamScoreLimit)
+	// and the end screen's Completed/Cheated/Failed dialog all read it. The
+	// room state goes to g_NetChallengeSetup as well, so a host this
+	// machine migrates to keeps running the room's challenge (netmigrate.c)
+	if (rules->challengeon) {
+		g_MpChallengeIndex = rules->challengeindex;
+		g_BossFile.locktype = MPLOCKTYPE_CHALLENGE;
+		g_NetChallengeSetup.on = 1;
+		g_NetChallengeSetup.index = rules->challengeindex;
+		sysLogPrintf(LOG_NOTE, "net: the room's challenge: %s", challengeGetName(g_MpChallengeIndex));
+	} else if (g_BossFile.locktype == MPLOCKTYPE_CHALLENGE) {
+		// the offline Challenge Mode's lock, left on this machine's setup by
+		// its own Advanced Setup play: it is not this room's match's
 		g_BossFile.locktype = MPLOCKTYPE_NONE;
 	}
 
@@ -1868,6 +1893,24 @@ void netRulesKeptForget(void)
 const struct netcooprules *netRulesKeptCoop(void)
 {
 	return s_Kept.valid && s_Kept.coop.on ? &s_Kept.coop : NULL;
+}
+
+// The kept match's challenge (protocol 37): a room that migrated over a
+// challenge match carries on as a challenge room, as its mission does
+// (netmigrate.c). No snapshot comes with it: the new host's own setup is
+// the adopted RULES', and netRulesAdoptEnd gives its own back (netrules.c),
+// so netChallengeSetupRestore has nothing of that machine's own to keep
+s32 netRulesKeptChallenge(s32 *index)
+{
+	if (!s_Kept.valid || !s_Kept.challengeon) {
+		return 0;
+	}
+
+	if (index) {
+		*index = s_Kept.challengeindex;
+	}
+
+	return 1;
 }
 
 // The kept match's content: the mod and the ROM hack mode it was played in

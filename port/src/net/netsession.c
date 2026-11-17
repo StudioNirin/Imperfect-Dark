@@ -277,8 +277,17 @@ static struct {
 	s16 numdeaths[MAX_MPCHRS];
 	s16 numpoints[MAX_MPCHRS];
 	s16 killcounts[MAX_MPCHRS][MAX_MPCHRS];
+	u8 challenge;                 // protocol 37: bit 0 the host judged it won, bit 1 the room played it
+	u16 challengeindex;           // which one it judged
 } s_End;
 static u8 s_EndScen[NETSCEN_SIZE]; // MATCH_END's scenario block (protocol 7)
+
+// protocol 37: the host's challenge verdict, worked out at mpEndMatch for
+// the MATCH_END below (netChallengeMatchEnded); s_MatchHumans is the
+// match's human count as H1 settled it, the record's numplayers tier
+static u8 s_ChallengeWon;
+static u8 s_ChallengePresent;
+static s32 s_MatchHumans;
 
 // harness
 static s32 s_TestHost = 0;    // --net-test-host N: start the match once N have joined
@@ -1795,9 +1804,11 @@ s32 netHostMatchStarting(s32 stagenum, s32 numplayers)
 		}
 	}
 
-	// a challenge is never marked complete from a match with remote players
-	// (the lock comes back at H12)
-	if ((bits & ~1) && g_BossFile.locktype == MPLOCKTYPE_CHALLENGE) {
+	// a challenge lock the host's own game put on (the offline Challenge
+	// Mode, or an old room's) is not this net match's, unless the room is
+	// itself a challenge room - then it stays on through the match for the
+	// host's own end screen to judge from (protocol 37)
+	if ((bits & ~1) && g_BossFile.locktype == MPLOCKTYPE_CHALLENGE && !g_NetChallengeSetup.on) {
 		sysLogPrintf(LOG_NOTE, "net: the challenge lock is off for this net match");
 		g_BossFile.locktype = MPLOCKTYPE_NONE;
 	}
@@ -1808,6 +1819,10 @@ s32 netHostMatchStarting(s32 stagenum, s32 numplayers)
 			numplayers++;
 		}
 	}
+
+	s_MatchHumans = numplayers;
+	s_ChallengePresent = 0;
+	s_ChallengeWon = 0;
 
 	netTestOwnOptions();
 	netPlayersHostMatchStart();
@@ -2784,6 +2799,125 @@ static void netHostOwnNameBack(void)
 }
 
 /**
+ * H9, from mpEndMatch while the locktype is still the challenge's, both
+ * roles (src/game/mplayer/mplayer.c; netproto.h protocol 37): the room's
+ * challenge gets judged and marked.
+ *
+ * The host is the sole judge. challengeIsCompleteForEndscreen() reads this
+ * machine's players' abort flags and the team rankings, and a remote
+ * player's abort never reaches the host - a client that quits simply
+ * leaves, and is then not present to mark anything anyway - and the cheat
+ * check is the offline one's (g_CheatsActiveBank0/1,
+ * challengeConsiderMarkingComplete) which on either side can only see this
+ * machine. So the verdict carries the host's view, and each machine adds
+ * its own abort and cheat view before it marks (a cheat on any one machine
+ * keeps that one machine's record clean of it).
+ *
+ * Marking is this machine's first player's slot, and its tier the match's
+ * human count clamped to the stock four: completions[] is a u8 per tier
+ * with bit 0 "any player" and player p at 2 << p, so a slot past the
+ * fourth falls out of the byte onto the tier above it
+ * (CLAUDE-notes/save-format.md "Challenge records") - a net room's mpindex
+ * can be 11, where the offline loop would corrupt the table. The gamefile
+ * save that follows every net match end takes the tick to disk with it.
+ */
+void netChallengeMatchEnded(void)
+{
+	s32 tier;
+	s32 i;
+
+	if (netIsClient()) {
+		// the host's verdict, which this machine's stage waited for to end
+		// at all (netSessionTickBegin): no s_End, no verdict, no mark
+		if (!s_End.valid || !(s_End.challenge & 2)) {
+			return;
+		}
+
+		if (!(s_End.challenge & 1) || g_CheatsActiveBank0 || g_CheatsActiveBank1) {
+			sysLogPrintf(LOG_NOTE, "net: challenge %d: this machine marks nothing: %s",
+					s_End.challengeindex,
+					(g_CheatsActiveBank0 || g_CheatsActiveBank1) ? "it cheated" : "the host's verdict says lost");
+			return;
+		}
+
+		for (i = 0; i < PLAYERCOUNT(); i++) {
+			if (g_Vars.players[i]->aborted) {
+				sysLogPrintf(LOG_NOTE, "net: the host won the room's challenge, but this machine aborted: no mark");
+				return;
+			}
+		}
+
+		tier = s_End.numplayers;
+
+		if (s_End.challengeindex < (u16) ARRAYCOUNT(g_MpChallenges)) {
+			if (tier < 1) {
+				tier = 1;
+			}
+
+			if (tier > MAX_LOCAL_PLAYERS) {
+				tier = MAX_LOCAL_PLAYERS;
+			}
+
+			challengeSetCompletedByAnyPlayerWithNumPlayers(s_End.challengeindex, tier, true);
+			challengeSetCompletedByPlayerWithNumPlayers(0, s_End.challengeindex, tier, true);
+			sysLogPrintf(LOG_NOTE, "net: challenge %d: the host's verdict marked this machine's record at %d players, completions[%d] now %d",
+					s_End.challengeindex, tier, tier - 1, g_MpChallenges[s_End.challengeindex].completions[tier - 1]);
+		}
+
+		return;
+	}
+
+	if (!g_NetChallengeSetup.on) {
+		return;
+	}
+
+	s_ChallengePresent = 1;
+
+	// gate staging for a debugger-less run (tools/ci/netchallengetest.sh):
+	// the verdict's inputs stood in for, as the gate's case names say - an
+	// aborting player, a cheat used, a fuller room than the pair running
+	if (sysArgGetInt("--net-test-challenge-abort", 0) && PLAYERCOUNT() > 0) {
+		g_Vars.players[0]->aborted = 1;
+	}
+
+	if (sysArgGetInt("--net-test-challenge-cheat", 0)) {
+		g_CheatsActiveBank0 |= 1;
+	}
+
+	if (sysArgGetInt("--net-test-challenge-players", 0) > 0) {
+		s_MatchHumans = sysArgGetInt("--net-test-challenge-players", 0);
+	}
+
+	// the offline judgement: nobody this machine sees aborted, and team 0
+	// on top (challengeApply put every player on team 0, so a match the
+	// room simply finished is won; an abort loses it, as offline)
+	s_ChallengeWon = challengeIsCompleteForEndscreen() && !g_CheatsActiveBank0 && !g_CheatsActiveBank1;
+
+	tier = s_MatchHumans;
+
+	if (tier < 1) {
+		tier = 1;
+	}
+
+	if (tier > MAX_LOCAL_PLAYERS) {
+		tier = MAX_LOCAL_PLAYERS;
+	}
+
+	if (s_ChallengeWon) {
+		challengeSetCompletedByAnyPlayerWithNumPlayers(g_MpChallengeIndex, tier, true);
+		challengeSetCompletedByPlayerWithNumPlayers(0, g_MpChallengeIndex, tier, true);
+		// the host plays on its own unlock table, as offline; a client's
+		// stays the room's (the host's RULES) until its profile next loads
+		challengeDetermineUnlockedFeatures();
+	}
+
+	sysLogPrintf(LOG_NOTE, "net: challenge %d (%s): %s at %d players%s, completions[%d] now %d", g_MpChallengeIndex,
+			challengeGetName(g_MpChallengeIndex), s_ChallengeWon ? "won" : "not won", tier,
+			(g_CheatsActiveBank0 || g_CheatsActiveBank1) ? ", the host cheated" : "",
+			tier - 1, g_MpChallenges[g_MpChallengeIndex].completions[tier - 1]);
+}
+
+/**
  * H9, after mpEndMatch has worked out the awards: the clients end theirs on
  * the host's numbers
  */
@@ -2868,6 +3002,12 @@ void netHostMatchEnded(void)
 		netBufWriteU16(&b, NETSCEN_SIZE);
 		netBufWriteBytes(&b, scen, NETSCEN_SIZE);
 	}
+
+	// the challenge verdict (protocol 37): the host marked its own record
+	// at mpEndMatch; every other machine marks from this (bit 0 won, bit 1
+	// the room played a challenge at all)
+	netBufWriteU8(&b, (u8) ((s_ChallengePresent ? 2 : 0) | (s_ChallengeWon ? 1 : 0)));
+	netBufWriteU16(&b, (u16) g_MpChallengeIndex);
 
 	for (i = 0; i < NET_MAXPEERS; i++) {
 		// a client still loading too: it would otherwise wait at the barrier
@@ -3658,6 +3798,10 @@ static void netClientOnMatchEnd(struct netbuf *b)
 	} else {
 		netBufReadBytes(b, s_EndScen, NETSCEN_SIZE);
 	}
+
+	// the challenge verdict (protocol 37; netChallengeMatchEnded marks from it)
+	s_End.challenge = netBufReadU8(b);
+	s_End.challengeindex = netBufReadU16(b);
 
 	// the match this machine was still fetching a folder for is over: the
 	// STAGE_LOAD kept for it is dropped (loaded after the download it was a
@@ -4484,6 +4628,25 @@ static void netTestStartMatch(void)
 		}
 	}
 
+	// --net-test-challenge N: the room is a challenge room (protocol 37),
+	// playing g_MpChallenges entry N: the host snapshots its own setup as
+	// the lobby's Game row would (netlobby.c), and applies the challenge
+	// now, before the start writes it into RULES (tools/ci/netchallengetest.sh)
+	if (sysArgGetInt("--net-test-challenge", -1) >= 0) {
+		s32 ci = sysArgGetInt("--net-test-challenge", 0);
+
+		if (ci >= 0 && ci < ARRAYCOUNT(g_MpChallenges)) {
+			g_NetChallengeSetup.on = 1;
+			g_NetChallengeSetup.index = ci;
+			netChallengeSetupSnapshot();
+			g_MpChallengeIndex = ci;
+			challengeApply();
+			sysLogPrintf(LOG_NOTE, "net: --net-test-challenge: the room plays challenge %d: %s", ci, challengeGetName(ci));
+		} else {
+			sysLogPrintf(LOG_WARNING, "net: --net-test-challenge %d: no such challenge", ci);
+		}
+	}
+
 	mpStartMatch();
 	menuStop();
 }
@@ -4696,6 +4859,21 @@ void netSessionTick(void)
 void netSessionTickBegin(void)
 {
 	netHostSeatsTick();
+
+	// --net-test-end-frame N (host): end the match once the level has run
+	// N sixtieths, so a gate without a debugger (tools/ci/netchallengetest.sh)
+	// can end a match on a schedule. The barrier keeps the level's clock at
+	// 0 until every machine is in, so N counts from the match's own start
+	if (s_Role == NETROLE_HOST && s_MatchActive && !g_MainIsEndscreen) {
+		static s32 s_TestEnded = 0;
+		const s32 endframe = sysArgGetInt("--net-test-end-frame", 0);
+
+		if (!s_TestEnded && endframe > 0 && lvGetStageTime60() >= endframe) {
+			s_TestEnded = 1;
+			sysLogPrintf(LOG_NOTE, "net: --net-test-end-frame: ending the match at %d sixtieths", lvGetStageTime60());
+			mainEndStage();
+		}
+	}
 
 	if (s_EndPending && netSessionMatchActive() && !g_MainIsEndscreen) {
 		s_EndPending = 0;
@@ -6261,6 +6439,19 @@ void netSessionLobbyStartMatch(void)
 	}
 
 	sysLogPrintf(LOG_NOTE, "net: lobby: starting the room's match on 0x%02x, %d clients", g_MpSetup.stagenum, netSessionHostNumClients());
+
+	// a challenge room (net.h's struct netchallengesetup): the stock offline
+	// challenge machine now, as the menu's Accept does - its config writes
+	// over the room's setup, its lock comes on, and RULES below (H1) carry
+	// all of it. The host's own setup stays put in the snapshot (netlobby.c)
+	// until the room ends, which is why a challenge room hides the Combat
+	// Simulator's own pages (netlobbymenu.c)
+	if (g_NetChallengeSetup.on) {
+		g_MpChallengeIndex = g_NetChallengeSetup.index;
+		challengeApply();
+		sysLogPrintf(LOG_NOTE, "net: lobby: the room's challenge: %s", challengeGetName(g_MpChallengeIndex));
+	}
+
 	g_MpSetup.chrslots |= 1;
 	mpStartMatch();
 	menuStop();

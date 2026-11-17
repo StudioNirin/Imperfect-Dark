@@ -4594,6 +4594,13 @@ void mpEndMatch(void)
 	mpCalculateAwards();
 
 	if (g_BossFile.locktype == MPLOCKTYPE_CHALLENGE) {
+#ifndef PLATFORM_N64
+		// a challenge room: the host judges from its own full view and the
+		// verdict marks every machine (protocol 37); the offline marking
+		// loop must not run net - its per-player bits live in a byte with
+		// four players' room, and a net room's mpindex can be 11
+		if (g_NetMode != NETMODE_NONE) netChallengeMatchEnded(); else
+#endif
 		challengeConsiderMarkingComplete();
 	}
 

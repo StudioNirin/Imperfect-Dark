@@ -575,6 +575,8 @@ void netRulesSetLocked(s32 locked);
 s32 netRulesKeep(void);
 void netRulesKeptForget(void);
 const struct netcooprules *netRulesKeptCoop(void);
+// protocol 37: the kept match's challenge, for the room's new host
+s32 netRulesKeptChallenge(s32 *index);
 const struct netcontentneed *netRulesKeptContent(void);
 s32 netRulesAdopt(s32 swapslot);
 void netRulesAdoptEnd(void);

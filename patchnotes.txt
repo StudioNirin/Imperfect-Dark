@@ -40,6 +40,10 @@
 #
 # mod-base 69
 
+notes 91 2026-11-17
+Online: the single player's Multiplayer Challenges are playable online. A room's host picks one of their own completed challenges on the room's Settings page, the room then plays that challenge's arena with its rules, and anyone who completes it during the match has it ticked off in their own save. Host judged, so it counts wherever the host agrees you finished it.
+Instagib: the Options page opens instead of crashing the game the moment it comes up.
+
 notes 90 2026-11-14
 New gun: the Moonrailer. Hold the trigger for a second and a half and it fires itself - one shot, a Moonraker's beam, that kills at any range. As it fills it winds up and the gun builds red; let go early and the sound cuts out, the charge starts over from nothing, and no ammunition is spent. It holds one shot a magazine out of five, so it reloads after every shot, and it asks for the trigger again rather than firing twice to a press. At a full charge the shot lands deeper and longer than a quick one. Its charge is the Mauler's machinery, so the Mauler itself is untouched. It zooms like the AR34 on the aim button. It is in the multiplayer lists, the weapon wheel and the next-weapon cycle, and the Combat Simulator; no mission hands one out and no guard carries one. It is held two-handed like a rifle, and zooms like the AR34. Where you have the GoldenEye XBLA release installed it now wears that game's Moonraker in first person, and F6 switches between the two looks; without it, it wears Perfect Dark's Laser. First cut at that, so tell us if its size or its height in the view is off. Netplay protocol 36, so a match needs everyone on the same build.
 

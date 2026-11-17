@@ -267,6 +267,19 @@ s32 netMigrateAdopt(const char *room, s32 campaign, char *text, s32 textsize)
 		g_NetCoopSetup.anti = 0;
 	}
 
+	// a challenge room's match again as a challenge room (protocol 37), on
+	// the kept RULES' word alone - see netRulesKeptChallenge (netrules.c)
+	{
+		s32 cindex;
+
+		if (netRulesKeptChallenge(&cindex)) {
+			g_NetChallengeSetup.on = 1;
+			g_NetChallengeSetup.index = cindex;
+		} else {
+			g_NetChallengeSetup.on = 0;
+		}
+	}
+
 	netRulesAdopt(s_Kept.myslot >= 0 ? s_Kept.myslot : 0);
 
 	if (!coop) {
