@@ -109,7 +109,7 @@ struct menuitem g_InstaOptionsMenuItems[] = {
 	{
 		MENUITEMTYPE_SLIDER,
 		0,
-		MENUITEMFLAG_LOCKABLEMINOR,
+		MENUITEMFLAG_LOCKABLEMINOR | MENUITEMFLAG_LITERAL_TEXT,
 		(uintptr_t) "Charge Time\n",
 		0,
 		menuhandlerInstagibCharge,
