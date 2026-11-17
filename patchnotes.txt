@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 92 2026-11-17
+Instagib: opening its Options page went on crashing the game after all - properly mended now. The page's Charge Time row is gone entirely: Instagib sets its charge itself, and the page just holds the option checkboxes like the other modes'.
+
 notes 91 2026-11-17
 Online: the single player's Multiplayer Challenges are playable online. A room's host picks one of their own completed challenges on the room's Settings page, the room then plays that challenge's arena with its rules, and anyone who completes it during the match has it ticked off in their own save. Host judged, so it counts wherever the host agrees you finished it.
 Instagib: the Options page opens instead of crashing the game the moment it comes up.

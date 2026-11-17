@@ -23,39 +23,13 @@ extern struct menudialogdef g_ExtGameOptionsMenuDialog;
 
 /**
  * The charge time in 60ths of a second. Default is TICKS(90), the
- * Rail-Laser's own length; Instagib sets TICKS(6). Declared in
+ * Rail-Laser's own length; Instagib sets TICKS(6) at instaInit, which is
+ * the only hand on it - the mode's charge is its own business, not a
+ * setup row. (A setup or a host's rules that carry the scenario bits can
+ * still land a saved value on it, via instaReadSave.) Declared in
  * scenarios.c, and what raillaserCharge60() answers with.
  */
 extern s32 g_InstagibCharge60;
-
-MenuItemHandlerResult menuhandlerInstagibCharge(s32 operation, struct menuitem *item, union handlerdata *data)
-{
-	switch (operation) {
-	case MENUOP_GETSLIDER:
-		data->slider.value = g_InstagibCharge60;
-		break;
-	case MENUOP_SET:
-		// Five ticks is a third of a frame's breath shorter than the
-		// charge can be read at all, and four seconds stops being a
-		// charge and becomes a held trigger with a name on it.
-		if (data->slider.value < 5) {
-			data->slider.value = 5;
-		} else if (data->slider.value > 240) {
-			data->slider.value = 240;
-		}
-		g_InstagibCharge60 = data->slider.value;
-		break;
-	case MENUOP_GETSLIDERLABEL:
-		// Not L_MPWEAPONS_023's "%ds/point": this mode's default is half
-		// a second, and whole seconds would say "0s/point" for it. The
-		// dialog is literal text anyway - no language file names a mode
-		// the ROM never had.
-		sprintf(data->slider.label, "%.1fs/point\n", data->slider.value / 60.0f);
-		break;
-	}
-
-	return 0;
-}
 
 struct menuitem g_InstaOptionsMenuItems[] = {
 	{
@@ -105,14 +79,6 @@ struct menuitem g_InstaOptionsMenuItems[] = {
 		L_MPMENU_227, // "No Auto-Aim"
 		MPOPTION_NOAUTOAIM,
 		menuhandlerMpCheckboxOption,
-	},
-	{
-		MENUITEMTYPE_SLIDER,
-		0,
-		MENUITEMFLAG_LOCKABLEMINOR | MENUITEMFLAG_LITERAL_TEXT,
-		(uintptr_t) "Charge Time\n",
-		0,
-		menuhandlerInstagibCharge,
 	},
 	{
 		MENUITEMTYPE_SEPARATOR,
