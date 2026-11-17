@@ -8,12 +8,21 @@
 #include "audio.h"
 #include "mixer.h"
 #include "record.h"
+#include "sndfile.h"
 #include "system.h"
 #include "video.h"
 
 static SDL_AudioDeviceID dev;
 static const s16 *nextBuf;
 static u32 nextSize = 0;
+
+// A loose sound file mixed over the game's output (sndfile.c). The game's
+// buffer is its own, so the mix is copied into these and the copies are what
+// is queued and recorded.
+static s16 *shotMix = NULL;
+static u32 shotMixSize = 0;
+static s16 *shotRec = NULL;
+static u32 shotRecSize = 0;
 
 static s32 bufferSize = 512;
 static s32 queueLimit = 8192;
@@ -377,6 +386,33 @@ void audioEndFrame(void)
 				out = wideBuf;
 				outSize = nextSize * 3;
 				rec = recBuf;
+			}
+
+			// A loose sound file over the game's mix (sndfile.c). The game's
+			// buffer is its own, so the mix is copied and the copies are what
+			// is queued and recorded. The shot advances once, after both.
+			if (sndFileIsPlaying()) {
+				const u32 frames = nextSize / 4;
+
+				if (shotMixSize < outSize) {
+					shotMix = realloc(shotMix, outSize);
+					shotMixSize = outSize;
+				}
+
+				memcpy(shotMix, out, outSize);
+				sndFileMix(shotMix, frames, channels, sndFilePos());
+				out = shotMix;
+
+				if (shotRecSize < nextSize) {
+					shotRec = realloc(shotRec, nextSize);
+					shotRecSize = nextSize;
+				}
+
+				memcpy(shotRec, rec, nextSize);
+				sndFileMix(shotRec, frames, 2, sndFilePos());
+				rec = shotRec;
+
+				sndFileAdvance(frames);
 			}
 
 			// the speakers only: the recorder below still gets rec

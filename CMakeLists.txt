@@ -183,6 +183,26 @@ endif()
 message(STATUS "Patch notes: newest entry ${PATCHNOTES_NUMBER}")
 configure_file("${CMAKE_SOURCE_DIR}/port/include/patchnotesdata.h.in" "${CMAKE_BINARY_DIR}/port/include/patchnotesdata.h" @ONLY)
 
+# The title screen's cue (port/audio/title-screen.mp3; port/src/sndfile.c what
+# the game does with it). The build carries it inside the executable, so an
+# update - which replaces only the executable - brings a changed sound; a file
+# at data/sfx/title-screen.wav or .mp3 beside the game overrides it.
+#
+# Like the patch notes it is a configure dependency, so a changed sound is
+# picked up by the next build without `cmake -B build .` by hand.
+set(TITLE_AUDIO_FILE "${CMAKE_SOURCE_DIR}/port/audio/title-screen.mp3")
+set(TITLE_AUDIO_SIZE 0)
+set(TITLE_AUDIO_BYTES "")
+if(EXISTS "${TITLE_AUDIO_FILE}")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${TITLE_AUDIO_FILE}")
+  file(READ "${TITLE_AUDIO_FILE}" TITLE_AUDIO_HEX HEX)
+  string(LENGTH "${TITLE_AUDIO_HEX}" TITLE_AUDIO_HEXLEN)
+  math(EXPR TITLE_AUDIO_SIZE "${TITLE_AUDIO_HEXLEN} / 2")
+  string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," TITLE_AUDIO_BYTES "${TITLE_AUDIO_HEX}")
+endif()
+message(STATUS "Title sound: ${TITLE_AUDIO_SIZE} bytes")
+configure_file("${CMAKE_SOURCE_DIR}/port/include/titleaudiodata.h.in" "${CMAKE_BINARY_DIR}/port/include/titleaudiodata.h" @ONLY)
+
 set(ASSET_DIR "src/assets/${ROMID}")
 set(GENERATED_DIR "src/generated/${ROMID}")
 

@@ -32,12 +32,14 @@
 #include "types.h"
 #include "string.h"
 #ifndef PLATFORM_N64
+#include "system.h"
 #include "video.h"
 #include "update.h"
 #include "xblamesh.h"
 #include "game/zbuf.h"
 #include "romdata.h"
 #include "xbla4jintro.h"
+#include "sndfile.h"
 #endif
 
 #ifdef PLATFORM_N64
@@ -434,7 +436,7 @@ Gfx *titleRenderLegal(Gfx *gdl)
 					// it is the thing that changes colour rather than a
 					// message somewhere else - and the next start shows it in
 					// the ordinary blue with nothing to dismiss.
-					if (updateWasJustInstalled()) {
+					if (updateWasJustInstalled() || sysArgCheck("--title-sound")) {
 						static bool announced = false;
 
 						colour = 0xffd700ff;
@@ -445,7 +447,18 @@ Gfx *titleRenderLegal(Gfx *gdl)
 						// screen and the screen is drawn every frame.
 						if (!announced) {
 							announced = true;
-							sndStart(var80095200, SFX_M2_TARGET_SIGHTED, 0, -1, -1, -1.0f, -1, -1);
+
+							// The build's own title sound, or a file beside the
+							// game; the bank's cue when there is neither
+							// (sndfile.c). The N64 has no file, so there the
+							// bank's is all there is.
+#ifndef PLATFORM_N64
+							if (!sndIsDisabled() && !sndFilePlayCue("sfx/title-screen")) {
+#endif
+								sndStart(var80095200, SFX_M2_TARGET_SIGHTED, 0, -1, -1, -1.0f, -1, -1);
+#ifndef PLATFORM_N64
+							}
+#endif
 						}
 					}
 				} else if (elem->textid == L_OPTIONS_083) {
