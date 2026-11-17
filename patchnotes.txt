@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 93 2026-11-17
+Online Challenges: the challenge's own enemies and allies now turn up in the match, with the guns, arena and difficulty the challenge was built with. Before, the room played the arena but none of the sims spawned. Picking a challenge on the room's Settings page now shows what the challenge actually is instead of a note about records. The room's player count is used to tick off a completed challenge on every machine, so a challenge's sims can't make it count as more players than it was.
+
 notes 92 2026-11-17
 Instagib: opening its Options page went on crashing the game after all - properly mended now. The page's Charge Time row is gone entirely: Instagib sets its charge itself, and the page just holds the option checkboxes like the other modes'.
 

@@ -246,7 +246,12 @@
 //    numplayers clamped to the stock four (CLAUDE-notes/save-format.md
 //    "Challenge records"). The lobby's room settings gain "challenge":N
 //    for the room list.
-#define NET_PROTOCOL_VERSION 37
+// 38 (challenge record tiers): MATCH_END gains u8 challengehumans after the
+//    challenge index - the match's human count, which is the record's numplayers
+//    tier. It was PLAYERCOUNT() on the client, which counts a challenge's own
+//    simulants as players once those spawn, so a host and client could tick
+//    different tiers for the same win.
+#define NET_PROTOCOL_VERSION 38
 
 #define NETMSG_CONNECT    1
 #define NETMSG_ACCEPT     2
@@ -768,13 +773,17 @@
  *                                 machine adds its own abort and cheat
  *                                 view before it marks); bit 1, the room
  *                                 played a challenge to this end screen at
- *                                 all (the record's numplayers tier is the
- *                                 numplayers above, clamped to the stock
- *                                 four). Every machine marks its own
+ *                                 all. Every machine marks its own
  *                                 profile's record for the machine's first
  *                                 player from this; a machine that dropped
  *                                 before it hears the verdict marks nothing
  *   u16     challengeindex        the challenge it judged, as RULES brought
+ *   u8      challengehumans       (protocol 38) the match's human count - the
+ *                                 record's numplayers tier, clamped to the
+ *                                 stock four. Not numplayers above: a
+ *                                 challenge's own sims are players in
+ *                                 PLAYERCOUNT(), which would tick a higher
+ *                                 tier than the host's human count
  *
  * LOBBY (client -> host) - the client's match stage has stopped (its H12,
  * past its end screen) and it is back in the menus. The host sends RULES and

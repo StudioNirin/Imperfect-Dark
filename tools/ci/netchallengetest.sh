@@ -1,5 +1,5 @@
 #!/bin/bash
-# netchallengetest.sh — challenges in the online lobby (netproto.h protocol 37,
+# netchallengetest.sh — challenges in the online lobby (netproto.h protocol 38,
 # net.h's struct netchallengesetup): a challenge room's host pair, run through
 # the test session's own start (--net-test-challenge N) so the wire is what
 # the lobby's Launch would put on it.
@@ -27,9 +27,14 @@
 #            and the client marks nothing - its copy of the verdict says lost
 #   cheated  the host's cheat bank used: lost for everyone - the host's own
 #            record and the client's both stay clean
-#   clamped  the match counted 6 humans: the host's tick lands on the stock
-#            four-player tier, completions[3] not [5]; the client ticks the
-#            tier it really saw (the clamp only bites at 5 or more)
+#   clamped  the match counted 6 humans: the host's and the client's ticks both
+#            land on the stock four-player tier, completions[3] not [5]; the
+#            human count travels in MATCH_END so a challenge's sims (players
+#            in PLAYERCOUNT) cannot inflate the client's tier
+#   sims     a challenge with built-in simulants (entry 14, eight in its ROM
+#            config): the host turns on those the difficulty table enables
+#            for two humans, so the match plays with allies and enemies - the
+#            offline sanity check the net path otherwise never ran
 #   plain    no --net-test-challenge: MATCH_END's challenge block reads 0,
 #            nothing marks (the wire grew three bytes; a match with no
 #            challenge must not notice)
@@ -43,7 +48,7 @@ set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 BUILD=${BUILD:-$ROOT/build}
 OUT=${OUT:-$BUILD/netchallenge-out}; PORT=${PORT:-27700}
-CASES=${CASES:-won notwon cheated clamped plain}
+CASES=${CASES:-won notwon cheated clamped sims plain}
 BIN=${1:-pd.x86_64}
 case $BIN in /*) ;; */*) BIN=$(realpath "$BIN") ;; *) BIN=$BUILD/$BIN ;; esac
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
@@ -147,7 +152,22 @@ cheated)
 clamped)
 	run_case clamped --net-test-challenge 0 --net-test-challenge-players 6
 	check "$H" "net: challenge 0 \(.*\): won at 4 players, completions\[3\] now 3$" "clamped: six humans took the four-player tier"
-	check "$C" "net: challenge 0: the host's verdict marked this machine's record at 2 players, completions\[1\] now 3$" "clamped: the client ticked the tier it saw"
+	check "$C" "net: challenge 0: the host's verdict marked this machine's record at 4 players, completions\[3\] now 3$" "clamped: the client ticked the same human tier, not its sim-inflated player count"
+	;;
+sims)
+	run_case sims --net-test-challenge 14
+	check "$H" "net: the room's challenge 14: [1-9][0-9]* sims on for 2 human players$" \
+		"sims: the challenge's ROM sims are on for the match"
+	# challenge 14's config is MPCONFIG_CHALLENGE15, stage 0x47 - not the
+	# 0x32 the --net-test-host arg asked for: the challenge's own arena wins
+	check "$H" "net: match 1 starting on stage 0x47," \
+		"sims: the challenge's own stage, not the test arg's, was played"
+	check "$C" "net: match 1: loading .*stage 0x47" \
+		"sims: the client loaded the challenge's own stage"
+	check "$H" "net: challenge 14 \(.*\): won at 2 players, completions\[1\] now 3$" \
+		"sims: the host won with the challenge's sims present"
+	check "$C" "net: challenge 14: the host's verdict marked this machine's record at 2 players, completions\[1\] now 3$" \
+		"sims: the client marked the human tier, not its sim-inflated player count"
 	;;
 plain)
 	run_case plain
@@ -166,5 +186,15 @@ plain)
 	echo "no such case $c"; exit 2;;
 esac
 done
+
+# The confirm dialog's text is a UI string (no screenshot on this box, gdb
+# attach is blocked), so pin its source: the picker shows the chosen challenge's
+# own description, not boilerplate, through challengeLoad + its config.
+if grep -q 'challengeGetConfigDescription(cfg)' "$ROOT/port/src/netlobbymenu.c" \
+		&& grep -q 'challengeLoad(s_ChallengePickIndex' "$ROOT/port/src/netlobbymenu.c"; then
+	pass "picker: the confirm dialog shows the challenge's own description"
+else
+	fail "picker: the confirm dialog does not show the challenge's description"
+fi
 
 exit $status

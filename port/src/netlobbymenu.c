@@ -3298,11 +3298,18 @@ static MenuItemHandlerResult handlerChallengeSelect(s32 operation, struct menuit
 
 static char *netChallengePickText(struct menuitem *item)
 {
-	static char text[160];
+	// a description is 200 chars plus the name - keep the whole thing
+	static char text[260];
+	static u8 cfgbuf[0x1ca];
+	struct mpconfigfull *cfg;
 
 	if (s_ChallengePickIndex >= 0) {
-		snprintf(text, sizeof(text), "%s\nEveryone in the room plays it.\nA machine's own record ticks\nwhen the room wins it.",
-				challengeGetName(s_ChallengePickIndex));
+		// the stock confirm page shows the challenge's own description
+		// (menuitem.c's DESCRIPTION_MPCONFIG); show the same one here, not
+		// boilerplate about the room, so the host knows what it is picking
+		cfg = challengeLoad(s_ChallengePickIndex, cfgbuf, sizeof(cfgbuf));
+		snprintf(text, sizeof(text), "%s\n%s", challengeGetName(s_ChallengePickIndex),
+				cfg ? challengeGetConfigDescription(cfg) : "");
 	} else {
 		snprintf(text, sizeof(text), "No challenge there.");
 	}

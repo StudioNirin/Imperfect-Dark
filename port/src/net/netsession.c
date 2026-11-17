@@ -279,6 +279,7 @@ static struct {
 	s16 killcounts[MAX_MPCHRS][MAX_MPCHRS];
 	u8 challenge;                 // protocol 37: bit 0 the host judged it won, bit 1 the room played it
 	u16 challengeindex;           // which one it judged
+	u8 challengehumans;           // protocol 38: the match's human count, the record's tier - not PLAYERCOUNT() (sims)
 } s_End;
 static u8 s_EndScen[NETSCEN_SIZE]; // MATCH_END's scenario block (protocol 7)
 
@@ -1824,6 +1825,17 @@ s32 netHostMatchStarting(s32 stagenum, s32 numplayers)
 	s_ChallengePresent = 0;
 	s_ChallengeWon = 0;
 
+	// a challenge's sims are not in its chrslots: they come from the difficulty
+	// table challengeApply() loaded at this match's start. Offline, the setup
+	// menus turn them on (challengePerformSanityChecks); a net match has no such
+	// tick, so do it here with the match's human count, before RULES below carry
+	// the sims to the clients
+	if (g_NetChallengeSetup.on) {
+		challengeSetSimulantsForNumPlayers(numplayers);
+		sysLogPrintf(LOG_NOTE, "net: the room's challenge %d: %d sims on for %d human players",
+				g_NetChallengeSetup.index, mpGetNumSimSlotsOn(), numplayers);
+	}
+
 	netTestOwnOptions();
 	netPlayersHostMatchStart();
 
@@ -2847,7 +2859,10 @@ void netChallengeMatchEnded(void)
 			}
 		}
 
-		tier = s_End.numplayers;
+		// the record's tier is the human count, not PLAYERCOUNT(): a
+		// challenge's own sims are players on each machine (protocol 38), so
+		// numplayers would tick a higher tier than the host did
+		tier = s_End.challengehumans ? s_End.challengehumans : s_End.numplayers;
 
 		if (s_End.challengeindex < (u16) ARRAYCOUNT(g_MpChallenges)) {
 			if (tier < 1) {
@@ -3008,6 +3023,9 @@ void netHostMatchEnded(void)
 	// the room played a challenge at all)
 	netBufWriteU8(&b, (u8) ((s_ChallengePresent ? 2 : 0) | (s_ChallengeWon ? 1 : 0)));
 	netBufWriteU16(&b, (u16) g_MpChallengeIndex);
+	// the record's tier is the match's human count (protocol 38): a challenge's
+	// sims are players, so PLAYERCOUNT() would give clients a higher tier
+	netBufWriteU8(&b, (u8) (s_MatchHumans < 1 ? 1 : s_MatchHumans));
 
 	for (i = 0; i < NET_MAXPEERS; i++) {
 		// a client still loading too: it would otherwise wait at the barrier
@@ -3799,9 +3817,10 @@ static void netClientOnMatchEnd(struct netbuf *b)
 		netBufReadBytes(b, s_EndScen, NETSCEN_SIZE);
 	}
 
-	// the challenge verdict (protocol 37; netChallengeMatchEnded marks from it)
+	// the challenge verdict (protocol 37, humans 38; netChallengeMatchEnded marks from it)
 	s_End.challenge = netBufReadU8(b);
 	s_End.challengeindex = netBufReadU16(b);
+	s_End.challengehumans = netBufReadU8(b);
 
 	// the match this machine was still fetching a folder for is over: the
 	// STAGE_LOAD kept for it is dropped (loaded after the download it was a

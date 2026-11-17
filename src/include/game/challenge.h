@@ -20,6 +20,8 @@ void challengeForceUnlockConfigFeatures(struct mpconfig *config, u8 *array, s32 
 void challengeForceUnlockBotFeatures(void);
 void challengeForceUnlockOneFeature(s32 featurenum);
 void challengeApply(void);
+// Turn a challenge's ROM-defined simulants on for a match with numplayers humans. A net match's start calls this with the room's human count, as the offline setup menus do through challengePerformSanityChecks.
+void challengeSetSimulantsForNumPlayers(s32 numplayers);
 char *challengeGetCurrentDescription(void);
 char *challengeGetConfigDescription(struct mpconfigfull *mpconfig);
 bool challengeIsCompleteForEndscreen(void);

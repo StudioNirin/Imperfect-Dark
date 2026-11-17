@@ -246,6 +246,41 @@ void challengeDetermineUnlockedFeatures(void)
 	}
 }
 
+/**
+ * Turn a challenge's own simulants on for a match with numplayers humans.
+ *
+ * A challenge's ROM config has chrslots 0x0000: its simulants (allies and
+ * enemies alike) and their per-player-count difficulties live in
+ * config.simulants[], which challengeApply() loaded into
+ * g_MpSimulantDifficultiesPerNumPlayers. The offline setup reaches this through
+ * challengePerformSanityChecks() at menu time. A net match has no such tick, so
+ * its start calls this with the room's human count - before H1 writes the sims
+ * into RULES for the clients (netsession.c).
+ */
+void challengeSetSimulantsForNumPlayers(s32 numplayers)
+{
+	s32 i;
+
+	if (numplayers < 1) {
+		numplayers = 1;
+	}
+
+	if (numplayers > MAX_LOCAL_PLAYERS) {
+		numplayers = MAX_LOCAL_PLAYERS;
+	}
+
+	mpClearSimSlots();
+
+	// Challenges are ROM-defined and only describe MAX_BOTS_CONFIG simulants.
+	for (i = 0; i < MAX_BOTS_CONFIG; i++) {
+		g_BotConfigsArray[i].difficulty = g_MpSimulantDifficultiesPerNumPlayers[i][numplayers - 1];
+
+		if (g_BotConfigsArray[i].difficulty != BOTDIFF_DISABLED) {
+			mpSetSimSlotOn(i, true);
+		}
+	}
+}
+
 void challengePerformSanityChecks(void)
 {
 	if (g_BossFile.locktype == MPLOCKTYPE_CHALLENGE) {
@@ -263,16 +298,7 @@ void challengePerformSanityChecks(void)
 		// Turn off all simulants and turn them on if enabled
 		// for this number of players
 		g_MpSetup.chrslots &= 0x000f;
-		mpClearSimSlots();
-
-		// Challenges are ROM-defined and only describe MAX_BOTS_CONFIG simulants.
-		for (i = 0; i < MAX_BOTS_CONFIG; i++) {
-			g_BotConfigsArray[i].difficulty = g_MpSimulantDifficultiesPerNumPlayers[i][numplayers - 1];
-
-			if (g_BotConfigsArray[i].difficulty != BOTDIFF_DISABLED) {
-				mpSetSimSlotOn(i, true);
-			}
-		}
+		challengeSetSimulantsForNumPlayers(numplayers);
 
 		if (g_MpSetup.scenario == MPSCENARIO_KINGOFTHEHILL) {
 			g_Vars.mphilltime = 10;

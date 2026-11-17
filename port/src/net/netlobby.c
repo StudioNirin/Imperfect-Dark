@@ -3124,6 +3124,7 @@ struct netchallengesetup g_NetChallengeSetup = { 0, 0 };
 // started with - the config. This is the one copy of what was before.
 static struct mpsetup s_ChallengeOwnSetup;
 static struct mpbotconfig s_ChallengeOwnBots[MAX_BOTS];
+static u8 s_ChallengeOwnSimSlots[MAX_BOTS];
 static s32 s_ChallengeOwnLock;
 static s32 s_ChallengeOwnKept;
 
@@ -3135,6 +3136,7 @@ void netChallengeSetupSnapshot(void)
 
 	memcpy(&s_ChallengeOwnSetup, &g_MpSetup, sizeof(s_ChallengeOwnSetup));
 	memcpy(s_ChallengeOwnBots, g_BotConfigsArray, sizeof(s_ChallengeOwnBots));
+	memcpy(s_ChallengeOwnSimSlots, g_MpSimSlots, sizeof(s_ChallengeOwnSimSlots));
 	s_ChallengeOwnLock = g_BossFile.locktype;
 	s_ChallengeOwnKept = 1;
 }
@@ -3147,6 +3149,7 @@ void netChallengeSetupRestore(void)
 
 	memcpy(&g_MpSetup, &s_ChallengeOwnSetup, sizeof(g_MpSetup));
 	memcpy(g_BotConfigsArray, s_ChallengeOwnBots, sizeof(g_BotConfigsArray));
+	memcpy(g_MpSimSlots, s_ChallengeOwnSimSlots, sizeof(g_MpSimSlots));
 	g_BossFile.locktype = s_ChallengeOwnLock;
 	g_MpChallengeIndex = 0;
 	g_MpCurrentChallengeConfig = NULL;
