@@ -22,6 +22,14 @@ Combat Simulator's "Challenges+" menu row (setup.c) and carried in net RULES
 completion get/set APIs route through it. Names for Plus are generated
 ("Challenge+ N"), so no new language strings were added.
 
+Both the online picker and the offline entry lists show a right-column
+description that follows the highlighted row, and select a challenge on a
+single click - there is no confirm popup; Back (B/Escape) leaves without
+changing the selection. The offline lists share `g_MpChallengesMenuItems`
+and `mpChallengesEntryListHandler` (setup.c); the online picker has the
+equivalent in netlobbymenu.c. The offline Plus handler must set mode 1 AFTER
+calling the stock OPEN handler, which resets mode to 0.
+
 ## Save format
 
 `gamefile.c` writes the stock completion bits as before, then appends a second

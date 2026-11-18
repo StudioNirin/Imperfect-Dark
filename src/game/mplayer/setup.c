@@ -7794,6 +7794,9 @@ MenuItemHandlerResult menuhandlerMpStartChallenge(s32 operation, struct menuitem
 	return 0;
 }
 
+// The buffer behind the right-column description of the two entry lists.
+static u8 s_MpChallengeDescCfg[0x1ca];
+
 char *mpMenuTextChallengeName(struct menuitem *item)
 {
 #if VERSION >= VERSION_NTSC_1_0
@@ -7809,8 +7812,13 @@ char *mpMenuTextChallengeName(struct menuitem *item)
 MenuDialogHandlerResult mpCombatChallengesMenuDialog(s32 operation, struct menudialogdef *dialogdef, union handlerdata *data)
 {
 	if (operation == MENUOP_OPEN) {
-		// the stock Challenges list always uses the standard dataset
+		// the stock Challenges list always uses the standard dataset (the
+		// Plus wrapper sets mode 1 after this returns - see below)
 		g_ChallengeMode = 0;
+		// LISTITEMFOCUS only fires on cursor movement, so seed the right column
+		// with the first available challenge's description on open
+		g_Menus[g_MpPlayerNum].training.mpconfig = challengeLoadBySlot(0, s_MpChallengeDescCfg,
+				sizeof(s_MpChallengeDescCfg));
 	}
 
 	if (operation == MENUOP_TICK) {
@@ -7845,6 +7853,33 @@ MenuItemHandlerResult menuhandler0017ec64(s32 operation, struct menuitem *item, 
 	return 0;
 }
 
+// The entry lists (Challenges and Challenges+) share this handler. The stock
+// one is used for everything except focus and selection: focus loads the
+// highlighted challenge's description into the right column, and selecting a
+// row is the choice - apply it and go to Ready, with no confirm popup. Back
+// (B / Escape) closes the list without changing the selection.
+static MenuItemHandlerResult mpChallengesEntryListHandler(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_CHECKHIDDEN) {
+		return 0;
+	}
+
+	if (operation == MENUOP_LISTITEMFOCUS) {
+		g_Menus[g_MpPlayerNum].training.mpconfig = challengeLoadBySlot(data->list.value, s_MpChallengeDescCfg,
+				sizeof(s_MpChallengeDescCfg));
+		return 0;
+	}
+
+	if (operation == MENUOP_SET) {
+		g_Menus[g_MpPlayerNum].mpsetup.slotindex = data->list.value;
+		challengeSetCurrentBySlot(data->list.value);
+		func0f0f820c(&g_MpQuickGoMenuDialog, 3);
+		return 0;
+	}
+
+	return mpChallengesListMenuHandler(operation, item, data);
+}
+
 struct menuitem g_MpChallengesMenuItems[] = {
 	{
 		MENUITEMTYPE_LIST,
@@ -7852,7 +7887,16 @@ struct menuitem g_MpChallengesMenuItems[] = {
 		MENUITEMFLAG_LIST_CUSTOMRENDER,
 		0x00000078,
 		0x0000004d,
-		mpChallengesListMenuHandler,
+		mpChallengesEntryListHandler,
+	},
+	{
+		// right column: the highlighted challenge's own description
+		MENUITEMTYPE_SCROLLABLE,
+		DESCRIPTION_MPCONFIG,
+		MENUITEMFLAG_NEWCOLUMN,
+		0x0000007c,
+		PAL ? 0x41 : 0x37,
+		NULL,
 	},
 	{ MENUITEMTYPE_END },
 };
@@ -7866,15 +7910,20 @@ struct menudialogdef g_MpChallengesMenuDialog = {
 	NULL,
 };
 
-// Challenges+: the same list widget and items, but its OPEN switches the mode
-// to the separate dataset before any availability/name/record is read.
+// Challenges+: the same list widget and items, but its OPEN switches to the
+// separate dataset. Do this AFTER the stock handler returns - that one sets
+// mode 0 on open - and re-seed the right column from the Plus config.
 static MenuDialogHandlerResult mpCombatChallengesPlusMenuDialog(s32 operation, struct menudialogdef *dialogdef, union handlerdata *data)
 {
+	MenuDialogHandlerResult result = mpCombatChallengesMenuDialog(operation, dialogdef, data);
+
 	if (operation == MENUOP_OPEN) {
 		g_ChallengeMode = 1;
+		g_Menus[g_MpPlayerNum].training.mpconfig = challengeLoadBySlot(0, s_MpChallengeDescCfg,
+				sizeof(s_MpChallengeDescCfg));
 	}
 
-	return mpCombatChallengesMenuDialog(operation, dialogdef, data);
+	return result;
 }
 
 struct menudialogdef g_MpChallengesPlusMenuDialog = {

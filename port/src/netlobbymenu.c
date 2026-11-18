@@ -3275,10 +3275,12 @@ static MenuItemHandlerResult handlerCoopFriendlyFire(s32 operation, struct menui
  * row to challengeSetCurrentBySlot, which would apply the challenge to
  * this machine's live setup - the room's waits for its own start.
  */
-static s32 s_ChallengePickIndex = -1;
-
 static struct menudialogdef s_NetChallengePickMenuDialog;
-static struct menudialogdef s_NetChallengeConfirmMenuDialog;
+
+// The buffer behind the right column's description scrollable. The list's
+// focus handler loads the highlighted challenge into it; a static keeps it
+// alive for the dialog's life.
+static u8 s_NetChallengePickCfg[0x1ca];
 
 static char *textChallengeName(struct menuitem *item)
 {
@@ -3299,48 +3301,7 @@ static MenuItemHandlerResult handlerChallengeSelect(s32 operation, struct menuit
 	}
 
 	if (operation == MENUOP_SET) {
-		s_ChallengePickIndex = g_NetChallengeSetup.index;
 		menuPushDialog(&s_NetChallengePickMenuDialog);
-	}
-
-	return 0;
-}
-
-// The confirm page shows the challenge's own description, as the stock
-// confirm does (menuitem.c's DESCRIPTION_MPCONFIG scrollable). That reader
-// takes g_Menus[g_MpPlayerNum].training.mpconfig, so load the picked challenge
-// there when the dialog opens. A static buffer keeps it alive for the dialog's
-// life; a one-line LABEL would clip the multi-line description and show only
-// the name.
-static u8 s_NetChallengePickCfg[0x1ca];
-
-static MenuDialogHandlerResult netChallengeConfirm(s32 operation, struct menudialogdef *dialogdef, union handlerdata *data)
-{
-	if (operation == MENUOP_OPEN) {
-		if (s_ChallengePickIndex >= 0) {
-			g_Menus[g_MpPlayerNum].training.mpconfig = challengeLoad(s_ChallengePickIndex, s_NetChallengePickCfg,
-					sizeof(s_NetChallengePickCfg));
-		} else {
-			g_Menus[g_MpPlayerNum].training.mpconfig = NULL;
-		}
-	}
-
-	return 0;
-}
-
-static MenuItemHandlerResult handlerChallengeAccept(s32 operation, struct menuitem *item, union handlerdata *data)
-{
-	if (operation == MENUOP_SET && s_ChallengePickIndex >= 0) {
-		g_NetChallengeSetup.index = s_ChallengePickIndex;
-		sysLogPrintf(LOG_NOTE, "lobby: the room's challenge: %s", challengeGetName(s_ChallengePickIndex));
-	}
-
-	// the Accept row's CLOSESDIALOG flag has already popped the confirm page;
-	// with the choice made we also leave the picker list, back to Room Settings
-	// (the menu that opened it). Cancel keeps its flag alone and returns to the
-	// list, which is what a cancel should do.
-	if (operation == MENUOP_SET) {
-		menuPopDialog();
 	}
 
 	return 0;
@@ -3387,8 +3348,17 @@ static MenuItemHandlerResult handlerChallengeList(s32 operation, struct menuitem
 	}
 
 	if (operation == MENUOP_SET) {
-		s_ChallengePickIndex = netChallengeIndexFromSlot(data->list.value);
-		menuPushDialog(&s_NetChallengeConfirmMenuDialog);
+		s32 index = netChallengeIndexFromSlot(data->list.value);
+
+		// selecting a row is the choice: set the room's challenge and leave the
+		// picker (back to Room Settings). There is no confirm popup; the back
+		// button (B / Escape) closes the picker without changing the selection.
+		if (index >= 0) {
+			g_NetChallengeSetup.index = index;
+			sysLogPrintf(LOG_NOTE, "lobby: the room's challenge: %s", challengeGetName(index));
+		}
+
+		menuPopDialog();
 		return 0;
 	}
 
@@ -3438,43 +3408,6 @@ static struct menudialogdef s_NetChallengePickMenuDialog = {
 	s_NetChallengePickItems,
 	netChallengePick,
 	0,
-	NULL,
-};
-
-static struct menuitem s_NetChallengeConfirmItems[] = {
-	{
-		MENUITEMTYPE_SCROLLABLE,
-		DESCRIPTION_MPCONFIG,
-		0,
-		0x0000007c,
-		PAL ? 0x41 : 0x37,
-		NULL,
-	},
-	{
-		MENUITEMTYPE_SELECTABLE,
-		0,
-		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG | MENUITEMFLAG_LITERAL_TEXT,
-		(uintptr_t)"Accept\n",
-		0,
-		handlerChallengeAccept,
-	},
-	{
-		MENUITEMTYPE_SELECTABLE,
-		0,
-		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG | MENUITEMFLAG_LITERAL_TEXT,
-		(uintptr_t)"Cancel\n",
-		0,
-		NULL,
-	},
-	{ MENUITEMTYPE_END },
-};
-
-static struct menudialogdef s_NetChallengeConfirmMenuDialog = {
-	MENUDIALOGTYPE_DEFAULT,
-	(uintptr_t)"Room's Challenge",
-	s_NetChallengeConfirmItems,
-	netChallengeConfirm,
-	MENUDIALOGFLAG_LITERAL_TEXT,
 	NULL,
 };
 

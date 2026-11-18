@@ -211,16 +211,17 @@ plain)
 esac
 done
 
-# The confirm dialog's text is a UI string (no screenshot on this box, gdb
-# attach is blocked), so pin its source: the picker uses the stock DESCRIPTION
-# scrollable and loads the chosen challenge's config into training.mpconfig on
-# open - not a one-line label with boilerplate.
+# The description is a UI string (no screenshot on this box, gdb attach is
+# blocked), so pin its source: both the online picker and the offline entry
+# lists use the stock DESCRIPTION_MPCONFIG scrollable and load the highlighted
+# challenge's config into training.mpconfig - never a one-line boilerplate label.
 if grep -q 'DESCRIPTION_MPCONFIG' "$ROOT/port/src/netlobbymenu.c" \
-		&& grep -q 'challengeLoad(s_ChallengePickIndex' "$ROOT/port/src/netlobbymenu.c" \
-		&& grep -q 'training.mpconfig = challengeLoad' "$ROOT/port/src/netlobbymenu.c"; then
-	pass "picker: the confirm dialog shows the challenge's own description"
+		&& grep -q 'training.mpconfig = challengeLoad' "$ROOT/port/src/netlobbymenu.c" \
+		&& grep -q 'DESCRIPTION_MPCONFIG' "$ROOT/src/game/mplayer/setup.c" \
+		&& grep -q 'training.mpconfig = challengeLoadBySlot' "$ROOT/src/game/mplayer/setup.c"; then
+	pass "description: online and offline lists show the challenge's own description"
 else
-	fail "picker: the confirm dialog does not show the challenge's description"
+	fail "description: a challenge list does not show the challenge's own description"
 fi
 
 # Late joiners must not change the difficulty: the sim count and the record
@@ -238,18 +239,29 @@ else
 	fail "late join: the sims or tier are not pinned to the match's start count"
 fi
 
-# The picker UI (no screenshot here): Accept leaves the picker list as well as
-# the confirm page, and the list's focus loads the highlighted challenge's
-# description into the NEWCOLUMN scrollable beside it. Pin both in source.
+# The picker UI (no screenshot here): selecting a row sets the challenge and
+# leaves the picker (no confirm popup), and the list's focus loads the
+# highlighted description into the NEWCOLUMN scrollable. The two offline entry
+# lists use the same shape. Pin it in source.
 NL=$ROOT/port/src/netlobbymenu.c
-if grep -q 'menuPopDialog();' "$NL" \
+SU=$ROOT/src/game/mplayer/setup.c
+if grep -q 'g_NetChallengeSetup.index = index;' "$NL" \
 		&& grep -q 'MENUOP_LISTITEMFOCUS' "$NL" \
 		&& grep -q 'challengeLoad(index, s_NetChallengePickCfg' "$NL" \
 		&& grep -q 'MENUITEMFLAG_NEWCOLUMN' "$NL" \
-		&& grep -q 'DESCRIPTION_MPCONFIG' "$NL"; then
-	pass "picker: Accept returns to the previous menu and focus drives the right-column description"
+		&& grep -q 'DESCRIPTION_MPCONFIG' "$NL" \
+		&& ! grep -q 's_NetChallengeConfirmMenuDialog' "$NL"; then
+	pass "picker: selecting a row leaves the list and focus drives the right-column description"
 else
-	fail "picker: Accept navigation or the right-column description is missing"
+	fail "picker: direct select or the right-column description is missing"
+fi
+if grep -q 'mpChallengesEntryListHandler' "$SU" \
+		&& grep -q 'challengeSetCurrentBySlot(data->list.value);' "$SU" \
+		&& grep -q 'challengeLoadBySlot(data->list.value, s_MpChallengeDescCfg' "$SU" \
+		&& grep -q 'MENUITEMFLAG_NEWCOLUMN' "$SU"; then
+	pass "offline: Challenge and Challenges+ lists select on click with a live description column"
+else
+	fail "offline: the entry lists do not match the online picker"
 fi
 
 # Challenges+ independence: two record arrays, both read AND written in the
