@@ -363,7 +363,7 @@ s32 gamefileLoad(s32 device)
 
 			for (i = 0; i < ARRAYCOUNT(g_MpChallenges); i++) {
 				for (j = 1; j < MAX_LOCAL_PLAYERS + 1; j++) {
-					challengeSetCompletedByAnyPlayerWithNumPlayers(i, j, savebufferReadBits(&buffer, 1));
+					challengeSetCompletedByAnyPlayerIn(g_MpChallenges, i, j, savebufferReadBits(&buffer, 1));
 				}
 			}
 
@@ -380,6 +380,15 @@ s32 gamefileLoad(s32 device)
 
 			for (i = 0; i < 4; i++) {
 				g_GameFile.weaponsfound[i] = savebufferReadBits(&buffer, 8);
+			}
+
+			// Challenges+ records: a second block appended after everything the
+			// stock save wrote. A save from before this block reads as zeros,
+			// so Plus progress starts blank and the standard records are intact.
+			for (i = 0; i < ARRAYCOUNT(g_MpChallengesPlus); i++) {
+				for (j = 1; j < MAX_LOCAL_PLAYERS + 1; j++) {
+					challengeSetCompletedByAnyPlayerIn(g_MpChallengesPlus, i, j, savebufferReadBits(&buffer, 1));
+				}
 			}
 
 #if VERSION >= VERSION_NTSC_1_0
@@ -538,7 +547,7 @@ s32 gamefileSave(s32 device, s32 fileid, u16 deviceserial)
 
 		for (i = 0; i < ARRAYCOUNT(g_MpChallenges); i++) {
 			for (j = 1; j < MAX_LOCAL_PLAYERS + 1; j++) {
-				savebufferOr(&buffer, challengeIsCompletedByAnyPlayerWithNumPlayers(i, j), 1);
+				savebufferOr(&buffer, challengeIsCompletedByAnyPlayerIn(g_MpChallenges, i, j), 1);
 			}
 		}
 
@@ -552,6 +561,14 @@ s32 gamefileSave(s32 device, s32 fileid, u16 deviceserial)
 
 		for (i = 0; i < 4; i++) {
 			savebufferOr(&buffer, g_GameFile.weaponsfound[i], 8);
+		}
+
+		// Challenges+ records, appended after everything stock (see the read
+		// side). Both blocks are written regardless of the current mode.
+		for (i = 0; i < ARRAYCOUNT(g_MpChallengesPlus); i++) {
+			for (j = 1; j < MAX_LOCAL_PLAYERS + 1; j++) {
+				savebufferOr(&buffer, challengeIsCompletedByAnyPlayerIn(g_MpChallengesPlus, i, j), 1);
+			}
 		}
 
 		ret = pakSaveAtGuid(device, fileid, PAKFILETYPE_GAME, buffer.bytes, &newfileid, 0);

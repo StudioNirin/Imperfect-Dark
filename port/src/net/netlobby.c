@@ -3176,6 +3176,7 @@ void netLobbyLeave(void)
 	// room's challenge config had written, and the room's word itself
 	// (a client's came from its RULES; both are this room's only)
 	g_NetChallengeSetup.on = 0;
+	g_ChallengeMode = 0;
 	netChallengeSetupRestore();
 
 	// LAN or Direct Connect: a host's room closes, a member's connection

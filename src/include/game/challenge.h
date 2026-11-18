@@ -7,6 +7,15 @@
 extern u32 g_MpChallengeIndex;
 extern struct mpconfigfull *g_MpCurrentChallengeConfig;
 
+// Challenges+ (a separate 30-challenge dataset with its own records). 0 = the
+// stock challenges, 1 = Challenges+. Set by the menu and carried in net RULES.
+extern s32 g_ChallengeMode;
+// The active challenge list for the current mode - the completion APIs and the
+// net marking path use this so a Plus star never touches a standard record.
+struct challenge *challengeActiveList(void);
+// True when the given challenge is visible in the current mode. Every Plus
+// challenge is visible; the stock list keeps its unlock-based availability.
+
 void challengesInit(void);
 
 void challengeDetermineUnlockedFeatures(void);
@@ -44,6 +53,9 @@ bool challengeIsLoaded(void);
 s32 challengeGetAutoFocusedIndex(s32 mpchrnum);
 char *challengeGetName2(s32 playernum, s32 challengeindex);
 bool challengeIsCompletedByPlayerWithNumPlayers2(s32 mpchrnum, s32 index, s32 numplayers);
+// Explicit-list record accessors (the save reads/writes both datasets).
+bool challengeIsCompletedByAnyPlayerIn(struct challenge *list, s32 index, s32 numplayers);
+void challengeSetCompletedByAnyPlayerIn(struct challenge *list, s32 index, s32 numplayers, bool completed);
 bool challengeIsCompletedByAnyPlayerWithNumPlayers(s32 index, s32 numplayers);
 void challengeSetCompletedByAnyPlayerWithNumPlayers(s32 index, s32 numplayers, bool completed);
 bool challengeIsCompletedByPlayerWithNumPlayers(s32 mpchrnum, s32 index, s32 numplayers);

@@ -6050,10 +6050,19 @@ void mpplayerfileSaveWad(s32 playernum, struct savebuffer *buffer)
 
 	savebufferOr(buffer, g_PlayerConfigsArray[playernum].options, 12);
 
-	for (i = 0; i < ARRAYCOUNT(g_MpChallenges); i++) {
-		for (j = 1; j < MAX_LOCAL_PLAYERS + 1; j++) {
-			savebufferOr(buffer, challengeIsCompletedByPlayerWithNumPlayers(playernum, i, j), 1);
+	// Always the stock records: saved MP player files predate Challenges+ and
+	// must not change meaning when a Plus match happens to be the current mode.
+	{
+		s32 prev_mode = g_ChallengeMode;
+		g_ChallengeMode = 0;
+
+		for (i = 0; i < ARRAYCOUNT(g_MpChallenges); i++) {
+			for (j = 1; j < MAX_LOCAL_PLAYERS + 1; j++) {
+				savebufferOr(buffer, challengeIsCompletedByPlayerWithNumPlayers(playernum, i, j), 1);
+			}
 		}
+
+		g_ChallengeMode = prev_mode;
 	}
 
 	mpplayerfileSaveGunFuncs(buffer, playernum);

@@ -7808,6 +7808,11 @@ char *mpMenuTextChallengeName(struct menuitem *item)
 
 MenuDialogHandlerResult mpCombatChallengesMenuDialog(s32 operation, struct menudialogdef *dialogdef, union handlerdata *data)
 {
+	if (operation == MENUOP_OPEN) {
+		// the stock Challenges list always uses the standard dataset
+		g_ChallengeMode = 0;
+	}
+
 	if (operation == MENUOP_TICK) {
 		if (g_BossFile.locktype == MPLOCKTYPE_CHALLENGE
 				&& g_Menus[g_MpPlayerNum].curdialog
@@ -7858,6 +7863,26 @@ struct menudialogdef g_MpChallengesMenuDialog = {
 	g_MpChallengesMenuItems,
 	mpCombatChallengesMenuDialog,
 	0,
+	NULL,
+};
+
+// Challenges+: the same list widget and items, but its OPEN switches the mode
+// to the separate dataset before any availability/name/record is read.
+static MenuDialogHandlerResult mpCombatChallengesPlusMenuDialog(s32 operation, struct menudialogdef *dialogdef, union handlerdata *data)
+{
+	if (operation == MENUOP_OPEN) {
+		g_ChallengeMode = 1;
+	}
+
+	return mpCombatChallengesMenuDialog(operation, dialogdef, data);
+}
+
+struct menudialogdef g_MpChallengesPlusMenuDialog = {
+	MENUDIALOGTYPE_DEFAULT,
+	(uintptr_t)"Challenges+",
+	g_MpChallengesMenuItems,
+	mpCombatChallengesPlusMenuDialog,
+	MENUDIALOGFLAG_LITERAL_TEXT,
 	NULL,
 };
 
@@ -9035,6 +9060,14 @@ struct menuitem g_CombatSimulatorMenuItems[] = {
 		L_MISC_441, // "Challenges"
 		0,
 		(void *)&g_MpChallengesMenuDialog,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_SELECTABLE_OPENSDIALOG | MENUITEMFLAG_BIGFONT | MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Challenges+",
+		0,
+		(void *)&g_MpChallengesPlusMenuDialog,
 	},
 	{
 		MENUITEMTYPE_SELECTABLE,

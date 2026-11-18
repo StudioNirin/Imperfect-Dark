@@ -280,6 +280,7 @@ static struct {
 	u8 challenge;                 // protocol 37: bit 0 the host judged it won, bit 1 the room played it
 	u16 challengeindex;           // which one it judged
 	u8 challengehumans;           // protocol 38: the match's human count, the record's tier - not PLAYERCOUNT() (sims)
+	u8 challengemode;             // protocol 39: 0 stock challenge, 1 Challenges+
 } s_End;
 static u8 s_EndScen[NETSCEN_SIZE]; // MATCH_END's scenario block (protocol 7)
 
@@ -2845,38 +2846,54 @@ void netChallengeMatchEnded(void)
 			return;
 		}
 
-		if (!(s_End.challenge & 1) || g_CheatsActiveBank0 || g_CheatsActiveBank1) {
-			sysLogPrintf(LOG_NOTE, "net: challenge %d: this machine marks nothing: %s",
-					s_End.challengeindex,
-					(g_CheatsActiveBank0 || g_CheatsActiveBank1) ? "it cheated" : "the host's verdict says lost");
-			return;
-		}
+		// mark into the dataset the host judged (protocol 39), then restore
+		// this machine's own menu mode on every path out
+		{
+			s32 prev_mode = g_ChallengeMode;
 
-		for (i = 0; i < PLAYERCOUNT(); i++) {
-			if (g_Vars.players[i]->aborted) {
-				sysLogPrintf(LOG_NOTE, "net: the host won the room's challenge, but this machine aborted: no mark");
-				return;
+			g_ChallengeMode = s_End.challengemode;
+
+			if (!(s_End.challenge & 1) || g_CheatsActiveBank0 || g_CheatsActiveBank1) {
+				sysLogPrintf(LOG_NOTE, "net: challenge %d: this machine marks nothing: %s",
+						s_End.challengeindex,
+						(g_CheatsActiveBank0 || g_CheatsActiveBank1) ? "it cheated" : "the host's verdict says lost");
+			} else {
+				bool aborted = false;
+
+				for (i = 0; i < PLAYERCOUNT(); i++) {
+					if (g_Vars.players[i]->aborted) {
+						aborted = true;
+						break;
+					}
+				}
+
+				if (aborted) {
+					sysLogPrintf(LOG_NOTE, "net: the host won the room's challenge, but this machine aborted: no mark");
+				} else {
+					// the record's tier is the human count, not PLAYERCOUNT():
+					// a challenge's sims are players on each machine (protocol
+					// 38), so numplayers would tick a higher tier than the host
+					tier = s_End.challengehumans ? s_End.challengehumans : s_End.numplayers;
+
+					if (s_End.challengeindex < (u16) ARRAYCOUNT(g_MpChallenges)) {
+						if (tier < 1) {
+							tier = 1;
+						}
+
+						if (tier > MAX_LOCAL_PLAYERS) {
+							tier = MAX_LOCAL_PLAYERS;
+						}
+
+						challengeSetCompletedByAnyPlayerWithNumPlayers(s_End.challengeindex, tier, true);
+						challengeSetCompletedByPlayerWithNumPlayers(0, s_End.challengeindex, tier, true);
+						sysLogPrintf(LOG_NOTE, "net: challenge %d: the host's verdict marked this machine's record at %d players, completions[%d] now %d",
+								s_End.challengeindex, tier, tier - 1,
+								challengeActiveList()[s_End.challengeindex].completions[tier - 1]);
+					}
+				}
 			}
-		}
 
-		// the record's tier is the human count, not PLAYERCOUNT(): a
-		// challenge's own sims are players on each machine (protocol 38), so
-		// numplayers would tick a higher tier than the host did
-		tier = s_End.challengehumans ? s_End.challengehumans : s_End.numplayers;
-
-		if (s_End.challengeindex < (u16) ARRAYCOUNT(g_MpChallenges)) {
-			if (tier < 1) {
-				tier = 1;
-			}
-
-			if (tier > MAX_LOCAL_PLAYERS) {
-				tier = MAX_LOCAL_PLAYERS;
-			}
-
-			challengeSetCompletedByAnyPlayerWithNumPlayers(s_End.challengeindex, tier, true);
-			challengeSetCompletedByPlayerWithNumPlayers(0, s_End.challengeindex, tier, true);
-			sysLogPrintf(LOG_NOTE, "net: challenge %d: the host's verdict marked this machine's record at %d players, completions[%d] now %d",
-					s_End.challengeindex, tier, tier - 1, g_MpChallenges[s_End.challengeindex].completions[tier - 1]);
+			g_ChallengeMode = prev_mode;
 		}
 
 		return;
@@ -2922,14 +2939,23 @@ void netChallengeMatchEnded(void)
 		challengeSetCompletedByAnyPlayerWithNumPlayers(g_MpChallengeIndex, tier, true);
 		challengeSetCompletedByPlayerWithNumPlayers(0, g_MpChallengeIndex, tier, true);
 		// the host plays on its own unlock table, as offline; a client's
-		// stays the room's (the host's RULES) until its profile next loads
-		challengeDetermineUnlockedFeatures();
+		// stays the room's (the host's RULES) until its profile next loads.
+		// A Plus completion grants nothing - it must not feed the shared
+		// feature unlocks or availability (decision 2026-11-18).
+		if (!g_ChallengeMode) {
+			challengeDetermineUnlockedFeatures();
+		}
 	}
 
 	sysLogPrintf(LOG_NOTE, "net: challenge %d (%s): %s at %d players%s, completions[%d] now %d", g_MpChallengeIndex,
 			challengeGetName(g_MpChallengeIndex), s_ChallengeWon ? "won" : "not won", tier,
 			(g_CheatsActiveBank0 || g_CheatsActiveBank1) ? ", the host cheated" : "",
-			tier - 1, g_MpChallenges[g_MpChallengeIndex].completions[tier - 1]);
+			tier - 1, challengeActiveList()[g_MpChallengeIndex].completions[tier - 1]);
+	if (g_ChallengeMode) {
+		// Plus progress is independent: show the untouched standard record
+		sysLogPrintf(LOG_NOTE, "net: plus: standard challenge %d completions[%d] still %d",
+				g_MpChallengeIndex, tier - 1, g_MpChallenges[g_MpChallengeIndex].completions[tier - 1]);
+	}
 }
 
 /**
@@ -3026,6 +3052,7 @@ void netHostMatchEnded(void)
 	// the record's tier is the match's human count (protocol 38): a challenge's
 	// sims are players, so PLAYERCOUNT() would give clients a higher tier
 	netBufWriteU8(&b, (u8) (s_MatchHumans < 1 ? 1 : s_MatchHumans));
+	netBufWriteU8(&b, (u8) g_ChallengeMode); // protocol 39: which record set to mark
 
 	for (i = 0; i < NET_MAXPEERS; i++) {
 		// a client still loading too: it would otherwise wait at the barrier
@@ -3817,10 +3844,11 @@ static void netClientOnMatchEnd(struct netbuf *b)
 		netBufReadBytes(b, s_EndScen, NETSCEN_SIZE);
 	}
 
-	// the challenge verdict (protocol 37, humans 38; netChallengeMatchEnded marks from it)
+	// the challenge verdict (protocol 37, humans 38, mode 39; netChallengeMatchEnded marks from it)
 	s_End.challenge = netBufReadU8(b);
 	s_End.challengeindex = netBufReadU16(b);
 	s_End.challengehumans = netBufReadU8(b);
+	s_End.challengemode = netBufReadU8(b);
 
 	// the match this machine was still fetching a folder for is over: the
 	// STAGE_LOAD kept for it is dropped (loaded after the download it was a
@@ -4650,17 +4678,20 @@ static void netTestStartMatch(void)
 	// --net-test-challenge N: the room is a challenge room (protocol 37),
 	// playing g_MpChallenges entry N: the host snapshots its own setup as
 	// the lobby's Game row would (netlobby.c), and applies the challenge
-	// now, before the start writes it into RULES (tools/ci/netchallengetest.sh)
-	if (sysArgGetInt("--net-test-challenge", -1) >= 0) {
-		s32 ci = sysArgGetInt("--net-test-challenge", 0);
+	// now, before the start writes it into RULES (tools/ci/netchallengetest.sh).
+	// --net-test-challenge-plus N selects the separate Challenges+ dataset.
+	if (sysArgGetInt("--net-test-challenge", -1) >= 0 || sysArgGetInt("--net-test-challenge-plus", -1) >= 0) {
+		s32 ci = sysArgGetInt("--net-test-challenge-plus", sysArgGetInt("--net-test-challenge", 0));
 
 		if (ci >= 0 && ci < ARRAYCOUNT(g_MpChallenges)) {
 			g_NetChallengeSetup.on = 1;
 			g_NetChallengeSetup.index = ci;
+			g_ChallengeMode = sysArgGetInt("--net-test-challenge-plus", -1) >= 0 ? 1 : 0;
 			netChallengeSetupSnapshot();
 			g_MpChallengeIndex = ci;
 			challengeApply();
-			sysLogPrintf(LOG_NOTE, "net: --net-test-challenge: the room plays challenge %d: %s", ci, challengeGetName(ci));
+			sysLogPrintf(LOG_NOTE, "net: --net-test-challenge%s: the room plays challenge %d: %s",
+					g_ChallengeMode ? "-plus" : "", ci, challengeGetName(ci));
 		} else {
 			sysLogPrintf(LOG_WARNING, "net: --net-test-challenge %d: no such challenge", ci);
 		}

@@ -36,6 +36,15 @@ u8 g_MpFeaturesUnlocked[80];
 u32 g_MpChallengeIndex = 0;
 struct mpconfigfull *g_MpCurrentChallengeConfig = NULL;
 
+// Challenges+: 0 = stock challenge dataset, 1 = the separate Plus copy. The
+// menu sets it when entering the Plus list; net RULES carry it to clients.
+s32 g_ChallengeMode = 0;
+
+struct challenge *challengeActiveList(void)
+{
+	return g_ChallengeMode ? g_MpChallengesPlus : g_MpChallenges;
+}
+
 struct challenge g_MpChallenges[] = {
 	{ L_OPTIONS_406, MPCONFIG_CHALLENGE01 }, // "Challenge 1"
 	{ L_OPTIONS_407, MPCONFIG_CHALLENGE02 }, // "Challenge 2"
@@ -71,11 +80,20 @@ struct challenge g_MpChallenges[] = {
 
 bool challengeIsAvailable(s32 challengeindex)
 {
+	// Every Plus challenge is visible - it has no unlock gating of its own yet.
+	if (g_ChallengeMode) {
+		return true;
+	}
+
 	return (g_MpChallenges[challengeindex].availability & 1) != 0;
 }
 
 bool challengeIsAvailableToPlayer(s32 chrnum, s32 challengeindex)
 {
+	if (g_ChallengeMode) {
+		return true;
+	}
+
 	if ((g_MpSetup.chrslots & (1 << chrnum)) == 0) {
 		return 0;
 	}
@@ -85,6 +103,10 @@ bool challengeIsAvailableToPlayer(s32 chrnum, s32 challengeindex)
 
 bool challengeIsAvailableToAnyPlayer(s32 challengeindex)
 {
+	if (g_ChallengeMode) {
+		return true;
+	}
+
 	return (g_MpChallenges[challengeindex].availability & (((g_MpSetup.chrslots & 0xf) << 1) | 1)) != 0;
 }
 
@@ -322,8 +344,18 @@ s32 challengeGetNumAvailable(void)
 	return count;
 }
 
+// The Plus list shows generated names - "Challenge+ N" - so adding the mode
+// needs no 30 new language strings. A static buffer is safe here: names are
+// only read for the frame's render, one challenge at a time.
+static char s_PlusName[32];
+
 char *challengeGetName(s32 challengeindex)
 {
+	if (g_ChallengeMode) {
+		snprintf(s_PlusName, sizeof(s_PlusName), "Challenge+ %d", challengeindex + 1);
+		return s_PlusName;
+	}
+
 	return langGet(g_MpChallenges[challengeindex].name);
 }
 
@@ -648,7 +680,20 @@ struct mpconfigfull *challengeLoadConfig(s32 confignum, u8 *buffer, s32 len)
 
 struct mpconfigfull *challengeLoad(s32 challengeindex, u8 *buffer, s32 len)
 {
-	return challengeLoadConfig(g_MpChallenges[challengeindex].confignum, buffer, len);
+	struct mpconfigfull *cfg = challengeLoadConfig(challengeActiveList()[challengeindex].confignum, buffer, len);
+
+	// Plus uses its own copy of the config and the description strings, so an
+	// edit to a Plus entry can never reach the stock challenge (or vice versa).
+	// challengeLoadConfig still does the ROM/segment work above; override the
+	// two data members it filled in.
+	if (g_ChallengeMode && cfg) {
+		s32 confignum = g_MpChallengesPlus[challengeindex].confignum;
+
+		cfg->config = g_MpConfigsPlus[confignum];
+		cfg->strings = g_MpStringsPlus[confignum];
+	}
+
+	return cfg;
 }
 
 struct mpconfigfull *challengeLoadBySlot(s32 n, u8 *buffer, s32 len)
@@ -1003,7 +1048,7 @@ s32 challengeGetAutoFocusedIndex(s32 mpchrnum)
 
 char *challengeGetName2(s32 playernum, s32 challengeindex)
 {
-	return langGet(g_MpChallenges[challengeindex].name);
+	return challengeGetName(challengeindex);
 }
 
 bool challengeIsCompletedByPlayerWithNumPlayers2(s32 mpchrnum, s32 index, s32 numplayers)
@@ -1011,35 +1056,58 @@ bool challengeIsCompletedByPlayerWithNumPlayers2(s32 mpchrnum, s32 index, s32 nu
 	return challengeIsCompletedByPlayerWithNumPlayers(mpchrnum, index, numplayers);
 }
 
+// Explicit-list record accessors - the save writes both datasets regardless
+// of the current mode, so it names the list it means.
+bool challengeIsCompletedByAnyPlayerIn(struct challenge *list, s32 index, s32 numplayers)
+{
+	return (list[index].completions[numplayers - 1] & 1) != 0;
+}
+
+void challengeSetCompletedByAnyPlayerIn(struct challenge *list, s32 index, s32 numplayers, bool completed)
+{
+	if (completed) {
+		list[index].completions[numplayers - 1] |= 1;
+		return;
+	}
+
+	list[index].completions[numplayers - 1] &= ~1;
+}
+
+// All record reads/writes go through the active list so a Plus completion
+// never touches a standard challenge's stars (and vice versa).
+#define CHAL_REC (challengeActiveList())
+
 bool challengeIsCompletedByAnyPlayerWithNumPlayers(s32 index, s32 numplayers)
 {
-	return (g_MpChallenges[index].completions[numplayers - 1] & 1) != 0;
+	return (CHAL_REC[index].completions[numplayers - 1] & 1) != 0;
 }
 
 void challengeSetCompletedByAnyPlayerWithNumPlayers(s32 index, s32 numplayers, bool completed)
 {
 	if (completed) {
-		g_MpChallenges[index].completions[numplayers - 1] |= 1;
+		CHAL_REC[index].completions[numplayers - 1] |= 1;
 		return;
 	}
 
-	g_MpChallenges[index].completions[numplayers - 1] &= ~1;
+	CHAL_REC[index].completions[numplayers - 1] &= ~1;
 }
 
 bool challengeIsCompletedByPlayerWithNumPlayers(s32 mpchrnum, s32 index, s32 numplayers)
 {
-	return (g_MpChallenges[index].completions[numplayers - 1] & (2 << mpchrnum)) != 0;
+	return (CHAL_REC[index].completions[numplayers - 1] & (2 << mpchrnum)) != 0;
 }
 
 void challengeSetCompletedByPlayerWithNumPlayers(u32 mpchrnum, s32 index, s32 numplayers, bool completed)
 {
 	if (completed) {
-		g_MpChallenges[index].completions[numplayers - 1] |= 2 << mpchrnum;
+		CHAL_REC[index].completions[numplayers - 1] |= 2 << mpchrnum;
 		return;
 	}
 
-	g_MpChallenges[index].completions[numplayers - 1] &= ~(2 << mpchrnum);
+	CHAL_REC[index].completions[numplayers - 1] &= ~(2 << mpchrnum);
 }
+
+#undef CHAL_REC
 
 bool challengeIsCompleteForEndscreen(void)
 {
@@ -1100,7 +1168,13 @@ void challengeConsiderMarkingComplete(void)
 		}
 
 		setCurrentPlayerNum(prevplayernum);
-		challengeDetermineUnlockedFeatures();
+		// A Plus completion grants nothing: it must not feed the shared feature
+		// unlocks or change which challenges are available. Availability stays
+		// driven by the stock list. (The marking above already routed to the
+		// active list, so the Plus star is recorded in its own array.)
+		if (!g_ChallengeMode) {
+			challengeDetermineUnlockedFeatures();
+		}
 	}
 }
 

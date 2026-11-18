@@ -174,6 +174,7 @@ struct netrulesmsg {
 	u32 scenariobits;
 	u8 challengeon;               // protocol 37: a challenge room's match (net.h)
 	u16 challengeindex;
+	u8 challengemode;             // protocol 39: 0 stock challenge, 1 Challenges+
 	s32 weaponsetnum;
 	// protocol 34: the host's own name for that set, when it saved one. The
 	// number means nothing to a client whose list differs (netproto.h)
@@ -232,6 +233,7 @@ struct netrulessaved {
 	s32 endless;
 	s32 maxexplosions;
 	u8 locktype;
+	u8 challengemode; // protocol 39: this machine's mode before a challenge match
 	struct missionconfig mission; // a client's own mission settings (co-op)
 	s32 difficulty;
 	s32 coopradaron;
@@ -1033,6 +1035,7 @@ void netRulesWrite(struct netbuf *b, u32 matchid)
 	// the pair tells the client its locktype and challenge HUD to match
 	netBufWriteU8(b, g_NetChallengeSetup.on ? 1 : 0);
 	netBufWriteU16(b, (u16) (g_NetChallengeSetup.on ? g_MpChallengeIndex : 0));
+	netBufWriteU8(b, (u8) g_ChallengeMode); // protocol 39
 
 	netBufWriteS32(b, g_MpWeaponSetNum);
 
@@ -1200,6 +1203,7 @@ s32 netRulesRead(struct netbuf *b)
 	s_NetRules.scenariobits = netBufReadU32(b);
 	s_NetRules.challengeon = netBufReadU8(b) ? 1 : 0;
 	s_NetRules.challengeindex = netBufReadU16(b);
+	s_NetRules.challengemode = netBufReadU8(b);
 	s_NetRules.weaponsetnum = netBufReadS32(b);
 	netBufReadString(b, s_NetRules.weaponsetname, sizeof(s_NetRules.weaponsetname));
 	netTextPrintable(s_NetRules.weaponsetname, 1); // the font trusts this string
@@ -1310,7 +1314,8 @@ s32 netRulesRead(struct netbuf *b)
 	s_NetRules.cheats[1] = netBufReadU32(b);
 
 	if (s_NetRules.scenario >= NUM_MPSCENARIOS || s_NetRules.timelimit > 60 || s_NetRules.scorelimit > 100
-			|| (s_NetRules.challengeon && s_NetRules.challengeindex >= (u16) ARRAYCOUNT(g_MpChallenges))) {
+			|| (s_NetRules.challengeon && s_NetRules.challengeindex >= (u16) ARRAYCOUNT(g_MpChallenges))
+			|| (s_NetRules.challengeon && s_NetRules.challengemode > 1)) {
 		b->error = 1;
 	}
 
@@ -1434,6 +1439,7 @@ static void netRulesSaveInto(struct netrulessaved *out)
 	out->endless = g_MpEndlessMatch;
 	out->maxexplosions = g_MaxExplosionsSetting;
 	out->locktype = g_BossFile.locktype;
+	out->challengemode = (u8) g_ChallengeMode;
 	out->lockinfo = g_MpLockInfo;
 	out->mission = g_MissionConfig;
 	out->difficulty = lvGetDifficulty();
@@ -1664,7 +1670,10 @@ static void netRulesPut(const struct netrulesmsg *rules, s32 coop)
 		g_BossFile.locktype = MPLOCKTYPE_CHALLENGE;
 		g_NetChallengeSetup.on = 1;
 		g_NetChallengeSetup.index = rules->challengeindex;
-		sysLogPrintf(LOG_NOTE, "net: the room's challenge: %s", challengeGetName(g_MpChallengeIndex));
+		// the room's mode selects which dataset this machine marks and names
+		g_ChallengeMode = rules->challengemode;
+		sysLogPrintf(LOG_NOTE, "net: the room's %s: %s", g_ChallengeMode ? "Challenges+ challenge" : "challenge",
+				challengeGetName(g_MpChallengeIndex));
 	} else if (g_BossFile.locktype == MPLOCKTYPE_CHALLENGE) {
 		// the offline Challenge Mode's lock, left on this machine's setup by
 		// its own Advanced Setup play: it is not this room's match's
@@ -1795,6 +1804,7 @@ static void netRulesRestoreFrom(const struct netrulessaved *saved)
 	g_MpEndlessMatch = saved->endless;
 	g_MaxExplosionsSetting = saved->maxexplosions;
 	g_BossFile.locktype = saved->locktype;
+	g_ChallengeMode = saved->challengemode;
 	g_MpLockInfo = saved->lockinfo;
 	g_MpHumanSlotsHi = 0;
 	g_MissionConfig = saved->mission;

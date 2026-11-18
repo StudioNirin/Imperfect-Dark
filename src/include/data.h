@@ -607,6 +607,10 @@ extern struct aibotweaponpreference g_GeAibotWeaponPreferences[NUM_GE_WEAPONS];
 #endif
 extern u32 var80087eb4;
 extern struct challenge g_MpChallenges[30];
+// Challenges+: independent copies of the challenge list, configs and strings.
+extern struct challenge g_MpChallengesPlus[30];
+extern struct mpconfig g_MpConfigsPlus[];
+extern struct mpstrings g_MpStringsPlus[];
 extern u8 g_FrIsValidWeapon;
 extern s32 g_FrWeaponNum;
 extern u8 g_ChrBioSlot;

@@ -251,7 +251,11 @@
 //    tier. It was PLAYERCOUNT() on the client, which counts a challenge's own
 //    simulants as players once those spawn, so a host and client could tick
 //    different tiers for the same win.
-#define NET_PROTOCOL_VERSION 38
+// 39 (Challenges+): RULES and MATCH_END gain u8 challengemode - which of the
+//    two independent challenge datasets a room's match used (0 stock, 1
+//    Challenges+). Clients mark into and name from that dataset; a Plus
+//    completion grants no shared unlocks. Both lists are 30 entries.
+#define NET_PROTOCOL_VERSION 39
 
 #define NETMSG_CONNECT    1
 #define NETMSG_ACCEPT     2
@@ -475,6 +479,9 @@
  *   u16     challengeindex        the challenge in g_MpChallenges (its
  *                                 config is what the setup above came from;
  *                                 its number marks the record)
+ *   u8      challengemode         (protocol 39) 0 stock challenge, 1 Challenges+:
+ *                                 which of the two independent datasets this
+ *                                 room's challenge uses for names and records
  *   s32     weaponsetnum          g_MpWeaponSetNum
  *   str(17) weaponsetname         (protocol 34) the host's own name for it,
  *                                 "" when it is one of the game's sets
@@ -784,6 +791,8 @@
  *                                 challenge's own sims are players in
  *                                 PLAYERCOUNT(), which would tick a higher
  *                                 tier than the host's human count
+ *   u8      challengemode         (protocol 39) 0 stock, 1 Challenges+ - the
+ *                                 dataset the verdict was judged for
  *
  * LOBBY (client -> host) - the client's match stage has stopped (its H12,
  * past its end screen) and it is back in the menus. The host sends RULES and

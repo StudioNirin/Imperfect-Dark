@@ -2988,8 +2988,10 @@ static MenuItemHandlerResult handlerGame(s32 operation, struct menuitem *item, u
 	// 0 Combat Simulator, 1 Co-op Mission, 2 Counter-Op Mission (protocol
 	// 32: the members' room teams their sides), then each set's campaign,
 	// then (protocol 37) 3+n Challenge: a Combat Simulator room whose match
-	// is a stock offline Challenge Mode run (net.h's struct netchallengesetup)
+	// is a stock offline Challenge Mode run (net.h's struct netchallengesetup),
+	// then (protocol 39) a Challenge+ option using the separate dataset
 	const s32 challengeopt = gameOptions();
+	const s32 challengeplusopt = challengeopt + 1;
 
 	if (g_GexPlusMode) {
 		g_NetCoopSetup.on = 0;
@@ -2999,12 +3001,13 @@ static MenuItemHandlerResult handlerGame(s32 operation, struct menuitem *item, u
 		if (g_NetChallengeSetup.on) {
 			g_NetChallengeSetup.on = 0;
 			netChallengeSetupRestore();
+			g_ChallengeMode = 0;
 		}
 	}
 
 	switch (operation) {
 	case MENUOP_GETOPTIONCOUNT:
-		data->dropdown.value = g_GexPlusMode ? challengeopt : challengeopt + 1;
+		data->dropdown.value = g_GexPlusMode ? challengeopt : challengeplusopt + 1;
 		break;
 	case MENUOP_GETOPTIONTEXT:
 		if (data->dropdown.value == 0) {
@@ -3021,6 +3024,10 @@ static MenuItemHandlerResult handlerGame(s32 operation, struct menuitem *item, u
 
 		if (data->dropdown.value == challengeopt) {
 			return (intptr_t)"Challenge";
+		}
+
+		if (data->dropdown.value == challengeplusopt) {
+			return (intptr_t)"Challenge+";
 		}
 
 		if (!netCoopGameTag(data->dropdown.value - 3, tag, sizeof(tag))) {
@@ -3045,16 +3052,19 @@ static MenuItemHandlerResult handlerGame(s32 operation, struct menuitem *item, u
 		// a challenge room: the host's own setup goes aside until the room
 		// ends (netlobby.c); the config itself waits for the room's own
 		// start (netSessionLobbyStartMatch), so the settings preview can
-		// show the challenge the room has not started yet
-		if (data->dropdown.value == challengeopt && !g_GexPlusMode) {
+		// show the challenge the room has not started yet. Challenge+ uses
+		// the separate dataset (protocol 39) via g_ChallengeMode.
+		if ((data->dropdown.value == challengeopt || data->dropdown.value == challengeplusopt) && !g_GexPlusMode) {
 			if (!g_NetChallengeSetup.on) {
 				netChallengeSetupSnapshot();
 			}
 
 			g_NetChallengeSetup.on = 1;
+			g_ChallengeMode = data->dropdown.value == challengeplusopt ? 1 : 0;
 		} else if (g_NetChallengeSetup.on) {
 			g_NetChallengeSetup.on = 0;
 			netChallengeSetupRestore();
+			g_ChallengeMode = 0;
 		}
 
 		break;
@@ -3062,7 +3072,7 @@ static MenuItemHandlerResult handlerGame(s32 operation, struct menuitem *item, u
 		data->dropdown.value = 0;
 
 		if (g_NetChallengeSetup.on && !g_GexPlusMode) {
-			data->dropdown.value = challengeopt;
+			data->dropdown.value = g_ChallengeMode ? challengeplusopt : challengeopt;
 		} else if (g_NetCoopSetup.on && g_NetCoopSetup.campaign) {
 			for (n = 0; netCoopGameTag(n, tag, sizeof(tag)); n++) {
 				if (strcasecmp(tag, g_NetCoopSetup.game) == 0) {

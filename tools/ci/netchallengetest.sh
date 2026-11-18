@@ -35,6 +35,10 @@
 #            config): the host turns on those the difficulty table enables
 #            for two humans, so the match plays with allies and enemies - the
 #            offline sanity check the net path otherwise never ran
+#   plus     Challenges+ (protocol 39): the same challenge 14 on the separate
+#            dataset. Assert the generated "Challenge+ N" name, that the host
+#            and client both use the Plus records, and that marking a Plus
+#            star leaves the standard record for that challenge untouched
 #   plain    no --net-test-challenge: MATCH_END's challenge block reads 0,
 #            nothing marks (the wire grew three bytes; a match with no
 #            challenge must not notice)
@@ -48,7 +52,7 @@ set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 BUILD=${BUILD:-$ROOT/build}
 OUT=${OUT:-$BUILD/netchallenge-out}; PORT=${PORT:-27700}
-CASES=${CASES:-won notwon cheated clamped sims plain}
+CASES=${CASES:-won notwon cheated clamped sims plus plain}
 BIN=${1:-pd.x86_64}
 case $BIN in /*) ;; */*) BIN=$(realpath "$BIN") ;; *) BIN=$BUILD/$BIN ;; esac
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
@@ -172,6 +176,23 @@ sims)
 	check "$C" "net: challenge 14: the host's verdict marked this machine's record at 2 players, completions\[1\] now 3$" \
 		"sims: the client marked the human tier, not its sim-inflated player count"
 	;;
+plus)
+	# Challenges+ on its own dataset. givekills makes team 0 win so the mark
+	# is deterministic; challenge 14 has no standard completion in this run.
+	run_case plus --net-test-challenge-plus 14 --net-test-givekills 0,30,20
+	check "$H" "net: --net-test-challenge-plus: the room plays challenge 14: Challenge\+ 15$" \
+		"plus: the host used the generated Challenges+ name"
+	check "$C" "net: the room's Challenges\+ challenge: Challenge\+ 15$" \
+		"plus: the client named it from RULES as Challenges+"
+	check "$H" "net: match 1 starting on stage 0x47," \
+		"plus: the challenge's own arena was played"
+	check "$H" "net: challenge 14 \(Challenge\+ 15\): won at 2 players, completions\[1\] now 3$" \
+		"plus: the host marked the Plus record"
+	check "$H" "net: plus: standard challenge 14 completions\[1\] still 0$" \
+		"plus: the standard record was left untouched"
+	check "$C" "net: challenge 14: the host's verdict marked this machine's record at 2 players, completions\[1\] now 3$" \
+		"plus: the client marked the Plus record too"
+	;;
 plain)
 	run_case plain
 	if grep -q "net: challenge" "$H"; then
@@ -215,6 +236,23 @@ if grep -q 'tier = s_MatchHumans;' "$NS" \
 	pass "late join: the sims and tier come from the H1 human count, set once"
 else
 	fail "late join: the sims or tier are not pinned to the match's start count"
+fi
+
+# Challenges+ independence: two record arrays, both read AND written in the
+# gamefile (symmetric save block), and Plus completions grant no shared unlocks.
+CH=$ROOT/src/game/challenge.c
+GF=$ROOT/src/game/gamefile.c
+if grep -q 'challengeActiveList()' "$CH" \
+		&& [ "$(grep -c 'challengeSetCompletedByAnyPlayerIn(g_MpChallenges' "$GF")" -ge 2 ] \
+		&& [ "$(grep -c 'challengeIsCompletedByAnyPlayerIn(g_MpChallenges' "$GF")" -ge 2 ]; then
+	pass "plus: two independent record sets, both read and written by the save"
+else
+	fail "plus: the standard and Plus records are not both saved independently"
+fi
+if grep -q 'if (!g_ChallengeMode) {' "$CH" && grep -q 'if (!g_ChallengeMode) {' "$NS"; then
+	pass "plus: a Plus completion grants no shared feature unlocks"
+else
+	fail "plus: a Plus completion feeds the shared unlock table"
 fi
 
 exit $status
