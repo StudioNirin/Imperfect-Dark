@@ -41,7 +41,7 @@
 # mod-base 69
 
 notes 95 2026-11-18
-New mode: Challenges+ is a separate set of the 30 Combat Challenges with its own star records. It starts as a copy of the originals, so you can play them online and earn stars without touching your standard challenge progress. Pick it from the Combat Simulator menu, or online from the room's Game setting. Challenges+ stars do not unlock anything yet.
+New mode: Challenges+ is a separate set of the 30 Combat Challenges with its own star records. It starts as a copy of the originals, so you can play them online and earn stars without touching your standard challenge progress. Pick it from the Combat Simulator menu, or online from the room's Game setting. Challenges+ stars do not unlock anything yet. Picking a challenge online now shows its description beside the list as you scroll through it, and Accept takes you back to the room's settings rather than the list.
 
 notes 94 2026-11-17
 Online Challenges: picking a challenge on a room's Settings page now shows the challenge's own description on the confirmation page, so you can see what it is before accepting.

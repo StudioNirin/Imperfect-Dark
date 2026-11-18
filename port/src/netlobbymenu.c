@@ -3335,7 +3335,35 @@ static MenuItemHandlerResult handlerChallengeAccept(s32 operation, struct menuit
 		sysLogPrintf(LOG_NOTE, "lobby: the room's challenge: %s", challengeGetName(s_ChallengePickIndex));
 	}
 
+	// the Accept row's CLOSESDIALOG flag has already popped the confirm page;
+	// with the choice made we also leave the picker list, back to Room Settings
+	// (the menu that opened it). Cancel keeps its flag alone and returns to the
+	// list, which is what a cancel should do.
+	if (operation == MENUOP_SET) {
+		menuPopDialog();
+	}
+
 	return 0;
+}
+
+// row -> challenge: the same availability walk challengeSetCurrentBySlot does
+static s32 netChallengeIndexFromSlot(s32 slot)
+{
+	s32 index;
+
+	for (index = 0; index < (s32) ARRAYCOUNT(g_MpChallenges); index++) {
+		if (!challengeIsAvailableToAnyPlayer(index)) {
+			continue;
+		}
+
+		if (slot == 0) {
+			return index;
+		}
+
+		slot--;
+	}
+
+	return -1;
 }
 
 static MenuItemHandlerResult handlerChallengeList(s32 operation, struct menuitem *item, union handlerdata *data)
@@ -3344,24 +3372,22 @@ static MenuItemHandlerResult handlerChallengeList(s32 operation, struct menuitem
 		return 0; // the stock list hides itself while its machine plays a challenge; the host is not playing
 	}
 
-	if (operation == MENUOP_SET) {
-		s32 slot = data->list.value;
-		s32 index;
+	// the highlighted row drives the right column's description: load that
+	// challenge's config so the DESCRIPTION_MPCONFIG scrollable shows it
+	if (operation == MENUOP_LISTITEMFOCUS) {
+		s32 index = netChallengeIndexFromSlot(data->list.value);
 
-		// row -> challenge: the same availability walk challengeSetCurrentBySlot does
-		for (index = 0; index < (s32) ARRAYCOUNT(g_MpChallenges); index++) {
-			if (!challengeIsAvailableToAnyPlayer(index)) {
-				continue;
-			}
-
-			if (slot == 0) {
-				break;
-			}
-
-			slot--;
+		if (index >= 0) {
+			g_Menus[g_MpPlayerNum].training.mpconfig = challengeLoad(index, s_NetChallengePickCfg, sizeof(s_NetChallengePickCfg));
+		} else {
+			g_Menus[g_MpPlayerNum].training.mpconfig = NULL;
 		}
 
-		s_ChallengePickIndex = index < (s32) ARRAYCOUNT(g_MpChallenges) ? index : -1;
+		return 0;
+	}
+
+	if (operation == MENUOP_SET) {
+		s_ChallengePickIndex = netChallengeIndexFromSlot(data->list.value);
 		menuPushDialog(&s_NetChallengeConfirmMenuDialog);
 		return 0;
 	}
@@ -3378,14 +3404,39 @@ static struct menuitem s_NetChallengePickItems[] = {
 		0x0000004d,
 		handlerChallengeList,
 	},
+	{
+		// right column: the highlighted challenge's own description
+		MENUITEMTYPE_SCROLLABLE,
+		DESCRIPTION_MPCONFIG,
+		MENUITEMFLAG_NEWCOLUMN,
+		0x0000007c,
+		PAL ? 0x41 : 0x37,
+		NULL,
+	},
 	{ MENUITEMTYPE_END },
 };
+
+static MenuDialogHandlerResult netChallengePick(s32 operation, struct menudialogdef *dialogdef, union handlerdata *data)
+{
+	// LISTITEMFOCUS only fires on cursor movement, so seed the right column on
+	// open with the challenge the picker was opened on
+	if (operation == MENUOP_OPEN) {
+		if (g_NetChallengeSetup.on && g_NetChallengeSetup.index < (s32) ARRAYCOUNT(g_MpChallenges)) {
+			g_Menus[g_MpPlayerNum].training.mpconfig = challengeLoad(g_NetChallengeSetup.index, s_NetChallengePickCfg,
+					sizeof(s_NetChallengePickCfg));
+		} else {
+			g_Menus[g_MpPlayerNum].training.mpconfig = NULL;
+		}
+	}
+
+	return 0;
+}
 
 static struct menudialogdef s_NetChallengePickMenuDialog = {
 	MENUDIALOGTYPE_DEFAULT,
 	L_MPMENU_050, // "Combat Challenges"
 	s_NetChallengePickItems,
-	NULL,
+	netChallengePick,
 	0,
 	NULL,
 };

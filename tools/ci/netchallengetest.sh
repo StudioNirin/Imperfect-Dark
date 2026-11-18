@@ -238,6 +238,20 @@ else
 	fail "late join: the sims or tier are not pinned to the match's start count"
 fi
 
+# The picker UI (no screenshot here): Accept leaves the picker list as well as
+# the confirm page, and the list's focus loads the highlighted challenge's
+# description into the NEWCOLUMN scrollable beside it. Pin both in source.
+NL=$ROOT/port/src/netlobbymenu.c
+if grep -q 'menuPopDialog();' "$NL" \
+		&& grep -q 'MENUOP_LISTITEMFOCUS' "$NL" \
+		&& grep -q 'challengeLoad(index, s_NetChallengePickCfg' "$NL" \
+		&& grep -q 'MENUITEMFLAG_NEWCOLUMN' "$NL" \
+		&& grep -q 'DESCRIPTION_MPCONFIG' "$NL"; then
+	pass "picker: Accept returns to the previous menu and focus drives the right-column description"
+else
+	fail "picker: Accept navigation or the right-column description is missing"
+fi
+
 # Challenges+ independence: two record arrays, both read AND written in the
 # gamefile (symmetric save block), and Plus completions grant no shared unlocks.
 CH=$ROOT/src/game/challenge.c
