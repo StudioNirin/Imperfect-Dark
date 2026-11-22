@@ -4750,3 +4750,51 @@ box:
 - **Give it a machine that has nothing else on it.** `netpredicttest.sh` needs
   no `pdlobbyd`, only `build/data/pd.ntsc-final.z64` and an offscreen video
   driver, so it can run in CI. Nobody's local box is the reference.
+
+## Zombies and One Shall Stand... on open seats (2026-11-22, no wire change)
+
+A Join-in-Progress room makes every seat in the room a player slot: the host
+starts the match with `bits = (1 << seats) - 1`, so the open seats are real
+players with real characters, real `g_Vars.players[i]` entries and real
+`PLAYERCOUNT()`. The condition the host kills at match start - a vacate - hides
+the seat and makes it solid to nothing, but nothing else about it said "this
+seat is not a player".
+
+Three things read it as a player for years:
+
+- Pop a Cap skips it (`netScenPacOut` + `netPacVictimIndex`, the existing seam).
+- The co-op modes skip it (`netPlayerOutOfPlay`), so an open seat played alone
+  never strands a match.
+- Zombies and One Shall Stand... counted it as a survivor forever - in the
+  starter pool, in the uninfected count, in the end-of-round points, in the
+  lives-left count and in the score table. An open seat can never be infected,
+  so the round could never end and the match sat on the fight forever.
+
+The same seam now covers both: `zombiesOutOfPlay()` / `lmsOutOfPlay()` are
+`netPlayerOutOfPlay` on the chr index, matching the Pop a Cap/co-op pattern,
+and the round logic, the pick-up loops, the death handling, the score and
+`netScenHostSeatCleared` (the dropped seat's counts now clear the mode's too)
+all respect it. The LMS host publishes an out-of-play seat as lives 0/out 1 so
+the clients read it as gone. `lv.c`'s death-animation wait skips out-of-play
+players for the same reason (a seat that never finishes the animation is not
+worth waiting for).
+
+The same seat is also what unhooked the Skedar puppet: the host published the
+role byte, the client applied it, but nothing consumed it for a body that was
+already built - the flag existed only for a first build. A player puppet's
+role change now takes the stale flag the block's apply set and forces the
+rebuild, and the sim body is rebuilt the same way (`zombiesPrepareBotSpawn`).
+`zombiesNotifyChrSpawn()` also reads the seat as the fallback when the chr is
+not yet in the match's list, which is what the host's own first build and the
+client's puppet first build hit. The same flag gates the dostartnewlife loops
+in `zombiesStartRound` and the kill-table accounting in `lv.c`.
+
+Everything still comes from the host: the client follows the published block
+and rebuilds its own bodies under it, which is the same shape as the
+counter-op's body rebuilds. The stale-flag and rebuild are both consumed on
+the client's next puppet pass, so the body is one tick behind the host's.
+
+**The client's first build** still lands one tick behind the host's for the
+same reason: the first block arrives from a snapshot, not from the render
+clock, so the role byte is read before the puppet first registers. The
+seat-based fallback in `zombiesNotifyChrSpawn` covers it.

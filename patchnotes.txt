@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 98 2026-11-22
+Zombies online: an open seat (a join-in-progress room's empty seats) is no longer counted as a player - it takes no part in the starter pool, the fight, the round-end points or the score table, so the match no longer ends at 3/5 and the round no longer stalls on it. The Skedar body now reaches the puppet who wears it: a player's role turning turns its puppet into Skedar the moment the host's byte flips, and a simulant's body rebuilds for the same reason. Simulants now wear the right body on the client too. One Shall Stand... online: an open seat is out of the match - it has no lives to spend and never stands in the way of a winner. Plasma Tag: Fast Movement comes on by default now, and the simulants run at the same pace as the players. Bowcaster bolts bounce off surfaces again instead of landing dead, so a bolt that ricochets into a character still hurt it. The Moonrailer, the Bowcaster's glow and the Shock Rifle draw their beams for the players you see on the client. Check for Updates now delivers the release's model packs, docs and payload checksum list rather than only the program, so an install that never saw a new pack gets it.
+
 notes 97 2026-11-19
 New mode: Plasma Tag is a free-for-all where everyone fights with the Bowcaster and never runs out of ammo. Everyone starts on half health, and Fast Movement is available in the mode's Options. Pick it from the Combat Simulator scenario menu.
 
