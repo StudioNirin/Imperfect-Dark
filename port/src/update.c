@@ -33,6 +33,7 @@
 #include <SDL2/SDL.h>
 #include "types.h"
 #include "fs.h"
+#include "archive.h"
 #include "system.h"
 #include "sha256.h"
 #include "ghostnet.h"
@@ -155,6 +156,9 @@ static char g_Commit[UPDATE_MAXCOMMIT + 1] = { 0 };
 static char g_Asset[64] = { 0 };
 static char g_Sha[65] = { 0 };
 static u32 g_Size = 0;
+static char g_AssetArchive[64] = { 0 };
+static char g_AssetSha[65] = { 0 };
+static u32 g_AssetSize = 0;
 
 // The other channel's latest build: stable's for a dev build, dev's for a
 // stable one. Asked for alongside this channel's by a check the player made
@@ -278,7 +282,11 @@ static bool updateParseManifest(const char *text, struct updaterel *out, char *e
 	char asset[64] = { 0 };
 	char sha[65] = { 0 };
 	unsigned long size = 0;
+	char assetArchive[64] = { 0 };
+	char assetSha[65] = { 0 };
+	unsigned long assetSize = 0;
 	bool found = false;
+	bool foundAsset = false;
 
 	while (*at) {
 		const char *eol = strchr(at, '\n');
@@ -303,6 +311,10 @@ static bool updateParseManifest(const char *text, struct updaterel *out, char *e
 			// written after the builds as before, and stopping at the first
 			// match would leave a release describing itself as nameless.
 			found = strcmp(target, VERSION_TARGET) == 0;
+		} else if (!foundAsset && sscanf(line, "asset %63s %63s %64s %lu", target, assetArchive, assetSha, &assetSize) == 4) {
+			// The optional assets archive - a release before the one that
+			// ships one has no such line, which is an ordinary manifest.
+			foundAsset = strcmp(target, VERSION_TARGET) == 0;
 		}
 
 		if (!eol) {
@@ -333,6 +345,19 @@ static bool updateParseManifest(const char *text, struct updaterel *out, char *e
 	snprintf(out->asset, sizeof(out->asset), "%s", asset);
 	snprintf(out->sha, sizeof(out->sha), "%s", sha);
 	out->size = (u32)size;
+
+	// The assets archive is optional and unchecked here: an old release,
+	// or one a build never carried, is a valid manifest with no assets.
+	if (foundAsset) {
+		if (strlen(assetSha) != 64 || assetSize == 0 || assetSize > UPDATE_MAXBYTES) {
+			snprintf(err, errsize, "%s", LANG_N("the release described a file this cannot be"));
+			return false;
+		}
+
+		snprintf(out->assetArchive, sizeof(out->assetArchive), "%s", assetArchive);
+		snprintf(out->assetSha, sizeof(out->assetSha), "%s", assetSha);
+		out->assetSize = (u32)assetSize;
+	}
 
 	return true;
 }
@@ -463,6 +488,9 @@ static bool updateFetchManifest(char *err, u32 errsize)
 	snprintf(g_Asset, sizeof(g_Asset), "%s", rel.asset);
 	snprintf(g_Sha, sizeof(g_Sha), "%s", rel.sha);
 	g_Size = rel.size;
+	snprintf(g_AssetArchive, sizeof(g_AssetArchive), "%s", rel.assetArchive);
+	snprintf(g_AssetSha, sizeof(g_AssetSha), "%s", rel.assetSha);
+	g_AssetSize = rel.assetSize;
 	SDL_UnlockMutex(g_Lock);
 
 	return true;
@@ -838,6 +866,154 @@ static bool updateDownload(bool other, char *msg, u32 msgsize)
 	return true;
 }
 
+/**
+ * The assets archive a release carries, if it carries one: downloaded and
+ * verified the same way the build is, then extracted into the game. Only the
+ * entries the release meant for that - the model packs, the docs and the
+ * payload checksum list - are written; everything else in the archive is left
+ * where the archive kept it. A release that carries no assets line is a
+ * release to leave alone.
+ *
+ * The old release's model packs outright are NOT removed: an update brings in
+ * what the new release carries and leaves what the player has where it was,
+ * which is how every other file in this archive is meant to be read.
+ */
+static s32 updateWantAsset(const char *name, void *arg)
+{
+	(void) arg;
+
+	if (strncmp(name, "model-packs/", 12) == 0) {
+		return 1;
+	}
+
+	if (strncmp(name, "docs/", 5) == 0) {
+		return 1;
+	}
+
+	if (strcmp(name, "PAYLOAD.txt") == 0) {
+		return 1;
+	}
+
+	return 0;
+}
+
+static bool updateFetchAssets(bool other, char *msg, u32 msgsize)
+{
+	struct ghostnetbuf *buf = &g_Download;
+	struct ghostnetreq req;
+	char archive[64] = { 0 };
+	char sha[65] = { 0 };
+	u32 size = 0;
+	char url[512];
+	char newpath[FS_MAXPATH];
+	char destDir[FS_MAXPATH];
+	char self[FS_MAXPATH];
+	s32 status = 0;
+	FILE *f;
+
+	SDL_LockMutex(g_Lock);
+	if (other) {
+		snprintf(archive, sizeof(archive), "%s", g_OtherKnown ? g_Other.assetArchive : "");
+		snprintf(sha, sizeof(sha), "%s", g_Other.assetSha);
+		size = g_Other.assetSize;
+	} else {
+		snprintf(archive, sizeof(archive), "%s", g_AssetArchive);
+		snprintf(sha, sizeof(sha), "%s", g_AssetSha);
+		size = g_AssetSize;
+	}
+	SDL_UnlockMutex(g_Lock);
+
+	// A release with no assets line leaves the install alone.
+	if (archive[0] == '\0') {
+		return true;
+	}
+
+	// The game's root is beside the binary - fsFullPath of the $E placeholder
+	{
+		const char *root = fsFullPath("$E");
+
+		if (!root || !root[0]) {
+			snprintf(msg, msgsize, "%s", LANG_N("could not find where this build runs from"));
+			return false;
+		}
+
+		snprintf(destDir, sizeof(destDir), "%.*s", (s32)sizeof(destDir) - 1, root);
+	}
+
+	snprintf(newpath, sizeof(newpath), "%s/pd-update-assets.zip", destDir);
+
+	f = fopen(newpath, "wb");
+
+	if (f == NULL) {
+		snprintf(msg, msgsize, "cannot write %s (%s)", newpath, strerror(errno));
+		return false;
+	}
+
+	snprintf(url, sizeof(url), "%s/%s", other ? updateOtherBaseUrl() : updateBaseUrl(), archive);
+
+	memset(&req, 0, sizeof(req));
+	req.url = url;
+	req.redirect = true;
+	req.timeout = UPDATE_DOWNLOADTIMEOUT;
+	req.cancel = &g_Cancel;
+	buf->data = NULL;
+	buf->len = 0;
+	buf->sink = f;
+	buf->maxlen = size;
+
+	if (!ghostnetSend(&req, buf, &status, msg, msgsize)) {
+		fclose(f);
+		remove(newpath);
+		return false;
+	}
+
+	fclose(f);
+
+	if (status != 200) {
+		snprintf(msg, msgsize, "the download answered %d", status);
+		remove(newpath);
+		return false;
+	}
+
+	if (buf->len != size) {
+		snprintf(msg, msgsize, "the download stopped early (%u of %u bytes)", (u32)buf->len, size);
+		remove(newpath);
+		return false;
+	}
+
+	{
+		char gotsha[65];
+
+		if (!sha256File(newpath, gotsha)) {
+			snprintf(msg, msgsize, "%s", LANG_N("could not read back what was downloaded"));
+			remove(newpath);
+			return false;
+		}
+
+		if (strcmp(sha, gotsha) != 0) {
+			snprintf(msg, msgsize, "%s", LANG_N("the download is not the file the release describes"));
+			remove(newpath);
+			return false;
+		}
+	}
+
+	{
+		s32 written = archiveExtractMatching(newpath, destDir, updateWantAsset, NULL);
+
+		if (written < 0) {
+			snprintf(msg, msgsize, "%s", LANG_N("the assets could not be unpacked"));
+			remove(newpath);
+			return false;
+		}
+
+		sysLogPrintf(LOG_NOTE, "update: %d asset file(s) unpacked into %s", written, destDir);
+	}
+
+	remove(newpath);
+
+	return true;
+}
+
 static int updateWorker(void *arg)
 {
 	char msg[160] = { 0 };
@@ -900,6 +1076,11 @@ static int updateWorker(void *arg)
 		}
 	} else if (job == UPDATE_JOB_SWITCH) {
 		if (updateDownload(true, msg, sizeof(msg))) {
+			// the other channel's assets follow the build through the same gate
+			if (!updateFetchAssets(true, msg, sizeof(msg))) {
+				sysLogPrintf(LOG_WARNING, "update: the other channel's assets were not unpacked: %s", msg);
+			}
+
 			SDL_LockMutex(g_Lock);
 			snprintf(msg, sizeof(msg), "Switched to %s (%s).\nRestart to start using it.",
 					updateOtherChannel(), g_Other.version);
@@ -911,6 +1092,14 @@ static int updateWorker(void *arg)
 		}
 	} else if (job == UPDATE_JOB_INSTALL) {
 		if (updateDownload(false, msg, sizeof(msg))) {
+			// The new release's model packs, docs and payload checksum list
+			// land with the build. Failure leaves the install whole - the
+			// build is already staged - but says so, as quietly as the assets
+			// are meant to be an update.
+			if (!updateFetchAssets(false, msg, sizeof(msg))) {
+				sysLogPrintf(LOG_WARNING, "update: the new release's assets were not unpacked: %s", msg);
+			}
+
 			updateSetResult(UPDATE_STAGED, "Installed. Restart to start using it.");
 		} else {
 			updateSetResult(UPDATE_ERROR, msg);

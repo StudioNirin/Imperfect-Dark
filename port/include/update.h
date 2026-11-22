@@ -48,6 +48,13 @@ struct updaterel {
 	u32 size;
 	s32 notesnum;
 	char notesdate[16];
+	// The assets archive the release ships beside the build (optional: an
+	// older release carries none, and the build it describes is still the
+	// one to install). An empty assetArchive means the release carries no
+	// such archive.
+	char assetArchive[64];
+	char assetSha[65];
+	u32 assetSize;
 };
 
 // See the note on the definition: empty for the real release URL, set only by

@@ -62,6 +62,35 @@ the owner's call, it is about the mod, not the game).
   network, no cache); `PD_UPDATE_NOTICE_FORCE=1` lifts the automation guard for
   a real check against `Mod.UpdateServer`.
 
+## The assets archive (2026-11-22)
+
+An install that never saw a new model pack kept the old one: the update
+replaced only the exe, so a fresh pack the release carries was invisible to
+anyone who had already installed. The release now ships a second archive
+beside the build, one line per target in `update.txt`:
+
+    asset <target> pd-assets-<target>.zip <sha256> <size>
+
+The archive carries `model-packs/`, `docs/` and `PAYLOAD.txt` (a sha256 for
+every file in it, the same form the full package uses) - the same three things
+the clean package carries in those folders. It is deliberately not a second
+copy of the full package: no ROM, no saved config, no added-content - those
+still come from the player's own install, as they have always.
+
+`updateFetchAssets()` downloads it on the same gate as the build - same
+size and hash checks, same budget - then unpacks it into the game root with
+`archiveExtractMatching()` and an allowlist: `model-packs/`, `docs/` and
+`PAYLOAD.txt` are extracted, everything else in the archive is skipped. The
+extraction is best effort: if it fails, the build is already staged and the
+check reports it, but the install is not retried. A release with no `asset`
+line is an old release with no assets, and the update leaves the install
+alone. The extraction does not delete anything it did not write, so a pack
+a player made locally stays put.
+
+A release cut before this feature carries no `asset` line, which parses as
+"no assets" - there is no version floor for the assets the way there is for
+the switch row.
+
 ## Switching channels
 
 A check the player makes also fetches the other channel's `update.txt` and
