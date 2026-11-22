@@ -8277,7 +8277,16 @@ s32 projectileTick(struct defaultobj *obj, bool *embedded)
 								}
 							}
 
-							objLand(prop, &sp5e8, &sp5f4, embedded);
+							{
+								struct weaponobj *w = (struct weaponobj *) obj;
+								// A plasma bolt is a bouncing projectile, not something that lands on
+								// the way: a surface it meets is one it ricochets off, not the end of its life.
+								// The chr hit already dealt its damage and landed it (handled); a surface
+								// contact keeps the bolt in the air, fizzling on its own timer.
+								if (w->weaponnum != WEAPON_BOWCASTERBOLT || handled) {
+									objLand(prop, &sp5e8, &sp5f4, embedded);
+								}
+							}
 						}
 					}
 
