@@ -517,8 +517,15 @@ static void netScenCapture(u8 *out)
 		for (i = 0; i < g_MpNumChrs; i++) {
 			const s32 slot = netScenSlotOf(i);
 			s32 left = g_LmsStartingLives - g_MpAllChrConfigPtrs[i]->numdeaths;
+			// A seat nobody plays is out: it has no lives to spend (net scenes
+			// publish it as such so the clients read it as gone)
+			bool outofplay = i < PLAYERCOUNT() && netPlayerOutOfPlay(i);
 
 			if (slot >= 0) {
+				if (outofplay) {
+					left = 0;
+				}
+
 				out[LMS_LIVES + slot] = (u8)(left > 0 ? left : 0);
 				out[LMS_OUT + slot] = (u8)(left <= 0 ? 1 : 0);
 			}
@@ -573,6 +580,16 @@ void netScenHostSeatCleared(s32 slot)
 	g_ScenarioData.htm.dltime240[idx] = 0;
 	g_ScenarioData.pac.killcounts[idx] = 0;
 	g_ScenarioData.pac.survivalcounts[idx] = 0;
+	g_ScenarioData.zombies.infected[idx] = 0;
+	g_ScenarioData.zombies.score[idx] = 0;
+	g_ScenarioData.zombies.infections[idx] = 0;
+	g_ScenarioData.zombies.startedas[idx] = 0;
+	g_ScenarioData.zombies.homebody[idx] = -1;
+	g_ScenarioData.zombies.homehead[idx] = -1;
+
+	if (idx < ARRAYCOUNT(g_ScenarioData.zombies.bodystale)) {
+		g_ScenarioData.zombies.bodystale[idx] = false;
+	}
 
 	for (pn = 0; pn < PLAYERCOUNT(); pn++) {
 		if (g_Vars.playerstats[pn].mpindex == slot) {
@@ -1256,11 +1273,30 @@ static void netScenApply(const u8 *b, u32 tick, const char *tag)
 			if (slot >= 0) {
 				u8 newrole = b[ZOM_ROLE + slot];
 
-				if (newrole != g_ZombiesNetRole[i] && i < PLAYERCOUNT()) {
-					g_ScenarioData.zombies.bodystale[i] = true;
+				if (newrole != g_ZombiesNetRole[i]) {
+					// the role goes first: the rebuild reads it back
+					g_ZombiesNetRole[i] = newrole;
+
+					if (i < PLAYERCOUNT() && i < ARRAYCOUNT(g_ScenarioData.zombies.bodystale)) {
+						// a player puppet wears the new body (its local body
+						// stale flag, taken by playerTickChrBody on its next pass)
+						g_ScenarioData.zombies.bodystale[i] = true;
+					} else if (i < PLAYERCOUNT()) {
+						// beyond the bodystale array the seat's role reads back
+						// from the seat in playerTickChrBody (zombiesNotifyChrSpawn)
+					} else {
+						// a simulant wears the new body too: it is the client's own
+						// chr, so its rebuild is the same call the host makes at a
+						// round turn
+						const s32 botindex = i - PLAYERCOUNT();
+						struct chrdata *bot = botindex >= 0 && botindex < g_BotCount && g_MpBotChrPtrs[botindex] ? g_MpBotChrPtrs[botindex] : NULL;
+
+						if (bot) {
+							zombiesPrepareBotSpawn(bot);
+						}
+					}
 				}
 
-				g_ZombiesNetRole[i] = newrole;
 				g_ZombiesNetScore[i] = gets16(b + ZOM_SCORE + slot * 2);
 			}
 		}

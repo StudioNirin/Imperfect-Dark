@@ -36,6 +36,23 @@ bool g_LmsNetBlockSeen = false;
 #endif
 
 /**
+ * A seat nobody plays (an open seat on a host): out of play, and not a
+ * player for the round's sake - no lives, never alive, not a winner. The
+ * same seam Pop a Cap and the co-op modes use. The host is the only one
+ * where the seat state is known; a client has no local seats and reads the
+ * published bytes.
+ */
+static bool lmsOutOfPlay(s32 mpchrnum)
+{
+#ifndef PLATFORM_N64
+	if (mpchrnum >= 0 && mpchrnum < PLAYERCOUNT() && netPlayerOutOfPlay(mpchrnum)) {
+		return true;
+	}
+#endif
+	return false;
+}
+
+/**
  * The standard option rows, with the life slider above them. The rows are
  * the same ones Combat and Instagib offer so switching modes does not move
  * the familiar checkboxes around.
@@ -183,6 +200,10 @@ static s32 lmsLivesLeft(s32 mpchrnum)
 		left = g_LmsNetLives[mpchrnum];
 	}
 #endif
+	if (lmsOutOfPlay(mpchrnum)) {
+		return 0;
+	}
+
 	return left > 0 ? left : 0;
 }
 
@@ -223,6 +244,10 @@ bool lmsLivesSpent(struct chrdata *chr)
 		return false;
 	}
 
+	if (lmsOutOfPlay(index)) {
+		return true;
+	}
+
 #ifndef PLATFORM_N64
 	// A net client has no local numdeaths during the match; the host publishes
 	// each chr's elimination in its scenario block.
@@ -247,6 +272,10 @@ s32 lmsMatchOver(void)
 	}
 
 	for (i = 0; i < g_MpNumChrs; i++) {
+		if (lmsOutOfPlay(i)) {
+			continue;
+		}
+
 		if (g_MpAllChrConfigPtrs[i]->numdeaths < g_LmsStartingLives) {
 			alive++;
 		}
@@ -273,6 +302,10 @@ void lmsCalculatePlayerScore(struct mpchrconfig *mpchr, s32 mpchrnum, s32 *score
 		left = g_LmsNetLives[mpchrnum];
 	}
 #endif
+
+	if (lmsOutOfPlay(mpchrnum)) {
+		left = 0;
+	}
 
 	if (left < 0) {
 		left = 0;

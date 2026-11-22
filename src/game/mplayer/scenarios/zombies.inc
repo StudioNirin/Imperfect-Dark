@@ -78,6 +78,26 @@ static bool sZombiesConvertPending[MAX_LOCAL_PLAYERS];
 // A client's snapshot of the published roles, to spot the flip to infected.
 static u8 sZombiesLastNetRole[MAX_MPCHRS];
 static s32 sZombiesLastNetRound = -1;
+// The host's fight-phase log line: the last uninfected count and round it
+// was printed for, so the line repeats only when something changed.
+static s32 sZombiesLastLoggedUninfected = -1;
+static s32 sZombiesLastLoggedRound = -1;
+
+/**
+ * A seat nobody plays (an open seat on a host): it is real in the player
+ * list but out of play, so it takes no part in the round - not the starter
+ * pool, not the fight's uninfected count, not the end-of-round points, and
+ * not the score table. The same seam Pop a Cap and the co-op modes use.
+ */
+static bool zombiesOutOfPlay(s32 index)
+{
+#ifndef PLATFORM_N64
+	if (index >= 0 && index < PLAYERCOUNT() && netPlayerOutOfPlay(index)) {
+		return true;
+	}
+#endif
+	return false;
+}
 
 /**
  * Rounds slider, above the familiar free-for-all rows.
@@ -370,7 +390,12 @@ void zombiesNotifyChrSpawn(struct chrdata *chr, s32 *bodynum, s32 *headnum, bool
 		return;
 	}
 
-	if (zombiesIsInfected(chr)) {
+	// A chr is not in the match's list yet on its first build (it registers
+	// at the end of the build, after this runs) and on a client the host's
+	// published byte is the record of its role, so the seat is the question
+	// being asked here: an infected seat is Skedar, whoever the body is
+	// being built for.
+	if (zombiesIsInfected(chr) || zombiesSeatIsInfected(g_Vars.currentplayernum)) {
 		*bodynum = BODY_SKEDAR;
 		*headnum = -1;
 		if (sp60) {
@@ -502,6 +527,8 @@ void zombiesStageReset(void)
 	memset(sZombiesConvertPending, 0, sizeof(sZombiesConvertPending));
 	memset(sZombiesLastNetRole, 0, sizeof(sZombiesLastNetRole));
 	sZombiesLastNetRound = -1;
+	sZombiesLastLoggedUninfected = -1;
+	sZombiesLastLoggedRound = -1;
 }
 
 /**
@@ -552,8 +579,15 @@ static void zombiesStartRound(s32 round)
 	// a new life hands out reads the same array.
 	memset(g_ScenarioData.zombies.infected, 0, sizeof(g_ScenarioData.zombies.infected));
 
-	// Reuse the role array as the pool marker while rolling.
+	// Reuse the role array as the pool marker while rolling. A seat nobody
+	// plays (an open seat on a host) is not a candidate: it is hidden, never
+	// hurt, and never converts, so it would stay uninfected forever and the
+	// round could never end.
 	for (i = 0; i < g_MpNumChrs; i++) {
+		if (zombiesOutOfPlay(i)) {
+			continue;
+		}
+
 		pool[poolcount++] = i;
 	}
 
@@ -601,11 +635,15 @@ static void zombiesStartRound(s32 round)
 	// the infected, the kit for the survivors (playerSpawnWeapons()'s
 	// scenario branch); bodystale makes the rebuild pick up the new role.
 	for (i = 0; i < PLAYERCOUNT() && i < ARRAYCOUNT(g_ScenarioData.zombies.bodystale); i++) {
+		if (zombiesOutOfPlay(i)) {
+			continue;
+		}
+
 		g_ScenarioData.zombies.bodystale[i] = true;
 	}
 
 	for (i = 0; i < PLAYERCOUNT() && i < ARRAYCOUNT(g_Vars.players); i++) {
-		if (g_Vars.players[i]) {
+		if (g_Vars.players[i] && !zombiesOutOfPlay(i)) {
 			g_Vars.players[i]->dostartnewlife = true;
 		}
 	}
@@ -620,14 +658,22 @@ static void zombiesStartRound(s32 round)
 #ifndef PLATFORM_N64
 	{
 		s32 infected = 0;
+		s32 out = 0;
 
 		for (i = 0; i < g_MpNumChrs; i++) {
-			if (g_ScenarioData.zombies.infected[i]) {
+			if (zombiesOutOfPlay(i)) {
+				out++;
+			} else if (g_ScenarioData.zombies.infected[i]) {
 				infected++;
 			}
 		}
 
-		sysLogPrintf(LOG_NOTE, "zombies: round %d started, %d of %d infected", round, infected, g_MpNumChrs);
+		if (out) {
+			sysLogPrintf(LOG_NOTE, "zombies: round %d started, %d of %d infected (%d out of play)", round, infected,
+					g_MpNumChrs - out, out);
+		} else {
+			sysLogPrintf(LOG_NOTE, "zombies: round %d started, %d of %d infected", round, infected, g_MpNumChrs);
+		}
 	}
 #endif
 }
@@ -648,6 +694,10 @@ static void zombiesEndRound(void)
 	g_ScenarioData.zombies.phasetime60 = TICKS(ZOM_END_SECONDS * 60);
 
 	for (i = 0; i < g_MpNumChrs; i++) {
+		if (zombiesOutOfPlay(i)) {
+			continue;
+		}
+
 		if (!g_ScenarioData.zombies.infected[i]) {
 			g_ScenarioData.zombies.score[i] += 2;
 		}
@@ -740,10 +790,39 @@ void zombiesTick(void)
 		data->roundtime60 -= g_Vars.lvupdate60;
 
 		for (i = 0; i < g_MpNumChrs; i++) {
+			if (zombiesOutOfPlay(i)) {
+				continue;
+			}
+
 			if (!data->infected[i]) {
 				uninfected++;
 			}
 		}
+
+#ifndef PLATFORM_N64
+		// Log one line per round-flip change, not every tick: phase, round,
+		// how many are uninfected and how many are out of play, so a log can
+		// show a stalled round as a stall.
+		if (uninfected != sZombiesLastLoggedUninfected || sZombiesLastLoggedRound != data->round) {
+			sZombiesLastLoggedUninfected = uninfected;
+			sZombiesLastLoggedRound = data->round;
+
+			{
+				s32 out = 0;
+				s32 k;
+
+				for (k = 0; k < g_MpNumChrs; k++) {
+					if (zombiesOutOfPlay(k)) {
+						out++;
+					}
+				}
+
+				sysLogPrintf(LOG_NOTE,
+					"zombies: tick %u %s round %d: %d uninfected, %d out of play",
+					g_NetTick, "fight", data->round, uninfected, out);
+			}
+		}
+#endif
 
 		if (data->roundtime60 <= 0 || uninfected == 0) {
 			zombiesEndRound();
@@ -782,7 +861,7 @@ void zombiesHandleDeath(s32 attackerindex, s32 victimindex)
 
 	if (!g_Vars.normmplayerisrunning || g_MpSetup.scenario != MPSCENARIO_ZOMBIES
 			|| NET_CLIENT || victimindex < 0 || victimindex >= g_MpNumChrs
-			|| data->phase != ZOM_PHASE_FIGHT) {
+			|| data->phase != ZOM_PHASE_FIGHT || zombiesOutOfPlay(victimindex)) {
 		return;
 	}
 

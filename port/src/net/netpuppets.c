@@ -30,6 +30,7 @@
 #include "game/propsnd.h"
 #include "game/setuputils.h"
 #include "game/smoke.h"
+#include "game/mplayer/scenarios.h"
 #include "getank.h"
 #include "net/net.h"
 #include "net/netsnap.h"
@@ -1400,6 +1401,24 @@ static void netPupObj(struct netpup *u, struct prop *prop, const struct netentst
 				} else if (host == WEAPON_GRENADEROUND) {
 					smokeCreateSimple(&prop->pos, prop->rooms, SMOKETYPE_GRENADETAIL);
 					s_Trails++;
+				} else if (prop->weapon->weaponnum == WEAPON_BOWCASTERBOLT) {
+					// The bolt's trail is the glow beam it is; the head rides
+					// behind the bolt along its velocity, the way the host's tick
+					// sets it, so the puppet does the same from its own movement
+					s32 beamnum = boltbeamFindByProp(prop);
+
+					if (beamnum >= 0) {
+						struct coord head;
+
+						// the head rides a fixed trail behind the bolt, along
+						// the way it came this tick
+						head.x = prop->pos.x - dx * 6.0f;
+						head.y = prop->pos.y - dy * 6.0f;
+						head.z = prop->pos.z - dz * 6.0f;
+						boltbeamSetHeadPos(beamnum, &head);
+
+						boltbeamSetTailPos(beamnum, &prop->pos);
+					}
 				}
 			}
 		}
@@ -1660,6 +1679,17 @@ static struct prop *netPupMakeWeapon(const struct netdesc *d, const struct neten
 	weapon->base.hidden &= ~(OBJHFLAG_PROJECTILE | OBJHFLAG_DELETING);
 	propActivate(prop);
 	propEnable(prop);
+
+	// A plasma bolt draws the same trail it does on the host: the beam is
+	// the whole glow, so a puppet's bolt is invisible without one
+	if (weapon->weaponnum == WEAPON_BOWCASTERBOLT) {
+		const s32 beamnum = boltbeamCreate(prop);
+
+		if (beamnum >= 0) {
+			boltbeamSetGlow(beamnum);
+		}
+	}
+
 	netPupPlaceObj(&weapon->base, s, weapon->base.model->scale);
 
 	return prop;
@@ -2839,6 +2869,17 @@ s32 netClientPuppetPlayerTick(s32 playernum)
 	// a seat's character changed (a join in progress, the ROSTER): its
 	// body goes, and is built below the way a counter-op's guard's is
 	if (player->haschrbody && player->prop->chr && netPlayerBodyStaleTake(playernum)) {
+		player->haschrbody = false;
+		player->model00d4 = NULL;
+		chrRemove(player->prop, false);
+	}
+
+	// zombies: the host's published role byte turned this seat into Skedar
+	// (or back to a body) - the block's apply set the local body stale,
+	// and a body already built here needs the same removal the roster
+	// change gets. Consumed before the first-build branch below, which
+	// takes its own stale flag; here the seat is already wearing one.
+	if (player->haschrbody && player->prop->chr && zombiesBodyStaleTake()) {
 		player->haschrbody = false;
 		player->model00d4 = NULL;
 		chrRemove(player->prop, false);

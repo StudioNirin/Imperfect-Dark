@@ -3257,7 +3257,17 @@ void lvTick(void)
 		if (g_Vars.lvupdate240 != 0) {
 			s32 numdying = 0;
 
+			// A seat nobody plays (an open seat on a host) is dead and hidden
+			// for the match: it never finishes a death animation, and it is
+			// nothing to wait for - the match's own end rule (LMS's lives left,
+			// Zombies' rounds) is what ends it.
 			for (i = 0; i < PLAYERCOUNT(); i++) {
+#ifndef PLATFORM_N64
+				if (netPlayerOutOfPlay(i)) {
+					continue;
+				}
+#endif
+
 				if (g_Vars.players[i]->isdead) {
 					if (g_Vars.players[i]->redbloodfinished == false
 							|| g_Vars.players[i]->deathanimfinished == false
@@ -3268,6 +3278,12 @@ void lvTick(void)
 			}
 
 			for (i = 0; i < g_MpNumChrs; i++) {
+#ifndef PLATFORM_N64
+				if (i < PLAYERCOUNT() && netPlayerOutOfPlay(i)) {
+					continue;
+				}
+#endif
+
 				if (g_MpAllChrPtrs[i]->actiontype == ACT_DIE) {
 					numdying++;
 				}
