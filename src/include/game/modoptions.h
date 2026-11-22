@@ -363,6 +363,7 @@ struct modoptions {
 	s32 jumpwho;     // MODWHO_*: whether simulants jump too
 	s32 roll;        // MODROLL_*
 	s32 melee;       // the punch and kick combo
+	s32 falconpunch; // the punch as a lock-on lunge instead of the stock swing
 	s32 flinch;      // the body twitching where a shot landed
 	s32 spawnweapon; // SPAWNWEAPON_*: what everyone spawns holding in an arena
 	s32 spawnakimbo; // 0/1: whether that gun comes as a pair - Akimbo Start?
@@ -437,7 +438,11 @@ f32 modGetJumpApex(void);
 bool modCanPlayerRoll(void);
 bool modCanChrRoll(void);
 bool modIsMeleeComboEnabled(void);
+bool modIsFalconPunchEnabled(void);
 bool modIsFlinchEnabled(void);
+#ifndef PLATFORM_N64
+extern bool g_ModFalconDebug; // autopunch and lunge trace for the gates
+#endif
 s32 modGetSpawnWeapon(void);
 bool modCanChrSpawnArmed(void);
 bool modGetSpawnAkimbo(void);

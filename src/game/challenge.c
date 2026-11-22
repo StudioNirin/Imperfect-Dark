@@ -766,7 +766,7 @@ s32 challengeForceUnlockSetupFeatures(struct mpsetup *setup, u8 *array, s32 len)
 	}
 
 	// Force unlock the scenario
-	if (setup->scenario <= MPSCENARIO_CAPTURETHECASE) {
+	if (setup->scenario < NUM_MPSCENARIOS) {
 		s32 featurenum = g_MpScenarioOverviews[setup->scenario].requirefeature;
 
 		if (featurenum) {

@@ -61,6 +61,8 @@
  *          s16 hillrooms[2], f32 hillpos[3], f32 colourfrac[3]
  *     CTC  s16 teamindexes[4], s16 playercountsperteam[4], s16 baserooms[4],
  *          REF tokens[4]
+ *     LMS  u8 livesleft[MAX_MPCHRS], u8 out[MAX_MPCHRS]
+ *          (0 lives left = out; lives are derived from the host's numdeaths)
  *   REF (5 bytes): u8 kind (0 none, 1 a chr: u8 slot, 2 an entity: u16 id,
  *   u16 gen)
  */
@@ -98,6 +100,18 @@
 #define CTC_BASES   (OFF_BODY + 16)
 #define CTC_TOKENS  (OFF_BODY + 24)
 
+#define LMS_LIVES   (OFF_BODY + 0)
+#define LMS_OUT     (LMS_LIVES + MAX_MPCHRS)
+
+// Zombies overlays the same region: only one scenario is active at a time.
+#define ZOM_ROLE    (OFF_BODY + 0)
+#define ZOM_SCORE   (ZOM_ROLE + MAX_MPCHRS)
+#define ZOM_ROUND   (ZOM_SCORE + MAX_MPCHRS * 2)
+#define ZOM_PHASE   (ZOM_ROUND + 1)
+#define ZOM_TIME    (ZOM_PHASE + 1)
+// The round clock only runs in the fight; scenarios/zombies.inc's phase id.
+#define NETZOM_PHASE_FIGHT 1
+
 #define NETSCEN_TERMINALS 1 // HTM_NUM_TERMINALS (hackthatmac.inc)
 #define NETSCEN_RING      64
 #define NETSCEN_HOLDMAX   120 // ticks a block waits for its events past its tick at most
@@ -108,7 +122,8 @@
 #define NETSCEN_MISSION 0xfe // the block is a co-op mission's (protocol 12; netcoop.c's body at OFF_BODY)
 
 typedef char netscen_body[OFF_BODY == 224 ? 1 : -1]; // the layout netproto.h documents
-typedef char netscen_fits[(PAC_SURV + MAX_MPCHRS * 2 <= NETSCEN_SIZE && HTM_TIME + MAX_MPCHRS * 2 <= NETSCEN_SIZE) ? 1 : -1];
+typedef char netscen_fits[(PAC_SURV + MAX_MPCHRS * 2 <= NETSCEN_SIZE && HTM_TIME + MAX_MPCHRS * 2 <= NETSCEN_SIZE
+		&& LMS_OUT + MAX_MPCHRS <= NETSCEN_SIZE && ZOM_TIME + 2 <= NETSCEN_SIZE) ? 1 : -1];
 
 // host
 static u8 s_HostBlock[NETSCEN_SIZE];
@@ -495,6 +510,42 @@ static void netScenCapture(u8 *out)
 			put16(out + CTC_COUNTS + i * 2, (u16)d->playercountsperteam[i]);
 			put16(out + CTC_BASES + i * 2, (u16)d->baserooms[i]);
 			netScenWriteRef(out + CTC_TOKENS + i * 5, d->tokens[i]);
+		}
+		break;
+	}
+	case MPSCENARIO_LASTMANSTANDING: {
+		for (i = 0; i < g_MpNumChrs; i++) {
+			const s32 slot = netScenSlotOf(i);
+			s32 left = g_LmsStartingLives - g_MpAllChrConfigPtrs[i]->numdeaths;
+
+			if (slot >= 0) {
+				out[LMS_LIVES + slot] = (u8)(left > 0 ? left : 0);
+				out[LMS_OUT + slot] = (u8)(left <= 0 ? 1 : 0);
+			}
+		}
+		break;
+	}
+	case MPSCENARIO_ZOMBIES: {
+		struct scenariodata_zombies *d = &g_ScenarioData.zombies;
+
+		for (i = 0; i < g_MpNumChrs; i++) {
+			const s32 slot = netScenSlotOf(i);
+
+			if (slot >= 0) {
+				out[ZOM_ROLE + slot] = d->infected[i] ? 1 : 0;
+				put16(out + ZOM_SCORE + slot * 2, (u16)(s16)d->score[i]);
+			}
+		}
+
+		out[ZOM_ROUND] = (u8)d->round;
+		out[ZOM_PHASE] = (u8)d->phase;
+		// u16 on the wire: a Time Limit of over 18 minutes would wrap. The
+		// countdown before a round publishes its phase clock instead, so a
+		// client counts down from the same number as the host.
+		{
+			const s32 time60 = d->phase == NETZOM_PHASE_FIGHT ? d->roundtime60 : d->phasetime60;
+
+			put16(out + ZOM_TIME, (u16)(time60 > 0 ? (time60 > 65535 ? 65535 : time60) : 0));
 		}
 		break;
 	}
@@ -1179,6 +1230,59 @@ static void netScenApply(const u8 *b, u32 tick, const char *tag)
 			if (slot >= 0) {
 				d->killcounts[i] = gets16(b + PAC_KILLS + slot * 2);
 				d->survivalcounts[i] = gets16(b + PAC_SURV + slot * 2);
+			}
+		}
+		break;
+	}
+	case MPSCENARIO_LASTMANSTANDING: {
+		for (i = 0; i < g_MpNumChrs; i++) {
+			const s32 slot = netScenSlotOf(i);
+
+			if (slot >= 0) {
+				g_LmsNetLives[i] = b[LMS_LIVES + slot];
+				g_LmsNetOut[i] = b[LMS_OUT + slot];
+			}
+		}
+
+		// A zero lives byte is a legitimate value (the chr is out of lives),
+		// so the block's arrival needs its own marker.
+		g_LmsNetBlockSeen = true;
+		break;
+	}
+	case MPSCENARIO_ZOMBIES: {
+		for (i = 0; i < g_MpNumChrs; i++) {
+			const s32 slot = netScenSlotOf(i);
+
+			if (slot >= 0) {
+				u8 newrole = b[ZOM_ROLE + slot];
+
+				if (newrole != g_ZombiesNetRole[i] && i < PLAYERCOUNT()) {
+					g_ScenarioData.zombies.bodystale[i] = true;
+				}
+
+				g_ZombiesNetRole[i] = newrole;
+				g_ZombiesNetScore[i] = gets16(b + ZOM_SCORE + slot * 2);
+			}
+		}
+
+		{
+			const u8 oldround = g_ZombiesNetRound;
+
+			g_ZombiesNetRound = b[ZOM_ROUND];
+			g_ZombiesNetPhase = b[ZOM_PHASE];
+			g_ZombiesNetTime60 = get16(b + ZOM_TIME);
+			g_ZombiesNetBlockSeen = true;
+
+			// A new round: the host has started new lives for its own seats;
+			// a client asks the engine for the same for its own.
+			if (g_ZombiesNetRound != oldround && oldround != 0) {
+				s32 p;
+
+				for (p = 0; p < PLAYERCOUNT() && p < ARRAYCOUNT(g_Vars.players); p++) {
+					if (g_Vars.players[p]) {
+						g_Vars.players[p]->dostartnewlife = true;
+					}
+				}
 			}
 		}
 		break;

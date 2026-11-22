@@ -30,4 +30,40 @@ f32 scenarioChooseSpawnLocation(f32 chrradius, struct coord *pos, RoomNum *rooms
 s32 scenarioGetMaxTeams(void);
 void scenarioHighlightRoom(RoomNum room, s32 *arg1, s32 *arg2, s32 *arg3);
 
+// One Shall Stand...: elimination, match end and the death feed message.
+// Defined in scenarios/lastmanstanding.inc (included into scenarios.c).
+extern s32 g_LmsStartingLives;
+bool lmsLivesSpent(struct chrdata *chr);
+s32 lmsMatchOver(void);
+void lmsHandleDeath(s32 attackerindex, s32 victimindex);
+#ifndef PLATFORM_N64
+extern u8 g_LmsNetLives[MAX_MPCHRS];
+extern u8 g_LmsNetOut[MAX_MPCHRS];
+extern bool g_LmsNetBlockSeen;
+
+extern u8 g_ZombiesNetRole[MAX_MPCHRS];
+extern s16 g_ZombiesNetScore[MAX_MPCHRS];
+extern u8 g_ZombiesNetRound;
+extern u8 g_ZombiesNetPhase;
+extern u16 g_ZombiesNetTime60;
+extern bool g_ZombiesNetBlockSeen;
+#endif
+
+// Zombies: rounds, roles, scoring and the body rebuild request.
+// Defined in scenarios/zombies.inc (included into scenarios.c).
+extern s32 g_ZombiesRounds;
+extern bool g_ZombiesRadarZombies;
+s32 zombiesMatchOver(void);
+void zombiesHandleDeath(s32 attackerindex, s32 victimindex);
+bool zombiesIsInfected(struct chrdata *chr);
+bool zombiesSeatIsInfected(s32 playernum);
+void zombiesSeatWokeUp(s32 playernum);
+bool zombiesRoundInProgress(void);
+bool zombiesCountdownActive(void);
+bool zombiesRadarChr(Gfx **gdl, struct prop *prop);
+bool zombiesBodyStaleTake(void);
+void zombiesNotifyChrSpawn(struct chrdata *chr, s32 *bodynum, s32 *headnum, bool *sp60);
+s32 zombiesBodyNumForChr(struct chrdata *chr);
+void zombiesPrepareBotSpawn(struct chrdata *chr);
+
 #endif

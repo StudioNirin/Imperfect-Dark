@@ -72,6 +72,7 @@ static const struct {
 	{ "Mod.JumpFor",                 NETKEY_SYNC },
 	{ "Mod.CombatRoll",              NETKEY_SYNC },
 	{ "Mod.MeleeCombos",             NETKEY_SYNC },
+	{ "Mod.FalconPunch",             NETKEY_SYNC },
 	{ "Mod.FlinchWhenShot",          NETKEY_SYNC },
 	{ "Mod.StartArmed",              NETKEY_SYNC },
 	{ "Mod.StartArmedAkimbo",        NETKEY_SYNC },
@@ -156,7 +157,7 @@ struct netruleshuman {
 	u32 displayoptions;
 	u8 handicap;
 	u16 options;
-	u8 gunfuncs[6];
+	u8 gunfuncs[GUNFUNCS_BYTES];
 };
 
 struct netrulesmsg {
@@ -1091,7 +1092,7 @@ void netRulesWrite(struct netbuf *b, u32 matchid)
 		netBufWriteU8(b, p->handicap);
 		netBufWriteU16(b, p->options);
 
-		for (j = 0; j < 6; j++) {
+		for (j = 0; j < GUNFUNCS_BYTES; j++) {
 			netBufWriteU8(b, p->gunfuncs[j]);
 		}
 	}
@@ -1257,7 +1258,7 @@ s32 netRulesRead(struct netbuf *b)
 		h->handicap = netBufReadU8(b);
 		h->options = netBufReadU16(b);
 
-		for (j = 0; j < 6; j++) {
+		for (j = 0; j < GUNFUNCS_BYTES; j++) {
 			h->gunfuncs[j] = netBufReadU8(b);
 		}
 	}
@@ -1633,7 +1634,7 @@ static void netRulesPut(const struct netrulesmsg *rules, s32 coop)
 		p->options = h->options;
 		s_PutOptions[i] = h->options;
 
-		for (j = 0; j < 6; j++) {
+		for (j = 0; j < GUNFUNCS_BYTES; j++) {
 			p->gunfuncs[j] = h->gunfuncs[j];
 		}
 

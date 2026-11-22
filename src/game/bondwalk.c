@@ -38,6 +38,7 @@
 #include "geroom.h"
 #include "gestan.h"
 #include "system.h"
+#include "game/mplayer/scenarios.h"
 #ifndef PLATFORM_N64
 #include "getank.h"
 #include "sitchair.h"
@@ -278,6 +279,10 @@ void bwalkInit(void)
 	g_Vars.currentplayer->bondforcespeed.x = 0;
 	g_Vars.currentplayer->bondforcespeed.y = 0;
 	g_Vars.currentplayer->bondforcespeed.z = 0;
+	g_Vars.currentplayer->meleelungeprop = NULL;
+	g_Vars.currentplayer->meleelungetime60 = 0;
+	g_Vars.currentplayer->meleecooldown60 = 0;
+	g_Vars.currentplayer->meleefalconanimstarted = false;
 
 #ifndef PLATFORM_N64
 	g_Vars.currentplayer->rollspeed.x = 0;
@@ -2589,6 +2594,20 @@ void bwalkApplyMoveData(struct movedata *data)
 		// whole point is the distance. Both take the same factor, so the sprint
 		// adds the same ground in every direction - the ROM's own 1.08 forward
 		// lean is left exactly as it was.
+		//
+		// Zombies: the infected already carry sprint's own 1.5 as their base
+		// (the chase is the mode's threat, and the sprint's price is a gun they
+		// do not hold), so the sprint multiplier stands down for them instead
+		// of stacking: a sprinting Skedar would otherwise cover 2.25 times the
+		// survivors' ground, which is a chase nobody outruns.
+#ifndef PLATFORM_N64
+		const bool zombieinfected = zombiesSeatIsInfected(g_Vars.currentplayernum);
+
+		if (zombieinfected) {
+			g_Vars.currentplayer->speedforwards *= ZOMBIE_SPEED_MULT;
+			g_Vars.currentplayer->speedsideways *= ZOMBIE_SPEED_MULT;
+		} else
+#endif
 		if (g_Vars.currentplayer->sprinting) {
 			g_Vars.currentplayer->speedforwards *= SPRINT_SPEED_MULT;
 			g_Vars.currentplayer->speedsideways *= SPRINT_SPEED_MULT;

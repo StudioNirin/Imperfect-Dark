@@ -14,7 +14,9 @@
 #include "lib/collision.h"
 #include "game/chraction.h"
 #include "game/coop.h"
+#include "game/options.h"
 #include "game/mplayer/mplayer.h"
+#include "game/mplayer/scenarios.h"
 #include "game/player.h"
 #include "game/playermgr.h"
 #include "lib/vi.h"
@@ -81,6 +83,91 @@ static f32 s_Flown = 0;  // units the free camera has moved
 static u32 s_FollowTicks[MAX_PLAYERS];
 static s32 s_Dead = 0;        // this machine's player, dead in a co-op mission, watches
 static s32 s_DeadLife = 0;    // the death it watches since (lifestarttime60)
+static s32 s_DeadPlayer = -1; // offline splitscreen: which local player the watch belongs to
+static struct prop *s_LmsTargetProp; // offline LMS: a chr (human or simulant) to watch
+
+/**
+ * The dead-player camera is driven by the host in netplay and by the local
+ * player offline. These wrappers let the camera code below run unchanged in
+ * One Shall Stand... without a net session.
+ */
+static s32 lmsLocalPad(void)
+{
+	if (g_NetMode != NETMODE_NONE) {
+		return netPlayersLocalPad();
+	}
+
+	return optionsGetContpadNum1(g_Vars.currentplayerstats->mpindex);
+}
+
+static void lmsMouseDelta(f32 *dx, f32 *dy)
+{
+	if (g_NetMode != NETMODE_NONE) {
+		netMouseDelta(g_NetLocalSlot, dx, dy);
+	} else {
+		*dx = 0;
+		*dy = 0;
+	}
+}
+
+static const struct mpplayerconfig *lmsOwnPlayer(void)
+{
+	if (g_NetMode != NETMODE_NONE) {
+		return netRulesOwnPlayer();
+	}
+
+	return &g_PlayerConfigsArray[g_Vars.currentplayernum];
+}
+
+static bool lmsTickPass(void)
+{
+	return g_NetMode != NETMODE_NONE ? (g_NetPass >= NETPASS_TICK && !g_NetReplaying) : true;
+}
+
+/**
+ * Offline One Shall Stand... has simulants in the match, and they are not in
+ * g_Vars.players, so the spectator cannot use the net player list to pick
+ * someone to watch. Pick a living chr prop instead.
+ */
+static bool lmsSpecTargetOkay(void)
+{
+	return s_LmsTargetProp && s_LmsTargetProp->chr
+		&& !(s_LmsTargetProp->chr->chrflags & CHRCFLAG_HIDDEN)
+		&& s_LmsTargetProp->chr->actiontype != ACT_DEAD;
+}
+
+static void lmsSpecNextTarget(void)
+{
+	s32 start = -1;
+	s32 i;
+	s32 k;
+
+	if (s_LmsTargetProp) {
+		for (i = 0; i < g_MpNumChrs; i++) {
+			if (g_MpAllChrPtrs[i] == s_LmsTargetProp->chr) {
+				start = i;
+				break;
+			}
+		}
+	}
+
+	for (k = 1; k <= g_MpNumChrs; k++) {
+		struct prop *prop;
+
+		i = (start + k + g_MpNumChrs * 2) % g_MpNumChrs;
+		prop = g_MpAllChrPtrs[i] ? g_MpAllChrPtrs[i]->prop : NULL;
+
+		if (prop && prop->chr && !(prop->chr->chrflags & CHRCFLAG_HIDDEN)
+				&& prop->chr->actiontype != ACT_DEAD) {
+			if (prop != s_LmsTargetProp) {
+				sysLogPrintf(LOG_NOTE, "net: one shall stand...: following chr %d", i);
+			}
+
+			s_LmsTargetProp = prop;
+			return;
+		}
+	}
+}
 
 static s32 netSpecEligible(s32 pn)
 {
@@ -134,6 +221,7 @@ void netSpecStop(void)
 	s_Dead = 0;
 	s_Target = -1;
 	s_HaveCam = 0;
+	s_LmsTargetProp = NULL;
 }
 
 void netSpecStageStart(void)
@@ -209,7 +297,7 @@ static void netSpecBasis(const struct coord *look, struct coord *up)
 
 static void netSpecFollow(void)
 {
-	struct prop *tprop = g_Vars.players[s_Target]->prop;
+	struct prop *tprop = s_LmsTargetProp ? s_LmsTargetProp : g_Vars.players[s_Target]->prop;
 	struct coord eye = tprop->pos;
 	struct coord cam;
 	struct coord aim;
@@ -228,7 +316,7 @@ static void netSpecFollow(void)
 
 	// a wall between: in, a halving at a time, to where it is clear
 	if (!cdTestLos04(&eye, tprop->rooms, &cam, CDTYPE_BG)) {
-		s_Pulled += g_NetPass >= NETPASS_TICK;
+		s_Pulled += lmsTickPass();
 
 		for (i = 0; i < 6; i++) {
 			struct coord t;
@@ -269,7 +357,11 @@ static void netSpecFollow(void)
 
 	netSpecBasis(&look, &up);
 	player0f0c1840(&cam, &up, &look, &tprop->pos, tprop->rooms);
-	s_FollowTicks[s_Target] += g_NetPass >= NETPASS_TICK;
+
+	// an offline LMS target is a chr, not a player slot
+	if (s_Target >= 0 && s_Target < MAX_PLAYERS) {
+		s_FollowTicks[s_Target] += lmsTickPass();
+	}
 
 	// where the free camera starts from
 	s_CamPos = cam;
@@ -283,8 +375,8 @@ static void netSpecFollow(void)
 
 static void netSpecFly(s32 move)
 {
-	const s32 pad = netPlayersLocalPad();
-	const s32 tick = move && g_NetPass >= NETPASS_TICK && !g_NetReplaying; // it moves on ticks; a frame between draws it where it is
+	const s32 pad = lmsLocalPad();
+	const s32 tick = move && lmsTickPass(); // it moves on ticks; a frame between draws it where it is
 	struct coord look;
 	struct coord up;
 	struct coord dst;
@@ -305,7 +397,7 @@ static void netSpecFly(s32 move)
 	// the look stick and the mouse look; the N64 styles, the stick turns and
 	// goes forward, the C buttons strafe and look up and down
 	if (tick) {
-		const struct mpplayerconfig *own = netRulesOwnPlayer();
+		const struct mpplayerconfig *own = lmsOwnPlayer();
 		const s32 pc = pad >= 0 && pad < MAX_PLAYERS && g_PlayerConfigsArray[pad].controlmode == CONTROLMODE_PC;
 		const u16 options = own ? own->options : g_PlayerConfigsArray[0].options;
 		const f32 pitchsign = (options & OPTION_FORWARDPITCH) ? 1.f : -1.f;
@@ -314,7 +406,7 @@ static void netSpecFly(s32 move)
 		const s32 cleft = joyGetButtons(pad, L_CBUTTONS) != 0;
 		const s32 cright = joyGetButtons(pad, R_CBUTTONS) != 0;
 
-		netMouseDelta(g_NetLocalSlot, &mdx, &mdy);
+		lmsMouseDelta(&mdx, &mdy);
 		s_Yaw -= mdx * 0.01f + joyGetStickX(pad) * 0.0008f;
 		s_Pitch -= mdy * 0.01f;
 		side = (cright ? 1.f : 0) - (cleft ? 1.f : 0);
@@ -363,7 +455,11 @@ static void netSpecControls(s32 pad)
 	}
 
 	if (joyGetButtonsPressedThisFrame(pad, Z_TRIG)) {
-		netSpecNext(1, "fire");
+		if (g_NetMode == NETMODE_NONE && g_MpSetup.scenario == MPSCENARIO_LASTMANSTANDING) {
+			lmsSpecNextTarget();
+		} else {
+			netSpecNext(1, "fire");
+		}
 	} else if (s_CycleEvery > 0 && g_NetTick - s_LastCycle >= (u32)s_CycleEvery) {
 		s_LastCycle = g_NetTick;
 		netSpecNext(1, "--net-test-spec-cycle");
@@ -439,15 +535,28 @@ s32 netSpecOn(void)
 s32 netSpecDeadCameraTick(void)
 {
 	struct player *pl = g_Vars.currentplayer;
+	bool lms = g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_LASTMANSTANDING
+		&& pl->prop && pl->prop->chr && lmsLivesSpent(pl->prop->chr);
+	bool offlineLms = lms && g_NetMode == NETMODE_NONE;
 
-	// the host runs every player's pass: only this machine's own is watching
-	if (g_NetMode == NETMODE_NONE || netSessionSpectating() || g_Vars.currentplayernum != g_NetLocalSlot) {
+	// the host runs every player's pass: only this machine's own is watching.
+	// Offline One Shall Stand... has no net slot; the local player is its own.
+	if (g_NetMode == NETMODE_NONE) {
+		if (!lms) {
+			return 0;
+		}
+	} else if (netSessionSpectating() || g_Vars.currentplayernum != g_NetLocalSlot) {
 		return 0;
 	}
 
+	// offline splitscreen: each local player's camera in turn
+	if (g_NetMode == NETMODE_NONE && s_Dead && s_DeadPlayer != g_Vars.currentplayernum) {
+		s_Dead = 0;
+	}
+
 	// (a counter-op's death is a press away from its next guard: no watching)
-	if (g_Vars.normmplayerisrunning || g_Vars.coopplayernum < 0 || !pl->isdead || netCoopRespawnDue(g_Vars.currentplayernum)
-			|| coopIsAntiNum(g_Vars.currentplayernum)) {
+	if (!lms && (g_Vars.normmplayerisrunning || g_Vars.coopplayernum < 0 || !pl->isdead || netCoopRespawnDue(g_Vars.currentplayernum)
+			|| coopIsAntiNum(g_Vars.currentplayernum))) {
 		s_Dead = 0;
 		return 0;
 	}
@@ -456,48 +565,59 @@ s32 netSpecDeadCameraTick(void)
 		// out once the death has gone to black, unless nobody is left alive
 		// (the mission is lost, and ends on its own)
 		if (!pl->redbloodfinished || !pl->deathanimfinished || !playerIsFadeComplete() || pl->colourscreenfrac < 1
-				|| coopAllDead() || netCoopLostSubject() >= 0) {
+				|| (!lms && (coopAllDead() || netCoopLostSubject() >= 0))) {
 			s_Dead = 0;
 			return 0;
 		}
 
 		s_Dead = 1;
+		s_DeadPlayer = g_Vars.currentplayernum;
 		s_DeadLife = pl->lifestarttime60;
 		s_Free = 0;
 		s_Target = -1;
+		s_LmsTargetProp = NULL;
 		s_HaveCam = 0;
 		s_Switches = s_Ticks = s_NoTarget = s_FreeTicks = s_Pulled = 0;
 		s_Flown = 0;
 		memset(s_FollowTicks, 0, sizeof(s_FollowTicks));
-		sysLogPrintf(LOG_NOTE, "net: co-op: player %d is out of the mission (tick %u): watching the others, Z the next, A the free camera",
-				g_Vars.currentplayernum, g_NetTick);
-		netSpecNext(1, "the first");
+		sysLogPrintf(LOG_NOTE, "net: %s: player %d is out (tick %u): watching the others, Z the next, A the free camera",
+				lms ? "one shall stand..." : "co-op", g_Vars.currentplayernum, g_NetTick);
+
+		if (offlineLms) {
+			lmsSpecNextTarget();
+		} else {
+			netSpecNext(1, "the first");
+		}
 
 		// the picture back from the death's black
 		playerSetFadeColour(0, 0, 0, 1);
 		playerSetFadeFrac(60, 0);
 	}
 
-	s_Ticks += g_NetPass >= NETPASS_TICK && !g_NetReplaying;
+	s_Ticks += lmsTickPass();
 
-	if (g_NetPass >= NETPASS_TICK && !g_NetReplaying && !mpIsPaused()) {
-		netSpecControls(netPlayersLocalPad());
+	if (lmsTickPass() && !mpIsPaused()) {
+		netSpecControls(lmsLocalPad());
 	}
 
-	if (!netSpecEligible(s_Target)) {
-		netSpecNext(1, s_Target < 0 ? "the first" : "the last one went out of play");
+	if (offlineLms ? !lmsSpecTargetOkay() : !netSpecEligible(s_Target)) {
+		if (offlineLms) {
+			lmsSpecNextTarget();
+		} else {
+			netSpecNext(1, s_Target < 0 ? "the first" : "the last one went out of play");
+		}
 	}
 
 	if (s_Free && s_HaveCam) {
 		netSpecFly(1);
-	} else if (netSpecEligible(s_Target)) {
+	} else if (offlineLms ? lmsSpecTargetOkay() : netSpecEligible(s_Target)) {
 		netSpecFollow();
 	} else if (s_HaveCam) {
 		// nobody up to watch: the camera stays where it was
-		s_NoTarget += g_NetPass >= NETPASS_TICK && !g_NetReplaying;
+		s_NoTarget += lmsTickPass();
 		netSpecFly(0);
 	} else {
-		s_NoTarget += g_NetPass >= NETPASS_TICK && !g_NetReplaying;
+		s_NoTarget += lmsTickPass();
 		return 0;
 	}
 
@@ -506,7 +626,10 @@ s32 netSpecDeadCameraTick(void)
 
 s32 netSpecDeadOn(void)
 {
-	return s_Dead && g_Vars.currentplayernum == g_NetLocalSlot && g_Vars.currentplayer->isdead
+	bool ownslot = g_NetMode == NETMODE_NONE
+		|| (g_Vars.currentplayernum == g_NetLocalSlot && s_DeadPlayer == g_Vars.currentplayernum);
+
+	return s_Dead && ownslot && g_Vars.currentplayer->isdead
 		&& s_DeadLife == g_Vars.currentplayer->lifestarttime60;
 }
 
@@ -529,10 +652,24 @@ void *netSpecRenderText(void *gdlp)
 
 	if (s_Free) {
 		snprintf(text, sizeof(text), "Free camera   A: follow%s", leave);
-	} else if (netSpecEligible(s_Target)) {
+	} else if (s_LmsTargetProp ? lmsSpecTargetOkay() : netSpecEligible(s_Target)) {
 		char name[16];
 
-		snprintf(name, sizeof(name), "%s", g_PlayerConfigsArray[g_Vars.playerstats[s_Target].mpindex].base.name);
+		if (s_LmsTargetProp) {
+			s32 i;
+
+			name[0] = '\0';
+
+			for (i = 0; i < g_MpNumChrs; i++) {
+				if (g_MpAllChrPtrs[i] == s_LmsTargetProp->chr) {
+					snprintf(name, sizeof(name), "%s", g_MpAllChrConfigPtrs[i]->name);
+					break;
+				}
+			}
+		} else {
+			snprintf(name, sizeof(name), "%s", g_PlayerConfigsArray[g_Vars.playerstats[s_Target].mpindex].base.name);
+		}
+
 		name[strcspn(name, "\n")] = '\0';
 		snprintf(text, sizeof(text), "Watching %s   Z: next   A: free camera%s", name, leave);
 	} else {

@@ -652,6 +652,12 @@ void playerStartNewLife(void)
 	g_Vars.currentplayer->dostartnewlife = false;
 
 #ifndef PLATFORM_N64
+	// Zombies: a seat the infected caught starts its new life with a banner
+	// saying so.
+	zombiesSeatWokeUp(g_Vars.currentplayernum);
+#endif
+
+#ifndef PLATFORM_N64
 	// Mission Respawn keeps what the player carries, and a collected
 	// objective item (Egyptian's Golden Gun and its ammo box, a key) is a
 	// prop carried as the player prop's child: marked for deletion here it
@@ -979,7 +985,10 @@ void playerLoadDefaults(void)
 	g_Vars.currentplayer->bondactivateorreload = false;
 	g_Vars.currentplayer->isdead = false;
 
-	if (stageGetIndex(g_Vars.stagenum) == STAGEINDEX_DUEL) {
+	if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_PLASMATEST) {
+		// Plasma Tag: everyone starts on half health.
+		g_Vars.currentplayer->bondhealth = 0.5f;
+	} else if (stageGetIndex(g_Vars.stagenum) == STAGEINDEX_DUEL) {
 		g_Vars.currentplayer->bondhealth = 0.01f;
 	} else if (stageGetIndex(g_Vars.stagenum) == STAGEINDEX_MAIANSOS) {
 		g_Vars.currentplayer->bondhealth = 0.5f;
@@ -1240,13 +1249,53 @@ static void playerSpawnWeapons(void)
 	// Instagib: every player spawns with a Moonrailer. Clear slots already
 	// happened in instaInit() (weapons[] = MPWEAPON_NONE), so mpGetSpawnWeapon()
 	// returns -1 here - handle this first before the normal spawn path.
-	if (g_MpSetup.scenario == MPSCENARIO_INSTAGIB) {
+	if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_INSTAGIB) {
 		invGiveSingleWeapon(WEAPON_RAILLASER);
 		bgunSetAmmoQuantity(AMMOTYPE_RAIL, bgunGetAmmoCapacityForWeapon(WEAPON_RAILLASER, FUNC_PRIMARY));
 		g_Vars.currentplayer->spawnweaponnums[HAND_LEFT] = WEAPON_NONE;
 		g_Vars.currentplayer->spawnweaponnums[HAND_RIGHT] = WEAPON_RAILLASER;
 		bgunEquipWeapon2(HAND_LEFT, WEAPON_NONE);
 		bgunEquipWeapon2(HAND_RIGHT, WEAPON_RAILLASER);
+		return;
+	}
+
+	// Plasma Tag: a Bowcaster only. The slots were cleared in plasmaTagInit(),
+	// so there is nothing to roll from the setup either.
+	if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_PLASMATEST) {
+		invGiveSingleWeapon(WEAPON_BOWCASTER);
+		bgunSetAmmoQuantity(AMMOTYPE_BOWCASTER, bgunGetAmmoCapacityForWeapon(WEAPON_BOWCASTER, FUNC_PRIMARY));
+		g_Vars.currentplayer->spawnweaponnums[HAND_LEFT] = WEAPON_NONE;
+		g_Vars.currentplayer->spawnweaponnums[HAND_RIGHT] = WEAPON_BOWCASTER;
+		bgunEquipWeapon2(HAND_LEFT, WEAPON_NONE);
+		bgunEquipWeapon2(HAND_RIGHT, WEAPON_BOWCASTER);
+		return;
+	}
+
+	// Zombies: the infected fight with their fists - a zombie with a shotgun
+	// stops being the threat of the mode. The survivors spawn with a PD
+	// Shotgun and a Falcon 2 in their inventory, both with half their spare
+	// ammo, single wield so the Falcon 2 is cycled to normally. No map
+	// pickups (zombiesInit() clears the slots and propPickupByPlayer()
+	// guards against leftovers), so this is the whole arsenal.
+	if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_ZOMBIES) {
+		if (zombiesSeatIsInfected(g_Vars.currentplayernum)) {
+			invGiveSingleWeapon(WEAPON_UNARMED);
+			g_Vars.currentplayer->spawnweaponnums[HAND_LEFT] = WEAPON_NONE;
+			g_Vars.currentplayer->spawnweaponnums[HAND_RIGHT] = WEAPON_UNARMED;
+			bgunEquipWeapon2(HAND_LEFT, WEAPON_NONE);
+			bgunEquipWeapon2(HAND_RIGHT, WEAPON_UNARMED);
+			return;
+		}
+
+		invGiveSingleWeapon(WEAPON_SHOTGUN);
+		invGiveSingleWeapon(WEAPON_FALCON2);
+		bgunSetAmmoQuantity(AMMOTYPE_SHOTGUN, bgunGetAmmoCapacityForWeapon(WEAPON_SHOTGUN, FUNC_PRIMARY) / 2);
+		bgunSetAmmoQuantity(AMMOTYPE_PISTOL, bgunGetAmmoCapacityForWeapon(WEAPON_FALCON2, FUNC_PRIMARY) / 2);
+
+		g_Vars.currentplayer->spawnweaponnums[HAND_LEFT] = WEAPON_NONE;
+		g_Vars.currentplayer->spawnweaponnums[HAND_RIGHT] = WEAPON_SHOTGUN;
+		bgunEquipWeapon2(HAND_LEFT, WEAPON_NONE);
+		bgunEquipWeapon2(HAND_RIGHT, WEAPON_SHOTGUN);
 		return;
 	}
 
@@ -2057,6 +2106,12 @@ void playerTickChrBody(void)
 	bool bodystale = modSpectateTakeBodyStale();
 
 #ifndef PLATFORM_N64
+	// Zombies: an infected player has to change body the moment their role
+	// changes, mid-round as well as at the start of one.
+	bodystale = zombiesBodyStaleTake() || bodystale;
+#endif
+
+#ifndef PLATFORM_N64
 	// Or a character picked from the Perfect Menu's Customize Character
 	bodystale = modGhostTakeMenuCharacterStale() || bodystale;
 
@@ -2128,6 +2183,7 @@ void playerTickChrBody(void)
 
 		s32 weaponmodelnum;
 		s32 spectatorbody;
+		bool varyheight;
 #ifndef PLATFORM_N64
 		bool gebond = false;
 #endif
@@ -2192,6 +2248,10 @@ void playerTickChrBody(void)
 			headnum = -1;
 			sp60 = false;
 		}
+
+		// Zombies: the infected wear Skedar. After the spectator override so
+		// the mode wins, but before the model is built.
+		zombiesNotifyChrSpawn(g_Vars.currentplayer->prop->chr, &bodynum, &headnum, &sp60);
 
 		if (g_Vars.tickmode == TICKMODE_CUTSCENE) {
 			weaponnum = g_DefaultWeapons[0];
@@ -2395,7 +2455,12 @@ void playerTickChrBody(void)
 		if (g_Vars.currentplayer->prop->chr == NULL && chrsGetNumFree() == 0) {
 			g_Vars.currentplayer->model00d4 = NULL;
 		} else {
-			g_Vars.currentplayer->model00d4 = body0f02ce8c(bodynum, headnum, bodymodeldef, headmodeldef, false, model, true, true);
+			// Skedar bodies roll a random 65-85% scale whenever varyheight is set.
+		// A zombie has to stay the same size through every rebuild.
+		varyheight = !(g_Vars.normmplayerisrunning
+				&& g_MpSetup.scenario == MPSCENARIO_ZOMBIES
+				&& bodynum == BODY_SKEDAR);
+		g_Vars.currentplayer->model00d4 = body0f02ce8c(bodynum, headnum, bodymodeldef, headmodeldef, false, model, true, varyheight);
 		}
 
 		if (g_Vars.currentplayer->model00d4 == NULL) {
@@ -2410,7 +2475,12 @@ void playerTickChrBody(void)
 			return;
 		}
 #else
-		g_Vars.currentplayer->model00d4 = body0f02ce8c(bodynum, headnum, bodymodeldef, headmodeldef, false, model, true, true);
+		// Skedar bodies roll a random 65-85% scale whenever varyheight is set.
+		// A zombie has to stay the same size through every rebuild.
+		varyheight = !(g_Vars.normmplayerisrunning
+				&& g_MpSetup.scenario == MPSCENARIO_ZOMBIES
+				&& bodynum == BODY_SKEDAR);
+		g_Vars.currentplayer->model00d4 = body0f02ce8c(bodynum, headnum, bodymodeldef, headmodeldef, false, model, true, varyheight);
 #endif
 
 #ifndef PLATFORM_N64
@@ -6492,6 +6562,11 @@ void playerTick(bool arg0)
 		if (g_PlayersWithControl[g_Vars.currentplayernum]
 #ifndef PLATFORM_N64
 				&& !geWatchMpHoldsInput()
+				// Zombies: nobody moves or fires while the round's countdown
+				// banner shows - the same no-control path a menu takes, so
+				// the pad is read as idle and a net client sends neutral
+				// commands the way it does through the opening swirl.
+				&& !zombiesCountdownActive()
 #endif
 				) {
 			if (g_NetPass == NETPASS_PRESENT_ONLY) netPredictPresentBegin(); // netplay: a frame drawn between ticks moves nobody
@@ -6538,8 +6613,11 @@ void playerTick(bool arg0)
 		if (g_Vars.currentplayer->isdead
 				&& geDeathCamCamera(&spf4, &camup, &camlook, &deathcamhint, deathcamrooms)) {
 			player0f0c1840(&spf4, &camup, &camlook, &deathcamhint, deathcamrooms);
-		} else if (g_Vars.currentplayer->isdead && g_NetMode != NETMODE_NONE && netSpecDeadCameraTick()) {
-			// netplay: a dead co-op player watching the others (netspec.c)
+		} else if (g_Vars.currentplayer->isdead
+				&& (g_NetMode != NETMODE_NONE || g_MpSetup.scenario == MPSCENARIO_LASTMANSTANDING)
+				&& netSpecDeadCameraTick()) {
+			// netplay: a dead co-op player watching the others (netspec.c);
+			// offline: an eliminated One Shall Stand... player doing the same
 		} else
 #endif
 		{
@@ -7861,6 +7939,13 @@ Gfx *playerRenderHud(Gfx *gdl)
 #ifndef PLATFORM_N64
 						// You Only Live Twice (GE Plus): twice dead is out
 						if (gexPlusLivesSpent(g_Vars.currentplayer->prop->chr)) {
+							canrestart = false;
+						}
+
+						// One Shall Stand...: no restart once the life count
+						// is spent. The player drops into the spectator
+						// camera instead of sitting on the death screen.
+						if (lmsLivesSpent(g_Vars.currentplayer->prop->chr)) {
 							canrestart = false;
 						}
 #endif

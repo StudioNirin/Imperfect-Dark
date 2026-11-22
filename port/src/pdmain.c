@@ -46,6 +46,7 @@
 #include "game/zbuf.h"
 #include "game/game_1a78b0.h"
 #include "game/mplayer/mplayer.h"
+#include "game/mplayer/scenarios.h"
 #include "game/pak.h"
 #include "game/splat.h"
 #include "game/utils.h"
@@ -393,6 +394,11 @@ void mainLoop(void)
 		extern s32 sysArgGetInt(const char *arg, s32 defval);
 		const s32 seed = sysArgGetInt("--rng-seed", -1);
 		rngSetSeed(seed >= 0 ? (u32)seed : osGetCount());
+
+		// Debug aid for the Falcon Punch gate: the seat holds its trigger in
+		// forever and the lunge prints where it started and where it landed.
+		// Off without the flag; see bondmove.c and prop.c.
+		g_ModFalconDebug = sysArgGetInt("--falcon-debug", 0) != 0;
 	}
 
 	// Outer loop - this is infinite because ending is never changed
@@ -549,6 +555,20 @@ void mainLoop(void)
 
 		if (argFindByPrefix(1, "-mpbots") || mpsims > 0) {
 			g_Vars.lvmpbotlevel = 1;
+		}
+
+		// Debug aid for the scenario gates: --mp-scenario N boots this match
+		// with that mode. Like --mpsims it applies only to the stage booted
+		// into, so leaving the match leaves the normal setup alone.
+		{
+			static bool mpscenarioapplied = false;
+			const s32 mpscenario = mpscenarioapplied ? -1 : sysArgGetInt("--mp-scenario", -1);
+
+			if (mpscenario >= 0 && mpscenario < NUM_MPSCENARIOS) {
+				g_MpSetup.scenario = mpscenario;
+				scenarioInit();
+				mpscenarioapplied = true;
+			}
 		}
 
 		if (g_Vars.coopplayernum >= 0 || g_Vars.antiplayernum >= 0) {

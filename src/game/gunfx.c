@@ -25,7 +25,9 @@
 #define BOLTBEAMTICKMODE_AUTOMATIC 1
 
 struct casing g_Casings[20];
-struct boltbeam g_BoltBeams[8];
+// Shared by crossbow bolts and plasma bolts. The firing code falls back to a
+// visible orb when every slot is taken, so a full room costs trails, not bolts.
+struct boltbeam g_BoltBeams[NUM_BOLTBEAMS];
 struct lasersight g_LaserSights[MAX_PLAYERS];
 
 void beamCreate(struct beam *beam, s32 weaponnum, struct coord *from, struct coord *to)
@@ -943,7 +945,7 @@ s32 boltbeamFindByProp(struct prop *prop)
 	s32 result = -1;
 	s32 i = 0;
 
-	for (; i < 8 && result == -1; i++) {
+	for (; i < ARRAYCOUNT(g_BoltBeams) && result == -1; i++) {
 		if (g_BoltBeams[i].unk00_prop == prop) {
 			result = i;
 		}
@@ -959,6 +961,7 @@ s32 boltbeamCreate(struct prop *prop)
 	if (beamnum >= 0) {
 		g_BoltBeams[beamnum].tickmode = BOLTBEAMTICKMODE_MANUAL;
 		g_BoltBeams[beamnum].unk00_prop = prop;
+		g_BoltBeams[beamnum].unk04 = 0;
 	}
 
 	return beamnum;
@@ -1018,13 +1021,31 @@ void boltbeamSetAutomatic(s32 beamnum, f32 speed)
 	g_BoltBeams[beamnum].speed = speed;
 }
 
+/**
+ * Mark a boltbeam as a plasma bolt's trail. The glow flag makes it draw wide
+ * and near-opaque instead of the thin, faint crossbow-bolt line.
+ */
+void boltbeamSetGlow(s32 beamnum)
+{
+	if (beamnum >= 0 && beamnum < ARRAYCOUNT(g_BoltBeams)) {
+		g_BoltBeams[beamnum].unk04 = 1;
+	}
+}
+
 Gfx *boltbeamsRender(Gfx *gdl)
 {
 	s32 i;
 
 	for (i = 0; i < ARRAYCOUNT(g_BoltBeams); i++) {
 		if (g_BoltBeams[i].unk00 != -1) {
-			gdl = beamRenderGeneric(gdl, g_TexLaserConfigs, 1, &g_BoltBeams[i].headpos, 0xafafff00, 2, &g_BoltBeams[i].tailpos, 0xafafff7f);
+			if (g_BoltBeams[i].unk04) {
+				// Head (behind) is fully transparent, tail (at the bolt) is
+				// solid white - the alpha gradient fades the trailing end
+				// into a bright point rather than a solid line.
+				gdl = beamRenderGeneric(gdl, g_TexLaserConfigs, 1, &g_BoltBeams[i].headpos, 0xffffff00, 7, &g_BoltBeams[i].tailpos, 0xffffffff);
+			} else {
+				gdl = beamRenderGeneric(gdl, g_TexLaserConfigs, 1, &g_BoltBeams[i].headpos, 0xafafff00, 2, &g_BoltBeams[i].tailpos, 0xafafff7f);
+			}
 		}
 	}
 

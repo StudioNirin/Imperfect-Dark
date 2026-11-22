@@ -56,19 +56,29 @@
  * second WEAPONFLAG3_SHOTGUNMODEL on the gun - and the self-test pins both,
  * because either would fight the charge and neither is visible from the row.
  *
- * Simulants cannot have it: no WEAPONFLAG_AICANUSE, because a simulant's
- * charge is its own state (aibot->maulercharge[] is the Mauler's copy,
- * bot.c) and none of that is written for this gun. No mission hands it out
- * either - no stage's item table can name a weapon number the ROM never had,
- * so it reaches a player through the multiplayer lists and the Combat
- * Simulator only.
+ * Simulants can have it, and are held to the same wait. A simulant's charge is
+ * its own state (aibot->maulercharge[], bot.c) rather than a player's hand, and
+ * that accumulator now fills for this gun too, on its function and at its length,
+ * with the shot held until the charge is full. Holding it matters more here than
+ * it does for the Mauler: the Mauler's shot is worth what it was charged to, so a
+ * simulant firing early only hits softer, while this gun's damage does not scale
+ * at all, so an unheld charge is the same kill a second and a half early and the
+ * target's only answer to a railgun is that window. What a charging simulant does
+ * not get is the sound: the rising loop is hung off the player's hand, so whether
+ * a bot's charge should be audible is still an open question, not a decision.
+ *
+ * No stage's item table hands it out - such a table cannot name a weapon number
+ * the ROM never had - so it reaches a person through the multiplayer lists and the
+ * Combat Simulator, and through the Randomizer's deal, which does name it and so
+ * puts it in a guard's hands (modrandom.c).
  */
 
 // What the weapon list calls it. The code keeps the Rail-Laser name through the
 // enum, the ammo type, this file and the gate, so the two names are not a
 // mistake: this string is the only place the gun's face is decided.
 static const char s_RailLaserName[] = "Moonrailer\n";
-static const char s_RailLaserChargeName[] = "Charged Shot\n";
+static const char s_RailLaserChargeName[] = "Rail Shot\n";
+static const char s_RailLaserScopeName[] = "Use Scope\n";
 
 /**
  * Whether this weapon number is the Rail-Laser's, in either function.
@@ -88,6 +98,30 @@ bool weaponChargesLikeMauler(s32 weaponnum)
 	weaponnum = weaponHost(weaponnum);
 
 	return weaponnum == WEAPON_MAULER || weaponnum == WEAPON_RAILLASER;
+}
+
+/**
+ * Which of the two guns the charge belongs to: its firing function, or -1.
+ *
+ * The Mauler charges on its secondary, where this gun charges on its primary and
+ * keeps the secondary for the scope. Everything that asks whether a charge is
+ * happening - the player's, a simulant's, and the shot that clears it - asks this
+ * rather than naming a function, so the two guns cannot drift apart on which
+ * press belongs to which.
+ */
+s32 weaponChargeFunction(s32 weaponnum)
+{
+	weaponnum = weaponHost(weaponnum);
+
+	if (weaponnum == WEAPON_MAULER) {
+		return FUNC_SECONDARY;
+	}
+
+	if (weaponnum == WEAPON_RAILLASER) {
+		return FUNC_PRIMARY;
+	}
+
+	return -1;
 }
 
 /**
@@ -116,7 +150,11 @@ extern s32 g_InstagibCharge60;
 
 s32 raillaserCharge60(void)
 {
-	return g_InstagibCharge60;
+	// The override belongs to Instagib alone. scenarioInit() only calls the
+	// newly selected scenario's init, so nothing restores the field when a
+	// player leaves Instagib: without this guard a Moonrailer picked up in a
+	// later match would charge in a tenth of a second.
+	return g_MpSetup.scenario == MPSCENARIO_INSTAGIB ? g_InstagibCharge60 : TICKS(90);
 }
 
 f32 raillaserChargeFull(void)
@@ -152,6 +190,10 @@ void raillaserInit(void)
 
 	if ((name = langAddPortText(s_RailLaserChargeName))) {
 		((struct weaponfunc *) gun->functions[FUNC_PRIMARY])->name = name;
+	}
+
+	if ((name = langAddPortText(s_RailLaserScopeName))) {
+		((struct weaponfunc *) gun->functions[FUNC_SECONDARY])->name = name;
 	}
 }
 
@@ -222,7 +264,9 @@ void raillaserSelfTest(void)
 	sysLogPrintf(LOG_NOTE, "raillaser test: note  first-person model: %s (file %d); the fit logs in a stage as fpfit: row %d",
 		gebeanMoonrailerSlot() ? "the release's Moonraker" : "Perfect Dark's Laser", gebeanMoonrailerSlot(),
 		NUM_GE_GUNS);
-	RAILLASER_CHECK(gun->functions[FUNC_SECONDARY] == NULL, "it has one function: a zoom is the aim input here, not an alt-fire");
+	RAILLASER_CHECK(gun->functions[FUNC_SECONDARY] != NULL
+			&& ((struct weaponfunc *) gun->functions[FUNC_SECONDARY])->type == INVENTORYFUNCTYPE_SHOOT_SINGLE,
+		"its second function is a full firing clone - the AR34's Use Scope pattern");
 	RAILLASER_CHECK(((struct weaponfunc *) gun->functions[FUNC_PRIMARY])->type == INVENTORYFUNCTYPE_SHOOT_SINGLE, "its shot is a single hitscan beam, not a projectile");
 	RAILLASER_CHECK(gun->ammos[FUNC_PRIMARY] != NULL && gun->ammos[FUNC_PRIMARY]->clipsize == 1, "one shot a magazine");
 	// Asked the other way until a player told us otherwise: this check demanded a
@@ -266,9 +310,60 @@ void raillaserSelfTest(void)
 	}
 	RAILLASER_CHECK(bgunGetAmmoTypeForWeapon(WEAPON_RAILLASER, FUNC_PRIMARY) == AMMOTYPE_RAIL, "its ammunition is the Rail-Laser's own type");
 	RAILLASER_CHECK(bgunGetAmmoCapacityForWeapon(WEAPON_RAILLASER, FUNC_PRIMARY) == 5, "five of them, which is its own type's capacity");
-	RAILLASER_CHECK(!(gun->flags & WEAPONFLAG_AICANUSE), "no simulant can be given it");
+	RAILLASER_CHECK(gun->flags & WEAPONFLAG_AICANUSE, "a simulant can be given it, and held to the same charge");
 	RAILLASER_CHECK(!(gun->flags3 & WEAPONFLAG3_FREESHOTS), "it runs out of ammunition, unlike the Moonraker");
-	RAILLASER_CHECK((gun->aimsettings->flags & INVAIMFLAG_MANUALZOOM) && gun->aimsettings->zoomfov == 20.0f, "its zoom is the AR34's, on the aim input");
+	RAILLASER_CHECK((gun->aimsettings->flags & INVAIMFLAG_MANUALZOOM)
+			&& gun->aimsettings->zoomfov == 20.0f,
+		"the aim input keeps its own zoom, as it always did");
+	RAILLASER_CHECK(gunfuncBitIndex(WEAPON_RAILLASER) == GUNFUNC_BIT_RAILLASER
+			&& gunfuncBitIndex(WEAPON_RAILLASER) >= 0
+			&& (gunfuncBitIndex(WEAPON_RAILLASER) >> 3) < ARRAYCOUNT(g_PlayerConfigsArray[0].gunfuncs),
+		"the function toggle has a saved bit that fits gunfuncs[]");
+
+	// The function choice must survive a player-file save/load, just as the
+	// AR34's does. Round-trip gunfuncs with the Moonrailer bit set and check it
+	// comes back. Restores the whole array afterwards so the test is side-effect free.
+	{
+		struct savebuffer written;
+		struct savebuffer readback;
+		u8 keepgunfuncs[ARRAYCOUNT(g_PlayerConfigsArray[0].gunfuncs)];
+		s32 bit = gunfuncBitIndex(WEAPON_RAILLASER);
+		s32 pn = 0;
+
+		// The player file body is 0x70 bytes now that the gunfuncs block carries
+		// a bit per weapon number (pak.c). The block is last, so it grows only the
+		// body's tail; the whole thing must still fit the pak's file length.
+		savebufferClear(&written);
+		mpplayerfileSaveWad(pn, &written);
+		RAILLASER_CHECK((written.bitpos + 7) / 8 <= 0x70,
+			"the per-weapon function bits still fit the player file body");
+
+		memcpy(keepgunfuncs, g_PlayerConfigsArray[pn].gunfuncs, sizeof(keepgunfuncs));
+		memset(g_PlayerConfigsArray[pn].gunfuncs, 0, sizeof(g_PlayerConfigsArray[pn].gunfuncs));
+		g_PlayerConfigsArray[pn].gunfuncs[bit >> 3] |= 1 << (bit & 7);
+
+		savebufferClear(&written);
+		mpplayerfileSaveGunFuncs(&written, pn);
+		savebufferClear(&readback);
+		memcpy(readback.bytes, written.bytes, sizeof(readback.bytes));
+		memset(g_PlayerConfigsArray[pn].gunfuncs, 0, sizeof(g_PlayerConfigsArray[pn].gunfuncs));
+		mpplayerfileLoadGunFuncs(&readback, pn);
+
+		RAILLASER_CHECK((g_PlayerConfigsArray[pn].gunfuncs[bit >> 3] & (1 << (bit & 7))) != 0,
+			"the Moonrailer's function choice survives a player-file save and load");
+
+		// A weapon number whose bit was never set must read as the primary
+		// function, not as garbage from an unset byte.
+		savebufferClear(&readback);
+		mpplayerfileSaveGunFuncs(&readback, pn);
+		readback.bytes[(bit >> 3)] &= ~(1 << (bit & 7));
+		memset(g_PlayerConfigsArray[pn].gunfuncs, 0, sizeof(g_PlayerConfigsArray[pn].gunfuncs));
+		mpplayerfileLoadGunFuncs(&readback, pn);
+		RAILLASER_CHECK((g_PlayerConfigsArray[pn].gunfuncs[bit >> 3] & (1 << (bit & 7))) == 0,
+			"an old save with no Moonrailer bit reads as primary, not garbage");
+
+		memcpy(g_PlayerConfigsArray[pn].gunfuncs, keepgunfuncs, sizeof(keepgunfuncs));
+	}
 	RAILLASER_CHECK(gun->shortname != L_GUN_047, "it is named for itself, not for the Moonraker");
 
 	// The number, and the GoldenEye block it sits past
@@ -283,8 +378,18 @@ void raillaserSelfTest(void)
 	RAILLASER_CHECK(g_MpWeapons[0x21].weaponnum == WEAPON_LASER, "the Moonraker's row is still at 0x21");
 	RAILLASER_CHECK(g_MpWeapons[0x50].weaponnum == WEAPON_GE_TASER, "GoldenEye's last row is still at 0x50");
 	RAILLASER_CHECK(g_MpWeapons[MPWEAPON_RAILLASER].weaponnum == WEAPON_RAILLASER, "and the Rail-Laser's row is the one past it");
-	RAILLASER_CHECK(NUM_MPWEAPONS == MPWEAPON_RAILLASER + 1, "and is the last row there is");
+	RAILLASER_CHECK(g_MpWeapons[MPWEAPON_BOWCASTER].weaponnum == WEAPON_BOWCASTER, "and the Bowcaster's row did not move when a third was appended");
+	RAILLASER_CHECK(NUM_MPWEAPONS == MPWEAPON_GESHOTGUN + 1, "and the DB-Shotgun's is the last row there is");
 	RAILLASER_CHECK(g_MpWeapons[MPWEAPON_RAILLASER].priammotype == AMMOTYPE_RAIL, "its hand-out names the Rail-Laser's ammunition");
+
+	// The Bowcaster: a crossbow in the hand, but a bolt with a number of its
+	// own so it does not stick in the wall or come back as crossbow ammo.
+	RAILLASER_CHECK(weaponHost(WEAPON_BOWCASTER) == WEAPON_CROSSBOW, "the Bowcaster behaves as a crossbow");
+	RAILLASER_CHECK(weaponHost(WEAPON_BOWCASTERBOLT) == WEAPON_BOWCASTERBOLT, "but its bolt does not behave as a crossbow bolt");
+	RAILLASER_CHECK(g_MpWeapons[MPWEAPON_BOWCASTER].weaponnum == WEAPON_BOWCASTER, "its Combat Simulator row is the one past the Rail-Laser's");
+	RAILLASER_CHECK(g_MpWeapons[MPWEAPON_BOWCASTER].priammotype == AMMOTYPE_BOWCASTER, "with its own ammunition");
+	RAILLASER_CHECK(bgunGetCapacityByAmmotype(AMMOTYPE_BOWCASTER) == 100, "a hundred spare bolts");
+	RAILLASER_CHECK(g_Weapons[WEAPON_BOWCASTER]->ammos[0]->clipsize == 30, "and thirty in the magazine");
 
 	// botFindPickup() (src/game/bot.c) keeps a stack array per ammunition type, and a
 	// simulant aborting is what found that they were sized by a literal 33 - the count
@@ -308,7 +413,7 @@ void raillaserSelfTest(void)
 			}
 		}
 		RAILLASER_CHECK(bad < 0, "no gun's ammunition type is past the arrays a bot indexes by it");
-		RAILLASER_CHECK(worst == AMMOTYPE_RAIL, "the Rail-Laser's type is the highest there is, so it is the one that found the bound");
+		RAILLASER_CHECK(worst == AMMOTYPE_SHOCK, "the newest type appended is the highest there is, so it is the one that found the bound");
 		RAILLASER_CHECK(botactGetAmmoTypeByFunction(WEAPON_RAILLASER, FUNC_PRIMARY) == AMMOTYPE_RAIL, "a bot sees the Moonrailer as needing Rail ammunition");
 	}
 
@@ -364,7 +469,14 @@ void raillaserSelfTest(void)
 	// The charge, at its edges. It rides hand->matmot1, the field the Mauler's
 	// cues already read, so its full is the Mauler's 5 and its rate is whatever
 	// fills that in the gun's own length.
-	RAILLASER_CHECK(raillaserCharge60() == g_InstagibCharge60, "the charge time reads the scenario override");
+	{
+		s32 keepsession = g_MpSetup.scenario;
+
+		RAILLASER_CHECK(raillaserCharge60() == TICKS(90), "outside Instagib the charge stays at one and a half seconds");
+		g_MpSetup.scenario = MPSCENARIO_INSTAGIB;
+		RAILLASER_CHECK(raillaserCharge60() == g_InstagibCharge60, "in Instagib it reads the scenario override");
+		g_MpSetup.scenario = keepsession;
+	}
 	RAILLASER_CHECK(g_InstagibCharge60 == TICKS(90), "the default charge is one and a half seconds");
 	RAILLASER_CHECK(raillaserChargeFull() == 5.0f, "it fills to the Mauler's own full, so its cues land with the Mauler's");
 	{
@@ -489,7 +601,7 @@ void raillaserSelfTest(void)
 		// Past the modes there are, the load says so out loud rather than
 		// indexing the tables past their end - which is what the same bits
 		// did before this guard, at both widths.
-		g_MpSetup.scenario = 7;
+		g_MpSetup.scenario = NUM_MPSCENARIOS; // the first id past any mode there is
 		savebufferClear(&written);
 		mpsetupfileSaveWad(&written, MPSETUP_VERSION_SCENARIO16);
 		savebufferClear(&readback);
@@ -497,8 +609,66 @@ void raillaserSelfTest(void)
 		mpsetupfileLoadWad(&readback, MPSETUP_VERSION_SCENARIO16);
 		RAILLASER_CHECK(g_MpSetup.scenario == MPSCENARIO_COMBAT, "a scenario with no mode behind it loads as Combat");
 
+		// One Shall Stand...'s life count travels in the same 32-bit word.
+		{
+			s32 keeplives = g_LmsStartingLives;
+
+			g_MpSetup.scenario = MPSCENARIO_LASTMANSTANDING;
+			g_LmsStartingLives = 7;
+			savebufferClear(&written);
+			mpsetupfileSaveWad(&written, MPSETUP_VERSION_LATEST);
+			g_LmsStartingLives = 0;
+			savebufferClear(&readback);
+			memcpy(readback.bytes, written.bytes, MPSETUP_BLOCKSIZE);
+			mpsetupfileLoadWad(&readback, MPSETUP_VERSION_LATEST);
+			RAILLASER_CHECK(g_MpSetup.scenario == MPSCENARIO_LASTMANSTANDING, "a version 7 setup keeps One Shall Stand...");
+			RAILLASER_CHECK(g_LmsStartingLives == 7, "and its life count");
+
+			// A corrupt or hostile word must not leave a mode with no lives.
+			g_LmsStartingLives = 99;
+			savebufferClear(&written);
+			scenarioWriteSave(&written);
+			savebufferClear(&readback);
+			memcpy(readback.bytes, written.bytes, MPSETUP_BLOCKSIZE);
+			scenarioReadSave(&readback, 1);
+			RAILLASER_CHECK(g_LmsStartingLives == 3, "an out-of-range life count falls back to three");
+
+			g_LmsStartingLives = keeplives;
+		}
+
 		g_MpSetup.scenario = keepsenario;
 	}
+
+	// A simulant's side of the charge (bot.c). Everything above this is the
+	// player's half; this is the half that decides whether a guard who picks one
+	// of these up shoots it like the gun or like a Moonraker with a borrowed name.
+	RAILLASER_CHECK(weaponChargeFunction(WEAPON_RAILLASER) == FUNC_PRIMARY
+			&& weaponChargeFunction(WEAPON_MAULER) == FUNC_SECONDARY
+			&& weaponChargeFunction(WEAPON_LASER) < 0,
+			"the charge is this gun's primary, the Mauler's secondary, and no other gun's");
+
+	// bot.c's firing loop reaches its charge branch only for a gun with no fixed
+	// ticks per shot. Give this one some and the accumulator simply stops filling
+	// - every simulant's Rail-Laser firing instantly, with nothing logged.
+	RAILLASER_CHECK(weaponGetNumTicksPerShot(WEAPON_RAILLASER, FUNC_PRIMARY) <= 0,
+			"a simulant's Rail-Laser reaches the charge branch of its firing loop");
+
+	// The wait a simulant is held to is the wait a player is held to: the charge
+	// fills at the rate the hand fills at, so it takes the same number of 60ths to
+	// reach the top. Asked of the two figures rather than of either, because the
+	// day one is defined without the other this is the thing that has gone wrong.
+	RAILLASER_CHECK(raillaserChargeFull() / raillaserChargeRate60() >= (f32) raillaserCharge60() - 1.0f
+			&& raillaserChargeFull() / raillaserChargeRate60() <= (f32) raillaserCharge60() + 1.0f,
+			"a simulant holds the charge for as long as a player does");
+
+	// Five shells, then the reload, like the person it is shooting at. The
+	// Moonraker's row carries the flag that keeps a simulant's laser clip at 999;
+	// this gun's must not, and the flag is worth pinning both ways, since the
+	// reason to take it off this row is the same reason to leave it on that one.
+	RAILLASER_CHECK(!weaponHasFlag2(WEAPON_RAILLASER, WEAPONFLAG2_BOTLIMITLESS),
+			"a simulant's Rail-Laser runs out of ammunition");
+	RAILLASER_CHECK(weaponHasFlag2(WEAPON_LASER, WEAPONFLAG2_BOTLIMITLESS),
+			"and the Moonraker's does not, which is what that flag is for");
 
 	if (failed) {
 		sysLogPrintf(LOG_NOTE, "raillaser test: %d of %d checks failed", failed, checks);

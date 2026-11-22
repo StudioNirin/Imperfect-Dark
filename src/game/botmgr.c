@@ -111,9 +111,22 @@ void botmgrAllocateBot(s32 chrnum, s32 aibotnum)
 					g_MpAllChrConfigPtrs[g_MpNumChrs] = &g_BotConfigsArray[aibotnum].base;
 					g_MpNumChrs++;
 
-					aibot->ammoheld = mempAlloc(36 * sizeof(s32), MEMPOOL_STAGE);
+					// Both the length and the clearing are NUM_AMMOTYPES, and both
+					// used to be numbers of the moment: the allocation said 36 and
+					// the loop that cleared it said 33, which is three ammunition
+					// types this fork has added that a simulant's reserve was never
+					// cleared for - the Rail-Laser's charges, the Bowcaster's bolts
+					// and the Shock Rifle's cells were pool garbage on a bot's first
+					// read (mempAlloc does not zero) and stayed stale across a
+					// respawn. A negative read there means the bot can never load a
+					// clip and will not even equip the gun; a positive one is
+					// effectively infinite until something clamps it. The length and
+					// the clearing are the same constant now, so the next type added
+					// cannot miss one of them; bot.c's botReset cleared the same
+					// array with the same 33.
+					aibot->ammoheld = mempAlloc(NUM_AMMOTYPES * sizeof(s32), MEMPOOL_STAGE);
 
-					for (i = 0; i < 33; i++) {
+					for (i = 0; i < NUM_AMMOTYPES; i++) {
 						aibot->ammoheld[i] = 0;
 					}
 

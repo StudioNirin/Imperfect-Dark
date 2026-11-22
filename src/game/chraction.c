@@ -69,6 +69,7 @@
 #include "game/coop.h"
 #ifndef PLATFORM_N64
 #include "gexplus.h"
+#include "game/mplayer/scenarios.h"
 #ifndef PLATFORM_N64
 #include "gesfx.h"
 #include "getank.h"
@@ -83,6 +84,9 @@
 #include "simbrain.h"
 #include "net/net.h"
 #include "killfeed.h"
+#include "raillaser.h"
+#include "shock.h"
+#include "dbshotgun.h"
 
 // GoldenEye's frame as geguns.c takes it for its guns' rates: two sixtieths
 #define GE_FRAME60 2
@@ -4248,6 +4252,11 @@ static bool chrYeetFromPosWithAction(struct chrdata *chr, struct coord *exppos, 
 	return false;
 }
 
+#ifndef PLATFORM_N64
+#define ZOM_FALCON_KNOCKBACK 8.0f // a lunge hit shoves harder than a stock jab (2)
+#define ZOM_FALCON_LAUNCH_ANGLE 30.0f // knockback is tilted this far above the horizontal
+#endif
+
 void chrYeetFromPos(struct chrdata *chr, struct coord *exppos, f32 force)
 {
 	if (g_NetReplaying) return; // netplay: a prediction replay moves the player and does nothing else (netpredict.c)
@@ -4980,6 +4989,14 @@ void chrDamage(struct chrdata *chr, f32 damage, struct coord *vector, struct gse
 	if (aprop && aprop->type == PROPTYPE_PLAYER && coopAntiIsWaiting(playermgrGetPlayerNumByProp(aprop))) {
 		return;
 	}
+
+	// Zombies: the countdown before a round belongs to nobody - no punch and
+	// no bullet lands until the fight starts. aprop is every attacker the
+	// arena can have; the floor keeps its teeth.
+	if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_ZOMBIES
+			&& aprop && !zombiesRoundInProgress()) {
+		return;
+	}
 #endif
 
 	// Don't damage if coop and friendly fire is off (human buddy)
@@ -5054,6 +5071,59 @@ void chrDamage(struct chrdata *chr, f32 damage, struct coord *vector, struct gse
 		isshoot = false;
 	}
 
+#ifndef PLATFORM_N64
+	if (ismelee && g_Vars.normmplayerisrunning) {
+		// The seat dealing the hit: its tick is the one running, so the
+		// current player is the attacker where the prop is a player's.
+		struct chrdata *achr = aprop ? aprop->chr : NULL;
+
+		if (!achr && aprop == g_Vars.currentplayer->prop) {
+			achr = g_Vars.currentplayer->prop->chr;
+		}
+
+		if (g_MpSetup.scenario == MPSCENARIO_ZOMBIES) {
+			bool attackerinfected = zombiesIsInfected(achr);
+			bool victiminfected = zombiesIsInfected(chr);
+
+			// Zombies cannot hurt one another, whatever friendly fire says.
+			if (attackerinfected && victiminfected) {
+				return;
+			}
+
+			// One punch from an infected chr turns an uninfected one.
+			if (attackerinfected && !victiminfected) {
+				damage = 1000.0f;
+			}
+		}
+
+		// Falcon Punch's back hit is lethal for players and simulants alike.
+		// The stock one-hit-KO below is deliberately left alone: it never
+		// reached a player (the player block returns first) or an aibot.
+		// The bonus damage and lunge stay the player's own, but a simulant
+		// landing a stock punch in the back takes a player down with it too;
+		// sim-on-sim keeps the stock two-hit kill, and in Zombies the rule
+		// above has already turned any live punch there outright. The
+		// FUNC_PRIMARY test matters as much: the disarm function is the same
+		// unarmed melee, and behind it is where you catch people off their
+		// guard.
+		if (modIsFalconPunchEnabled() && gset->weaponnum == WEAPON_UNARMED
+				&& gset->weaponfunc == FUNC_PRIMARY && achr
+				&& (achr->aibot == NULL || chr->aibot == NULL)) {
+			struct coord sp;
+			f32 falconangle;
+
+			sp.x = vprop->pos.x - vector->x;
+			sp.y = vprop->pos.y - vector->y;
+			sp.z = vprop->pos.z - vector->z;
+			falconangle = chrGetAngleToPos(chr, &sp);
+
+			if (falconangle > 2.0940616130829f && falconangle < 4.1881237030029f) {
+				damage = 1000.0f;
+			}
+		}
+	}
+#endif
+
 	// Set a flag on the victim that makes them switch to their "shot" AI list
 	chr->chrflags |= CHRCFLAG_TRIGGERSHOTLIST;
 
@@ -5073,7 +5143,16 @@ void chrDamage(struct chrdata *chr, f32 damage, struct coord *vector, struct gse
 	// Disarm only hurts the victim in solo missions and if the victim is an NPC
 	if (gsetHasFunctionFlags(gset, FUNCFLAG_DISARM)
 			&& gset->weaponnum == WEAPON_UNARMED
-			&& (vprop->type == PROPTYPE_PLAYER || g_Vars.normmplayerisrunning)) {
+			&& (vprop->type == PROPTYPE_PLAYER || g_Vars.normmplayerisrunning)
+#ifndef PLATFORM_N64
+			// Zombies: the infected's unarmed is the conversion, whatever
+			// function reached it - the mode strips the disarm at the source
+			// (botinv.c, bondgun.c), and this is the backstop that keeps a
+			// stray one from zeroing the damage that turns the victim.
+			&& !(g_MpSetup.scenario == MPSCENARIO_ZOMBIES
+					&& zombiesIsInfected(aprop ? aprop->chr : NULL))
+#endif
+			) {
 		damage = 0;
 	}
 
@@ -5536,7 +5615,15 @@ void chrDamage(struct chrdata *chr, f32 damage, struct coord *vector, struct gse
 				f32 boostscale;
 
 				// Handle player losing gun
-				if (gsetHasFunctionFlags(gset, FUNCFLAG_DISARM)) {
+				if (gsetHasFunctionFlags(gset, FUNCFLAG_DISARM)
+#ifndef PLATFORM_N64
+						// Zombies: the infected never take a gun off a
+						// survivor - their hit converts (see the damage gate
+						// above for the same rule).
+						&& !(g_MpSetup.scenario == MPSCENARIO_ZOMBIES
+								&& zombiesIsInfected(aprop ? aprop->chr : NULL))
+#endif
+						) {
 					bgunDisarm(aprop);
 				}
 
@@ -5692,7 +5779,13 @@ void chrDamage(struct chrdata *chr, f32 damage, struct coord *vector, struct gse
 
 		// Handle aibot/chr losing gun
 		if (gsetHasFunctionFlags(gset, FUNCFLAG_DISARM)
-				&& ((chr->flags & CHRFLAG0_CANLOSEGUN) || chr->aibot)) {
+				&& ((chr->flags & CHRFLAG0_CANLOSEGUN) || chr->aibot)
+#ifndef PLATFORM_N64
+				// Zombies: the infected never take a gun off a survivor.
+				&& !(g_MpSetup.scenario == MPSCENARIO_ZOMBIES
+						&& zombiesIsInfected(aprop ? aprop->chr : NULL))
+#endif
+				) {
 			if (chr->aibot) {
 				botDisarm(chr, aprop);
 			} else {
@@ -5760,6 +5853,17 @@ void chrDamage(struct chrdata *chr, f32 damage, struct coord *vector, struct gse
 #endif
 					) {
 				sp80 = 2;
+#ifndef PLATFORM_N64
+				// The Falcon Punch carries the whole body into the hit, so its
+				// victim is shoved further. Only the punch function: a disarm
+				// using the unarmed melee still gets the stock shove.
+				if (modIsFalconPunchEnabled() && gset->weaponfunc == FUNC_PRIMARY) {
+					sp80 = ZOM_FALCON_KNOCKBACK;
+				}
+				if (g_ModFalconDebug) {
+					sysLogPrintf(LOG_NOTE, "falcon: knockback %.1f on chr %d", sp80, chr->chrnum);
+				}
+#endif
 			}
 
 			if (weaponHost(gset->weaponnum) == WEAPON_TRANQUILIZER || weaponHost(gset->weaponnum) == WEAPON_PSYCHOSISGUN) {
@@ -5984,6 +6088,30 @@ void chrDamage(struct chrdata *chr, f32 damage, struct coord *vector, struct gse
 					chr->extraspeed.z = prop2->pos.z - aprop->pos.z;
 
 					guNormalize(&chr->extraspeed.x, &chr->extraspeed.y, &chr->extraspeed.z);
+
+#ifndef PLATFORM_N64
+					// Falcon Punch: lift the shove to an angle above the
+					// horizontal. Keep the horizontal heading the knockback
+					// already has (away from the attacker) and tilt it up;
+					// a stock punch's straight shove is untouched.
+					if (modIsFalconPunchEnabled() && gset->weaponfunc == FUNC_PRIMARY
+							&& gset->weaponnum == WEAPON_UNARMED) {
+						f32 angle = BADDEG2RAD(ZOM_FALCON_LAUNCH_ANGLE);
+						f32 horiz = sqrtf(chr->extraspeed.x * chr->extraspeed.x
+								+ chr->extraspeed.z * chr->extraspeed.z);
+
+						if (horiz > 0.0001f) {
+							chr->extraspeed.x = chr->extraspeed.x / horiz * cosf(angle);
+							chr->extraspeed.z = chr->extraspeed.z / horiz * cosf(angle);
+							chr->extraspeed.y = sinf(angle);
+						}
+
+						if (g_ModFalconDebug) {
+							sysLogPrintf(LOG_NOTE, "falcon: launch dir (%.2f,%.2f,%.2f)",
+									chr->extraspeed.x, chr->extraspeed.y, chr->extraspeed.z);
+						}
+					}
+#endif
 
 					chr->extraspeed.x *= sp80;
 					chr->extraspeed.y *= sp80;
@@ -7670,6 +7798,17 @@ bool chrGoToRoomPos(struct chrdata *chr, struct coord *pos, RoomNum *room, u32 g
 	struct waypoint *headingto = isgopos ? chr->act_gopos.waypoints[chr->act_gopos.curindex] : NULL;
 	struct coord prevpos;
 	s32 numwaypoints = 0;
+
+#ifndef PLATFORM_N64
+	// Zombies: no simulant steps an inch while the round's countdown holds
+	// (the human seats take the same hold through player.c's no-control
+	// pad path, and the simulants' strafing and attacks are refused in
+	// bot.c). The route and the goal are left as they were, so everybody
+	// resumes the very step they were on when the fight opens.
+	if (zombiesCountdownActive()) {
+		return false;
+	}
+#endif
 
 	// (the navmesh's simulants have their own holds: simbrainHoldsGoTo())
 	if (chr->aibot
@@ -9465,9 +9604,15 @@ void chrPunchInflictDamage(struct chrdata *chr, s32 damage, s32 range, u8 revers
 		bgunPlayPropHitSound(&gset, targetprop, -1);
 
 		if (targetprop->type == PROPTYPE_PLAYER || targetprop->type == PROPTYPE_CHR) {
-			f32 base = gsetGetDamage(&gset);
-
 #ifndef PLATFORM_N64
+			// Falcon Punch belongs to whoever holds a pad. A simulant's punch
+			// reads the function's own number instead of gsetGetDamage(),
+			// which the tickbox rewrites: 5 raw through the 2 this call
+			// multiplies would turn the two-hit kill into a one-hit one, and
+			// give sim survivors the same one-tap this move grants a player.
+			struct weaponfunc *punchfunc = gsetGetWeaponFunction(&gset);
+			f32 base = punchfunc != NULL ? ((struct weaponfunc_melee *) punchfunc)->damage : 0.0f;
+
 			// A guard's punch is five of Perfect Dark's (0.5), its animation's
 			// own count. Where unarmed is GoldenEye's slappers (2, a slap
 			// Bond deals) it was five of those, which killed Bond outright:
@@ -9476,6 +9621,8 @@ void chrPunchInflictDamage(struct chrdata *chr, s32 damage, s32 range, u8 revers
 			if (!chr->aibot && geslappersActive()) {
 				base = geslappersPdPunchDamage();
 			}
+#else
+			f32 base = gsetGetDamage(&gset);
 #endif
 
 			chrDamageByImpact(targetprop->chr, base * damage, &vector, &gset, chr->prop, 200);
@@ -10282,10 +10429,23 @@ void chrTickDead(struct chrdata *chr)
 				if (gexPlusLivesSpent(chr)) {
 					return;
 				}
+
+				// One Shall Stand...: a simulant out of lives stays down too.
+				if (lmsLivesSpent(chr)) {
+					return;
+				}
 #endif
 
 				botSpawn(chr, true);
 			} else {
+#ifndef PLATFORM_N64
+				// One Shall Stand...: keep an eliminated player's prop and
+				// room list so the spectator camera has something to build
+				// from. The chr is already hidden and cannot be targeted.
+				if (lmsLivesSpent(chr)) {
+					return;
+				}
+#endif
 				chr->hidden |= CHRHFLAG_DELETING;
 			}
 		} else {
@@ -12375,6 +12535,7 @@ void chrTickShoot(struct chrdata *chr, s32 handnum)
 						|| (weaponHost(gset.weaponnum) == WEAPON_SUPERDRAGON && gset.weaponfunc == FUNC_SECONDARY)
 						|| weaponHost(gset.weaponnum) == WEAPON_DEVASTATOR
 						|| weaponHost(gset.weaponnum) == WEAPON_CROSSBOW
+						|| weaponHost(gset.weaponnum) == WEAPON_SHOCKRIFLE
 						|| weaponHost(gset.weaponnum) == WEAPON_ROCKETLAUNCHER_34)
 						&& chrGetProjectileFunc(&gset) != NULL) {
 					makebeam = false;
@@ -12404,7 +12565,30 @@ void chrTickShoot(struct chrdata *chr, s32 handnum)
 							projectileobj = weaponCreateProjectileFromWeaponNum(
 									gegunsChrProjectileModel(gset.weaponnum, func->projectilemodelnum), rocketweaponnum, chr);
 						} else if (weaponHost(gset.weaponnum) == WEAPON_CROSSBOW) {
-							projectileobj = weaponCreateProjectileFromWeaponNum(func->projectilemodelnum, WEAPON_BOLT, chr);
+							// The Bowcaster hosts on the crossbow, so it arrives here
+							// too - and the number it arrives with has to be the one
+							// the shot really is, exactly as bondgun.c's player path
+							// remaps it. A stock WEAPON_BOLT from a Bowcaster is a
+							// wooden bolt: boltLand() sticks it in the wall and the
+							// pickup code hands it back as crossbow ammunition, so a
+							// simulant's Bowcaster spends a match littering the arena
+							// with someone else's ammunition.
+							s32 boltweapon = gset.weaponnum == WEAPON_BOWCASTER
+									? WEAPON_BOWCASTERBOLT : WEAPON_BOLT;
+
+							projectileobj = weaponCreateProjectileFromWeaponNum(func->projectilemodelnum, boltweapon, chr);
+
+							if (projectileobj) {
+								projectileobj->gunfunc = gset.weaponfunc;
+							}
+						} else if (weaponHost(gset.weaponnum) == WEAPON_SHOCKRIFLE) {
+							// The Shock Rifle hosts on nothing, so the branch above
+							// cannot catch it either. Without one here its orb
+							// function is resolved by the trace below: a beam that
+							// reads as the orb's 2.5 damage, draws as the gun's beam
+							// and is not an orb at all - no bounce, no expiry, and
+							// nothing for the detonation to find.
+							projectileobj = weaponCreateProjectileFromWeaponNum(func->projectilemodelnum, WEAPON_SHOCKORB, chr);
 
 							if (projectileobj) {
 								projectileobj->gunfunc = gset.weaponfunc;
@@ -12568,8 +12752,15 @@ void chrTickShoot(struct chrdata *chr, s32 handnum)
 					}
 
 					normalshoot = false;
-				} else if (weaponHost(gset.weaponnum) == WEAPON_MAULER && isaibot && gset.weaponfunc == FUNC_SECONDARY) {
-					gset.unk063a = (s32) (chr->aibot->maulercharge[handnum] * 10.0f);
+				} else if (isaibot && weaponChargeFunction(gset.weaponnum) == gset.weaponfunc) {
+					// A simulant's charged shot leaves: the charge that took it is spent.
+					// Only the Mauler's carries the figure into the shot, which is the
+					// damage multiplier this gun deliberately does not have (its shot is
+					// the same kill at any charge; raillaser.c pins that).
+					if (weaponHost(gset.weaponnum) == WEAPON_MAULER) {
+						gset.unk063a = (s32) (chr->aibot->maulercharge[handnum] * 10.0f);
+					}
+
 					chr->aibot->maulercharge[handnum] = 0;
 				}
 
@@ -12818,6 +13009,7 @@ void chrTickShoot(struct chrdata *chr, s32 handnum)
 			case WEAPON_TRANQUILIZER:
 			case WEAPON_LASER:
 			case WEAPON_RAILLASER:
+			case WEAPON_SHOCKRIFLE:
 			case WEAPON_PP9I:
 			case WEAPON_CC13:
 			case WEAPON_KL01313:
@@ -12852,8 +13044,19 @@ void chrTickShoot(struct chrdata *chr, s32 handnum)
 			if (firingthisframe) {
 				osSyncPrintf("firecount(%d) = %d", handnum, chr->aibot->loadedammo[handnum]);
 
-				if (chr->aibot->loadedammo[handnum] > 0) {
-					chr->aibot->loadedammo[handnum]--;
+				// Paid from the simulant's own clip at the same price a player
+				// pays: one cell for a beam, five for an orb, two for a full
+				// DB-Shotgun double, one for every other gun in the game. Without
+				// the other halves, a bot's orb was four cells cheaper than one in
+				// the player's hands and its double cost one round.
+				{
+					s32 ammocost = shockAmmoCostForFunc(gset.weaponnum, gset.weaponfunc)
+							* dbShotgunAmmoCost(gset.weaponnum, gset.weaponfunc,
+									chr->aibot->loadedammo[handnum]);
+
+					if (chr->aibot->loadedammo[handnum] >= ammocost) {
+						chr->aibot->loadedammo[handnum] -= ammocost;
+					}
 				}
 
 				osSyncPrintf("numshots(%d) = %d", handnum, chr->aibot->loadedammo[handnum]);
@@ -17612,6 +17815,22 @@ bool chrCompareTeams(struct chrdata *chr1, struct chrdata *chr2, u8 checktype)
 		if (checktype == COMPARE_ANY) {
 			return true;
 		}
+
+#ifndef PLATFORM_N64
+		// Zombies: the two roles are the match's two teams to the AI's eye.
+		// The simulant AI chooses its targets by team alone, so in this
+		// free-for-all it read everyone as an enemy: a roomful of zombies
+		// punched at nothing forever (the melee rules make a hit between
+		// them worth zero, and punching a wall you cannot hurt is a loop
+		// the AI has no way out of by itself), and the survivor simulants
+		// shot one another through the chase instead of holding one line
+		// against the infected. Same role is friends, cross role is war -
+		// the whole mode is one long two-sided fight.
+		if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_ZOMBIES
+				&& zombiesIsInfected(chr1) == zombiesIsInfected(chr2)) {
+			return checktype == COMPARE_FRIENDS;
+		}
+#endif
 
 		if (checktype == COMPARE_FRIENDS) { // Return true if chrs are friends
 			if (g_Vars.normmplayerisrunning) {

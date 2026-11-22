@@ -2815,11 +2815,15 @@ void objFree(struct defaultobj *obj, bool freeprop, bool canregen)
 			smokeClearForProp(obj->prop);
 		}
 
-		if (weaponHost(weapon->weaponnum) == WEAPON_BOLT) {
+		if (weaponHost(weapon->weaponnum) == WEAPON_BOLT
+				|| weapon->weaponnum == WEAPON_BOWCASTERBOLT) {
 			s32 beammnum = boltbeamFindByProp(obj->prop);
 
 			if (beammnum != -1) {
-				boltbeamSetAutomatic(beammnum, 1400);
+				// The plasma trail is longer, so let it retract a little
+				// faster on release; both are manual beams until here, and
+				// without this the beam slot leaks and keeps drawing forever.
+				boltbeamSetAutomatic(beammnum, weapon->weaponnum == WEAPON_BOWCASTERBOLT ? 2600 : 1400);
 			}
 		}
 
@@ -4832,6 +4836,17 @@ void objLand(struct prop *prop, struct coord *arg1, struct coord *arg2, bool *em
 	if (obj->type == OBJTYPE_WEAPON) {
 		struct weaponobj *weapon = (struct weaponobj *)obj;
 
+		if (weapon->weaponnum == WEAPON_BOWCASTERBOLT || weapon->weaponnum == WEAPON_SHOCKORB) {
+			// A spent plasma bolt or shock orb fizzles out instead of landing. Each
+			// has its own number, so neither reaches boltLand()'s embed or the
+			// collectible-bolt pickup; deleting it here keeps it from becoming a
+			// dropped weapon either, which for the orb would be worse than litter -
+			// a landed shot is a pickup, and its row is a whole weapon with a
+			// firing function, so the floor would hand out a Shock Rifle's orb.
+			obj->hidden |= OBJHFLAG_DELETING;
+			return;
+		}
+
 		if (weaponHasFlag2(weapon->weaponnum, WEAPONFLAG2_HARDWHENLANDED)) {
 			obj->flags |= OBJFLAG_INVINCIBLE;
 			obj->flags |= OBJFLAG_FORCENOBOUNCE;
@@ -5367,6 +5382,49 @@ void weaponTick(struct prop *prop)
 					weapon->timer240 = -1;
 					obj->hidden |= OBJHFLAG_DELETING;
 				}
+			}
+		}
+	} else if (weapon->weaponnum == WEAPON_BOWCASTERBOLT) {
+		struct projectile *projectile = obj->projectile;
+
+		// The boltbeam is a line from a head to a tail. A crossbow bolt only
+		// sets both ends at spawn and when it lands, so it shows no trail in
+		// flight. Drive the two ends every tick instead: the tail rides the
+		// bolt, the head sits a fixed distance behind it along the velocity,
+		// making a short glowing streak that follows the ball.
+		if (projectile && !(obj->hidden & OBJHFLAG_DELETING)) {
+			s32 beamnum = boltbeamFindByProp(prop);
+
+			if (beamnum != -1) {
+				f32 sx = projectile->speed.x;
+				f32 sy = projectile->speed.y;
+				f32 sz = projectile->speed.z;
+				f32 speed = sqrtf(sx * sx + sy * sy + sz * sz);
+
+				if (speed > 0.01f) {
+					const f32 trail = 180.f / speed;
+					struct coord head;
+
+					head.x = prop->pos.x - sx * trail;
+					head.y = prop->pos.y - sy * trail;
+					head.z = prop->pos.z - sz * trail;
+					boltbeamSetHeadPos(beamnum, &head);
+					boltbeamSetTailPos(beamnum, &prop->pos);
+
+					// No sparks: the boltbeam above is the whole trail, like
+					// the crossbow's line. Electrical sparks read as a firework
+					// sparkler rather than a clean beam.
+				}
+			}
+		}
+
+		// A plasma bolt is not a crossbow bolt: its timer really is a timer.
+		// When it runs out the bolt fizzles rather than staying in the world.
+		if (weapon->timer240 >= 0) {
+			weapon->timer240 -= g_Vars.lvupdate240;
+
+			if (weapon->timer240 < 0) {
+				obj->hidden |= OBJHFLAG_DELETING;
 			}
 		}
 	} else if (weaponHost(weapon->weaponnum) == WEAPON_BOLT) {
@@ -8007,7 +8065,29 @@ s32 projectileTick(struct defaultobj *obj, bool *embedded)
 						if (!handled && g_EmbedProp && obj->type == OBJTYPE_WEAPON) {
 							struct weaponobj *weapon = (struct weaponobj *) obj;
 
-							if (weaponHasFlag2(weapon->weaponnum, WEAPONFLAG2_BLADEHIT)) {
+							if (weapon->weaponnum == WEAPON_BOWCASTERBOLT) {
+								// The plasma bolt has no BLADEHIT so it does not
+								// stick or get collected, but it still has to hurt
+								// whatever it hits - otherwise it only makes a
+								// shield spark and bounces off as if it were a wall.
+								// Apply the firing function's damage straight to
+								// the character, then mark handled so the generic
+								// spark-only branch below is skipped.
+								if (hitprop->type == PROPTYPE_CHR || (hitprop->type == PROPTYPE_PLAYER && hitprop->chr)) {
+									struct chrdata *hitchr = hitprop->chr;
+									struct prop *ownerprop = obj->projectile ? obj->projectile->ownerprop : NULL;
+
+									// Use the bolt's direction of travel, as the BLADEHIT
+									// path does (var8009ce78). sp5f4 is the hit part's
+									// surface normal - right for the sparks below, but
+									// backwards for knockback and backshot detection.
+									func0f0341dc(hitchr, gsetGetDamage(&weapon->gset), &var8009ce78, &weapon->gset, ownerprop,
+											g_EmbedHitPart, g_EmbedProp, g_EmbedNode, g_EmbedModel, g_EmbedSide, var8006993c);
+
+									chrEmitSparks(hitchr, g_EmbedProp, g_EmbedHitPart, &sp5e8, &sp5f4, ownerprop ? ownerprop->chr : NULL);
+									handled = true;
+								}
+							} else if (weaponHasFlag2(weapon->weaponnum, WEAPONFLAG2_BLADEHIT)) {
 								if (hitprop->type == PROPTYPE_CHR || (hitprop->type == PROPTYPE_PLAYER && hitprop->chr)) {
 									struct chrdata *hitchr = hitprop->chr;
 
@@ -18818,6 +18898,8 @@ struct nameinfo var8006a944pf[] = {
 #endif
 	{ AMMOTYPE_KNIFE,        L_PROPOBJ_020, L_PROPOBJ_021, { DETERMINER_A,        DETERMINER_A,     DETERMINER_A,        DETERMINER_A,        DETERMINER_A        } },
 	{ AMMOTYPE_CROSSBOW,     L_PROPOBJ_045, L_PROPOBJ_068, { DETERMINER_A,        DETERMINER_A,     DETERMINER_A,        DETERMINER_AN,       DETERMINER_A        } },
+	{ AMMOTYPE_BOWCASTER,    L_PROPOBJ_045, L_PROPOBJ_068, { DETERMINER_A,        DETERMINER_A,     DETERMINER_A,        DETERMINER_AN,       DETERMINER_A        } }, // texts rewritten by ammotypePortNames()
+	{ AMMOTYPE_SHOCK,        L_PROPOBJ_045, L_PROPOBJ_068, { DETERMINER_A,        DETERMINER_A,     DETERMINER_A,        DETERMINER_AN,       DETERMINER_A        } }, // texts rewritten by ammotypePortNames()
 	{ AMMOTYPE_SHOTGUN,      L_PROPOBJ_010, L_PROPOBJ_074, { DETERMINER_A,        DETERMINER_A,     DETERMINER_AN,       DETERMINER_A,        DETERMINER_AN       } },
 	{ AMMOTYPE_FARSIGHT,     L_PROPOBJ_046, L_PROPOBJ_069, { DETERMINER_AN,       DETERMINER_A,     DETERMINER_AN,       DETERMINER_A,        DETERMINER_A        } },
 	{ AMMOTYPE_GRENADE,      L_PROPOBJ_013, L_PROPOBJ_077, { DETERMINER_A,        DETERMINER_A,     DETERMINER_AN,       DETERMINER_AN,       DETERMINER_AN       } },
@@ -19152,6 +19234,17 @@ void ammotypeGetDeterminer(char *dst, s32 ammotype, s32 qty)
 			determiner_some = true;
 		}
 		break;
+	case AMMOTYPE_BOWCASTER:
+		// "a plasma bolt", "some plasma bolts". Its own case rather than the
+		// crossbow's "some" group above: a single one is "a plasma bolt", and
+		// the group would say "some plasma bolt". ammotypeGetPickupName()
+		// below has the other half of the message.
+		if (qty == 1) {
+			determiner_a = true;
+		} else {
+			determiner_some = true;
+		}
+		break;
 	case AMMOTYPE_RAIL:
 		// "a rail charge", as any other rounds a gun loads. The fork's own
 		// type (constants.h), and the reason this switch is a switch over
@@ -19159,6 +19252,16 @@ void ammotypeGetDeterminer(char *dst, s32 ammotype, s32 qty)
 		// with no case here gives no determiner, and the pickup message then
 		// reads "Picked up ." (ammotypeGetPickupName() below has the other
 		// half of it).
+		if (qty == 1) {
+			determiner_a = true;
+		} else {
+			determiner_some = true;
+		}
+		break;
+	case AMMOTYPE_SHOCK:
+		// "a plasma cell", "some plasma cells" - the Shock Rifle's own type,
+		// and deliberately not the Bowcaster's plasma bolts: the two guns'
+		// ammunition is not interchangeable (AMMOTYPE_SHOCK, constants.h).
 		if (qty == 1) {
 			determiner_a = true;
 		} else {
@@ -19230,6 +19333,54 @@ static u16 ammotypeRailText(void)
 	return text;
 }
 
+/**
+ * The Bowcaster's ammunition, in its own words.
+ *
+ * The crossbow's L_PROPOBJ_045 and _068 say "bolt" and "bolts", which is a
+ * wooden bolt from a crossbow and not what the Bowcaster fires: a crate beside
+ * the gun that reads "some bolts" reads like crossbow supplies, and the two
+ * guns' ammunition are not interchangeable (AMMOTYPE_BOWCASTER, constants.h).
+ * Port text, as the Rail-Laser's above. The NTSC name appends the language
+ * file's "s" for two or more, so the caller asks for the singular; the PAL and
+ * JPN name table picks a plural id instead, and asks for that one
+ * (ammotypePortNames()).
+ */
+static u16 ammotypeBowcasterText(bool plural)
+{
+	static u16 texts[2];
+	u16 *text = &texts[plural];
+
+	if (!*text) {
+		*text = langAddPortText(plural ? "plasma bolts" : "plasma bolt");
+	}
+
+	return *text;
+}
+
+/**
+ * The Shock Rifle's ammunition, in its own words.
+ *
+ * Its own type and its own name rather than a share of the Bowcaster's: two
+ * guns drawing from one reserve would make a crate beside one gun fill the
+ * other's, and the user-facing word for the Bowcaster's shot is already
+ * "plasma bolt" (ammotypeBowcasterText), so a second gun firing "bolts" reads
+ * like a third name for the same thing. "Cell" is the word for a contained
+ * charge, which is what a crate of them holds; the shot itself, once fired, is
+ * the orb. Port text as the two above, and the same singular-for-NTSC, plural
+ * id-for-PAL/JPN split (ammotypePortNames()).
+ */
+static u16 ammotypeShockText(bool plural)
+{
+	static u16 texts[2];
+	u16 *text = &texts[plural];
+
+	if (!*text) {
+		*text = langAddPortText(plural ? "plasma cells" : "plasma cell");
+	}
+
+	return *text;
+}
+
 #if VERSION < VERSION_PAL_BETA
 void ammotypeGetPickupName(char *dst, s32 ammotype2, s32 qty)
 {
@@ -19260,6 +19411,8 @@ void ammotypeGetPickupName(char *dst, s32 ammotype2, s32 qty)
 
 		switch (ammotype) {
 		case AMMOTYPE_CROSSBOW:     textnum = L_PROPOBJ_045; break; // "bolt"
+		case AMMOTYPE_BOWCASTER:    textnum = ammotypeBowcasterText(false); break; // "plasma bolt"
+		case AMMOTYPE_SHOCK:        textnum = ammotypeShockText(false); break; // "plasma cell"
 		case AMMOTYPE_SHOTGUN:      textnum = L_PROPOBJ_011; break; // "cartridge"
 		case AMMOTYPE_FARSIGHT:     textnum = L_PROPOBJ_046; break; // "orb"
 		case AMMOTYPE_GRENADE:      textnum = L_PROPOBJ_014; break; // "grenade"
@@ -19347,7 +19500,9 @@ void ammotypePlayPickupSound(u32 ammotype)
 	case AMMOTYPE_BOOST:
 	case AMMOTYPE_TOKEN:
 	case AMMOTYPE_RAIL:
-		// The fork's own type: rounds a gun loads, so the ammunition sound
+	case AMMOTYPE_BOWCASTER:
+	case AMMOTYPE_SHOCK:
+		// The fork's own types: rounds a gun loads, so the ammunition sound
 		// rather than a mine's or a knife's. Without a case here the pickup
 		// was silent - the one pickup class with no sound at all.
 		objPlayPickupSfx(SFX_PICKUP_AMMO);
@@ -19417,6 +19572,44 @@ void weaponPlayPickupSound(s32 weaponnum)
 	objPlayPickupSfx(sound);
 }
 
+#if VERSION >= VERSION_PAL_BETA
+/**
+ * The fork's own ammunition in the ROM's ammo name table.
+ *
+ * var8006a944pf is a static initialiser, and a fork type's words live in the port
+ * text bank, which is only filled at run time (langAddPortText), so the row
+ * cannot carry them where it is written: the Bowcaster's keeps the crossbow's
+ * "bolt" and "bolts" until the first pickup message asks for a name, which is
+ * before anything reads the row, and the Shock Rifle's row is rewritten the same
+ * way (both of them, so the loop cannot stop at the first match). The Rail-Laser's
+ * type has no row here at all, so its message says nothing on these builds; the
+ * NTSC one names both in ammotypeGetDeterminer() and ammotypeGetPickupName()
+ * instead.
+ */
+static void ammotypePortNames(void)
+{
+	static bool done = false;
+	struct nameinfo *info;
+
+	if (done) {
+		return;
+	}
+
+	done = true;
+
+	for (info = var8006a944pf; info->id != 0; info++) {
+		if (info->id == AMMOTYPE_BOWCASTER) {
+			info->singulartext = ammotypeBowcasterText(false);
+			info->pluraltext = ammotypeBowcasterText(true);
+		}
+		else if (info->id == AMMOTYPE_SHOCK) {
+			info->singulartext = ammotypeShockText(false);
+			info->pluraltext = ammotypeShockText(true);
+		}
+	}
+}
+#endif
+
 void ammotypeGetPickupMessage(char *dst, s32 ammotype, s32 qty)
 {
 	s32 playercount = PLAYERCOUNT();
@@ -19430,6 +19623,7 @@ void ammotypeGetPickupMessage(char *dst, s32 ammotype, s32 qty)
 		ammotype = 999;
 	}
 
+	ammotypePortNames();
 	func0f0878c8pf(dst, ammotype, qty > 1, !full, 0, var8006a944pf);
 #elif VERSION >= VERSION_PAL_BETA
 	if (g_Jpn) {
@@ -19439,6 +19633,7 @@ void ammotypeGetPickupMessage(char *dst, s32 ammotype, s32 qty)
 			ammotype = 999;
 		}
 
+		ammotypePortNames();
 		func0f0878c8pf(dst, ammotype, qty > 1, !full, 0, var8006a944pf);
 	}
 #else
@@ -19588,6 +19783,8 @@ s32 ammocrateGetPickupAmmoQty(struct ammocrateobj *crate)
 	case AMMOTYPE_PISTOL   : qty = 10;            break;
 	case AMMOTYPE_SMG      : qty = 10;            break;
 	case AMMOTYPE_CROSSBOW : qty = 10;            break;
+	case AMMOTYPE_BOWCASTER: qty = 10;            break;
+	case AMMOTYPE_SHOCK    : qty = 10;            break;
 	case AMMOTYPE_RIFLE    : qty = 10;            break;
 	case AMMOTYPE_SHOTGUN  : qty = 5;             break;
 	case AMMOTYPE_MAGNUM   : qty = 5;             break;
@@ -19633,6 +19830,8 @@ s32 weaponGetPickupAmmoQty(struct weaponobj *weapon)
 		case AMMOTYPE_PISTOL:       qty = 10;          break;
 		case AMMOTYPE_SMG:          qty = 20;          break;
 		case AMMOTYPE_CROSSBOW:     qty = 5;           break;
+		case AMMOTYPE_BOWCASTER:    qty = 10;          break;
+		case AMMOTYPE_SHOCK:        qty = 10;          break;
 		case AMMOTYPE_RIFLE:        qty = 20;          break;
 		case AMMOTYPE_SHOTGUN:      qty = 10;          break;
 		case AMMOTYPE_FARSIGHT:     qty = 4;           break;
@@ -19657,6 +19856,8 @@ s32 weaponGetPickupAmmoQty(struct weaponobj *weapon)
 		case AMMOTYPE_PISTOL:     qty = 10;          break;
 		case AMMOTYPE_SMG:        qty = 10;          break;
 		case AMMOTYPE_CROSSBOW:   qty = 5;           break;
+		case AMMOTYPE_BOWCASTER:  qty = 10;          break;
+		case AMMOTYPE_SHOCK:      qty = 10;          break;
 		case AMMOTYPE_RIFLE:      qty = 10;          break;
 		case AMMOTYPE_SHOTGUN:    qty = 5;           break;
 		case AMMOTYPE_FARSIGHT:   qty = 4;           break;
@@ -19848,10 +20049,18 @@ s32 propPickupByPlayer(struct prop *prop, bool showhudmsg)
 	// Instagib: no weapon or ammo pickups. The scenario sets all weapon
 	// slots to MPWEAPON_NONE so nothing spawns, but this guards against
 	// any leftover pickups in converted maps or mods.
-	if (g_MpSetup.scenario == MPSCENARIO_INSTAGIB) {
+	if (g_MpSetup.scenario == MPSCENARIO_INSTAGIB || g_MpSetup.scenario == MPSCENARIO_ZOMBIES) {
 		if (obj->type == OBJTYPE_WEAPON || obj->type == OBJTYPE_AMMOCRATE
 				|| obj->type == OBJTYPE_MULTIAMMOCRATE) {
-			return TICKOP_NONE;
+			// Zombies splits this one by role: the mode spawns no guns, but
+			// what a disarm puts on the floor the survivor who owned it - or
+			// any other survivor - takes back up; being permanently disarmed
+			// by one punch is not the fight. The infected never touch one:
+			// their arsenal is their fists whatever is lying around.
+			if (g_MpSetup.scenario != MPSCENARIO_ZOMBIES
+					|| zombiesSeatIsInfected(g_Vars.currentplayernum)) {
+				return TICKOP_NONE;
+			}
 		}
 	}
 
@@ -19902,6 +20111,19 @@ s32 propPickupByPlayer(struct prop *prop, bool showhudmsg)
 				}
 
 				ammoHandlePickup(i + 1, qty, false, showhudmsg);
+			}
+
+			// The pairs past the record's nineteen, when this crate has any: an ammo
+			// type the record has no room for (types.h), written by setup.c from the
+			// spot's row.
+			for (i = 0; prop->extrapairs != NULL && i < prop->extrapairs->count; i++) {
+				s32 qty = prop->extrapairs->pairs[i].quantity;
+
+				if (!g_Vars.normmplayerisrunning) {
+					qty *= g_AmmoQuantityScale;
+				}
+
+				ammoHandlePickup(prop->extrapairs->pairs[i].ammotype, qty, false, showhudmsg);
 			}
 
 			if (g_Vars.in_cutscene == false) {
@@ -20172,6 +20394,105 @@ s32 propPickupByPlayer(struct prop *prop, bool showhudmsg)
 	return TICKOP_NONE;
 }
 
+/**
+ * --pickup-trace: why a prop beside Bond was not picked up.
+ *
+ * The test runs every frame Bond stands near something, so each answer is said
+ * once, and again only when it changes, with what the test read: an ammo crate's
+ * type and how much is held against its capacity, and a multi crate's filled
+ * pairs. That last one is the difference between a crate that holds nothing at
+ * all and one whose ammunition is already carried, which is the question a fork
+ * gun's spot raises: its ammunition type is past the nineteenth pair a built-in
+ * arena's crate can hold (props.h), so the crate there is drawn with nothing to
+ * take. The console build has no log file and no command line, so the body is
+ * the port's and the calls stay unconditional.
+ */
+void objTracePickupRefusal(struct prop *prop, const char *reason)
+{
+#ifdef PLATFORM_N64
+	(void) prop;
+	(void) reason;
+#else
+	static s32 trace = -1;
+	static struct {
+		struct defaultobj *obj;
+		const char *reason;
+	} traced[8];
+	static s32 slot = 0;
+	struct defaultobj *obj = prop->obj;
+	char detail[400]; // the record's list plus the pairs past it, both bounded above
+	char extra[96];
+	s32 i;
+
+	if (trace < 0) {
+		trace = sysArgCheck("--pickup-trace");
+	}
+
+	if (!trace) {
+		return;
+	}
+
+	// Said once per thing and answer, and again only when the answer changes. A
+	// remembered object rather than one last object, because Bond standing
+	// between two crates alternates them every frame, and a crate that has
+	// started refusing for a new reason has to be able to say so.
+	for (i = 0; i < (s32) ARRAYCOUNT(traced); i++) {
+		if (traced[i].obj == obj && traced[i].reason == reason) {
+			return;
+		}
+	}
+
+	traced[slot].obj = obj;
+	traced[slot].reason = reason;
+	slot = (slot + 1) % (s32) ARRAYCOUNT(traced);
+	*detail = '\0';
+	*extra = '\0';
+
+	if (obj->type == OBJTYPE_AMMOCRATE) {
+		struct ammocrateobj *crate = (struct ammocrateobj *) obj;
+
+		sprintf(detail, ", ammo type %d, held %d of %d", crate->ammotype,
+				bgunGetReservedAmmoCount(crate->ammotype), bgunGetCapacityByAmmotype(crate->ammotype));
+	} else if (obj->type == OBJTYPE_MULTIAMMOCRATE) {
+		struct multiammocrateobj *crate = (struct multiammocrateobj *) obj;
+		char list[100];
+		s32 len = 0;
+		s32 n = 0;
+
+		for (i = 0; i < (s32) ARRAYCOUNT(crate->slots) && len < 80; i++) {
+			if (crate->slots[i].quantity > 0) {
+				len += sprintf(list + len, " %d:%d", i + 1, crate->slots[i].quantity);
+				n++;
+			}
+		}
+
+		if (!n) {
+			*list = '\0';
+		}
+
+		if (prop->extrapairs != NULL) {
+			len = 0;
+			len += sprintf(extra + len, ", and %d pair%s past the record:", prop->extrapairs->count,
+					prop->extrapairs->count > 1 ? "s" : "");
+
+			for (i = 0; i < prop->extrapairs->count && len < 70; i++) {
+				s32 ammotype = prop->extrapairs->pairs[i].ammotype;
+
+				len += sprintf(extra + len, " %d:%d of %d", ammotype, prop->extrapairs->pairs[i].quantity,
+						bgunGetCapacityByAmmotype(ammotype));
+			}
+		}
+
+		sprintf(detail, ", %d of %d pairs filled:%s%s%s", n, (s32) ARRAYCOUNT(crate->slots),
+				n ? " " : " none", list, extra);
+	}
+
+	sysLogPrintf(LOG_NOTE, "pickup-trace: %s: prop %d, obj type %d at %.0f %.0f %.0f, flags 0x%08x, hidden 0x%08x%s",
+			reason, (s32) (prop - g_Vars.props), obj->type, prop->pos.x, prop->pos.y, prop->pos.z,
+			obj->flags, obj->hidden, detail);
+#endif
+}
+
 s32 objTestForPickup(struct prop *prop)
 {
 	struct defaultobj *obj = prop->obj;
@@ -20189,10 +20510,12 @@ s32 objTestForPickup(struct prop *prop)
 
 	if (func0f085194(obj) && obj->type != OBJTYPE_HAT) {
 		if (obj->flags & OBJFLAG_UNCOLLECTABLE) {
+			objTracePickupRefusal(prop, "flagged uncollectable");
 			return TICKOP_NONE;
 		}
 	} else {
 		if ((obj->flags & OBJFLAG_COLLECTABLE) == 0) {
+			objTracePickupRefusal(prop, "never flagged collectable");
 			return TICKOP_NONE;
 		}
 	}
@@ -20310,6 +20633,7 @@ s32 objTestForPickup(struct prop *prop)
 					&& (crate->ammotype != AMMOTYPE_PROXY_MINE || invHasSingleWeaponExcAllGuns(ammotypeGetWeapon(AMMOTYPE_PROXY_MINE)))
 					&& (crate->ammotype != AMMOTYPE_TIMED_MINE || invHasSingleWeaponExcAllGuns(ammotypeGetWeapon(AMMOTYPE_TIMED_MINE)))
 					&& (crate->ammotype != AMMOTYPE_KNIFE || invHasSingleWeaponExcAllGuns(ammotypeGetWeapon(AMMOTYPE_KNIFE)))) {
+				objTracePickupRefusal(prop, "out of space for it");
 				return TICKOP_NONE;
 			}
 		}
@@ -20345,7 +20669,23 @@ s32 objTestForPickup(struct prop *prop)
 			}
 		}
 
+		// The pairs past the record's nineteen, for an ammo type the record has no
+		// room for (types.h): the crate beside this fork's Bowcaster and Moonrailer
+		// spots, and beside any spot for a type added after them. Without this the
+		// crate is drawn, holds nothing the loop above can see, and is never
+		// offered - which from the sofa is indistinguishable from a bug in the gun.
+		for (i = 0; prop->extrapairs != NULL && i < prop->extrapairs->count; i++) {
+			s32 ammotype = prop->extrapairs->pairs[i].ammotype;
+
+			if (prop->extrapairs->pairs[i].quantity > 0
+					&& bgunGetReservedAmmoCount(ammotype) < bgunGetCapacityByAmmotype(ammotype)) {
+				ignore = false;
+				break;
+			}
+		}
+
 		if (ignore) {
+			objTracePickupRefusal(prop, "nothing in it Bond cannot already carry");
 			return TICKOP_NONE;
 		}
 	} else if (obj->type == OBJTYPE_SHIELD) {

@@ -1,6 +1,7 @@
 #include <ultra64.h>
 #ifndef PLATFORM_N64
 #include <stdlib.h>
+#include "system.h" // falcon debug lines
 #endif
 #include "constants.h"
 #include "../lib/naudio/n_sndp.h"
@@ -44,6 +45,7 @@
 #include "gestan.h"
 #include "geslappers.h"
 #include "net/net.h"
+#include "dbshotgun.h"
 #endif
 #include "lib/model.h"
 #include "lib/snd.h"
@@ -279,6 +281,7 @@ struct prop *propAllocate(void)
 		prop->propupdate60err = 2;
 		prop->opawallhits = NULL;
 		prop->xluwallhits = NULL;
+		prop->extrapairs = NULL; // a crate's pairs past the record's nineteen (types.h); setup.c writes them
 		g_Vars.propstates[prop->propstateindex].propcount++;
 
 		g_Vars.allocstateindex++;
@@ -1718,8 +1721,291 @@ void handInflictMeleeDamage(s32 handnum, struct gset *gset, bool arg2)
 	}
 }
 
+#define ZOM_FALCON_REACH 300.0f // how far the lock-on looks
+#define ZOM_FALCON_SPEED 12.0f // units a tick, the same idea as the roll's impulse
+#define ZOM_FALCON_TIME  TICKS(30) // the dash's whole window
+#define ZOM_FALCON_TRIP   8 // ticks the dash must run before it may hit
+#define ZOM_FALCON_HIT   60.0f // how close the dash has to get to land
+#define ZOM_FALCON_COOLDOWN TICKS(120) // two seconds before the fist swings again
+#define ZOM_FALCON_ANIMLEAD 8 // animation frames up to the strike keyframe
+
+/**
+ * Play the unarmed fist swing now, in the first person and on the body.
+ * The Falcon Punch holds this back from the swing's start so the fist comes
+ * across as the lunge reaches its target rather than before the dash.
+ */
+static void meleeFalconStartPunchAnim(s32 handnum, struct gset *gset)
+{
+	struct weaponfunc *func = gsetGetWeaponFunction(gset);
+
+	if (func && func->fire_animation) {
+		bgunStartAnimation(func->fire_animation, handnum, &g_Vars.currentplayer->hands[handnum]);
+#ifndef PLATFORM_N64
+		if (g_ModFalconDebug) {
+			sysLogPrintf(LOG_NOTE, "falcon: fist anim %d at frame %d",
+					g_Vars.currentplayer->hands[handnum].animload, g_Vars.lvframe60);
+		}
+#endif
+	}
+
+	chrPlayPunchAnimation(g_Vars.currentplayer->prop->chr);
+}
+
+/**
+ * Falcon Punch: pick the nearest chr inside a wide cone in front of the
+ * player and set the dash going towards it. The stock crosshair test still
+ * runs on the same swing, so a target under the reticle is hit as usual; the
+ * lunge closes the gap when it is a little to one side or further away. No
+ * target in the cone means a plain punch, not a dash into empty space.
+ * Returns true when a lunge was armed.
+ */
+static bool meleeFalconLockOn(void)
+{
+	struct player *player = g_Vars.currentplayer;
+	struct prop *best = NULL;
+	f32 bestdist = ZOM_FALCON_REACH;
+	// bond2.unk1c is the eye-to-view vector: it points where the player is
+	// looking. The camera sits behind the eye at -unk1c * camdist
+	// (player.c), and farsight tests a target in front by dotting the
+	// target-to-eye vector with unk1c and taking a negative. Negating it
+	// here would put the cone behind the player.
+	f32 forwardx = player->bond2.unk1c.x;
+	f32 forwardz = player->bond2.unk1c.z;
+	s32 i;
+
+	// A multiplayer match's seats and simulants are the mp chr pool; they
+	// are not chrDeregister-ed from the slot list, so a slot walk finds no
+	// one in a match. A mission answers out of the registered chrs.
+	if (g_Vars.normmplayerisrunning) {
+		for (i = 0; i < g_MpNumChrs; i++) {
+			struct chrdata *chr = g_MpAllChrPtrs[i];
+			struct prop *prop;
+			f32 dx;
+			f32 dz;
+			f32 dist;
+			f32 dot;
+
+			if (!chr || !chr->prop || chr->prop == player->prop || chrIsDead(chr)) {
+				continue;
+			}
+
+			prop = chr->prop;
+			dx = prop->pos.x - player->prop->pos.x;
+			dz = prop->pos.z - player->prop->pos.z;
+			dist = sqrtf(dx * dx + dz * dz);
+
+			if (dist < 1.0f || dist >= bestdist) {
+				continue;
+			}
+
+			dot = (dx * forwardx + dz * forwardz) / dist;
+
+			// A 60 degree half-angle, generous enough to feel like a lock-on.
+			if (dot < 0.5f) {
+				continue;
+			}
+
+			if (!cdTestLos04(&player->prop->pos, player->prop->rooms, &prop->pos, CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PATHBLOCKER | CDTYPE_BG)) {
+				continue;
+			}
+
+			best = prop;
+			bestdist = dist;
+		}
+	} else {
+		for (i = 0; i < g_NumChrSlots; i++) {
+			struct chrdata *chr = &g_ChrSlots[i];
+			struct prop *prop;
+			f32 dx;
+			f32 dz;
+			f32 dist;
+			f32 dot;
+
+			if (chr->chrnum < 0 || !chr->prop || chr->prop == player->prop
+					|| chrIsDead(chr) || chrIsAvoiding(chr)) {
+				continue;
+			}
+
+			prop = chr->prop;
+			dx = prop->pos.x - player->prop->pos.x;
+			dz = prop->pos.z - player->prop->pos.z;
+			dist = sqrtf(dx * dx + dz * dz);
+
+			if (dist < 1.0f || dist >= bestdist) {
+				continue;
+			}
+
+			dot = (dx * forwardx + dz * forwardz) / dist;
+
+			if (dot < 0.5f) {
+				continue;
+			}
+
+			if (!cdTestLos04(&player->prop->pos, player->prop->rooms, &prop->pos, CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PATHBLOCKER | CDTYPE_BG)) {
+				continue;
+			}
+
+			best = prop;
+			bestdist = dist;
+		}
+	}
+
+	// Nothing in front: the swing stays a plain punch. A lunge is only
+	// committed when there is somebody to lunge at.
+	if (!best) {
+		return false;
+	}
+
+	{
+		f32 dx = best->pos.x - player->prop->pos.x;
+		f32 dz = best->pos.z - player->prop->pos.z;
+		f32 dist = sqrtf(dx * dx + dz * dz);
+
+		player->meleelungeprop = best;
+		player->meleelungetime60 = ZOM_FALCON_TIME;
+		player->meleefalconanimstarted = false;
+		player->bondforcespeed.x = dx / dist * ZOM_FALCON_SPEED;
+		player->bondforcespeed.y = 0;
+		player->bondforcespeed.z = dz / dist * ZOM_FALCON_SPEED;
+	}
+#ifndef PLATFORM_N64
+	if (g_ModFalconDebug) {
+		sysLogPrintf(LOG_NOTE, "falcon: locked at frame %d from (%.0f,%.0f)",
+				g_Vars.lvframe60, player->prop->pos.x, player->prop->pos.z);
+	}
+#endif
+	return true;
+}
+
+/**
+ * While a dash is in flight, test the locked target every tick - once the
+ * dash has covered its minimum travel, so a close target is hit after a
+ * visible thrust rather than on the first tick. bondforcespeed decays by
+ * being explicitly cleared here; it does not stop on its own.
+ */
+static void meleeFalconLungeTick(s32 handnum, struct gset *gset)
+{
+	struct player *player = g_Vars.currentplayer;
+	struct prop *target;
+	f32 dx;
+	f32 dz;
+	s32 elapsed;
+
+	if (player->meleelungetime60 <= 0) {
+		return;
+	}
+
+	target = player->meleelungeprop;
+	elapsed = ZOM_FALCON_TIME - player->meleelungetime60;
+
+	if (target) {
+		if (!target->chr || target->chr->chrnum < 0) {
+			target = NULL; // the locked chr is gone mid-dash
+#ifndef PLATFORM_N64
+			if (g_ModFalconDebug) {
+				sysLogPrintf(LOG_NOTE, "falcon: locked chr gone mid-dash at frame %d", g_Vars.lvframe60);
+			}
+#endif
+		} else {
+			dx = target->pos.x - player->prop->pos.x;
+			dz = target->pos.z - player->prop->pos.z;
+#ifndef PLATFORM_N64
+			if (g_ModFalconDebug && (elapsed % 6) == 0) {
+				sysLogPrintf(LOG_NOTE, "falcon: dash tick %d dist %.0f force %.0f,%.0f",
+						elapsed, sqrtf(dx * dx + dz * dz),
+						player->bondforcespeed.x, player->bondforcespeed.z);
+			}
+#endif
+
+			// Let the fist come across as the hit arrives: the swing's
+			// strike keyframe is 8 animation frames in, so start it about
+			// that much travel short of the target.
+			if (!player->meleefalconanimstarted
+					&& (dx * dx + dz * dz) < (ZOM_FALCON_HIT + ZOM_FALCON_SPEED * ZOM_FALCON_ANIMLEAD)
+							* (ZOM_FALCON_HIT + ZOM_FALCON_SPEED * ZOM_FALCON_ANIMLEAD)) {
+				meleeFalconStartPunchAnim(handnum, gset);
+				player->meleefalconanimstarted = true;
+#ifndef PLATFORM_N64
+				if (g_ModFalconDebug) {
+					sysLogPrintf(LOG_NOTE, "falcon: swing at dash tick %d, dist %.0f",
+							elapsed, sqrtf(dx * dx + dz * dz));
+				}
+#endif
+			}
+
+			if (elapsed >= ZOM_FALCON_TRIP && (dx * dx + dz * dz) < ZOM_FALCON_HIT * ZOM_FALCON_HIT
+					&& cdTestLos04(&player->prop->pos, player->prop->rooms, &target->pos,
+							CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PATHBLOCKER | CDTYPE_BG)) {
+				struct coord gunpos2d;
+				struct coord gundir2d;
+
+				bgunCalculatePlayerShotSpread(&gunpos2d, &gundir2d, handnum, true);
+				mtx4RotateVecInPlace(camGetProjectionMtxF(), &gundir2d);
+				bgunPlayPropHitSound(gset, target, -1);
+				func0f0341dc(target->chr, gsetGetDamage(gset), &gundir2d, gset,
+						player->prop, HITPART_TORSO, target, NULL, NULL, -1, NULL);
+
+				player->meleelungeprop = NULL;
+				player->meleelungetime60 = 0;
+				player->bondforcespeed.x = 0;
+				player->bondforcespeed.y = 0;
+				player->bondforcespeed.z = 0;
+#ifndef PLATFORM_N64
+				if (g_ModFalconDebug) {
+					sysLogPrintf(LOG_NOTE, "falcon: lunge hit after %d ticks at %.0f, y (%.0f,%.0f) -> (%.0f,%.0f)",
+							elapsed, sqrtf(dx * dx + dz * dz),
+							player->prop->pos.x, player->prop->pos.z, target->pos.x, target->pos.z);
+				}
+#endif
+				return;
+			}
+		}
+
+		player->meleelungeprop = target;
+	}
+
+	player->meleelungetime60--;
+
+	if (player->meleelungetime60 <= 0) {
+		// A dash that never got close enough still has to swing its fist.
+		if (!player->meleefalconanimstarted) {
+			meleeFalconStartPunchAnim(handnum, gset);
+			player->meleefalconanimstarted = true;
+		}
+
+		player->meleelungeprop = NULL;
+		player->bondforcespeed.x = 0;
+		player->bondforcespeed.y = 0;
+		player->bondforcespeed.z = 0;
+#ifndef PLATFORM_N64
+		if (g_ModFalconDebug) {
+			sysLogPrintf(LOG_NOTE, "falcon: dash over at frame %d, y (%.0f,%.0f)", g_Vars.lvframe60,
+					player->prop->pos.x, player->prop->pos.z);
+		}
+#endif
+	}
+}
+
 void handTickAttack(s32 handnum)
 {
+	// Falcon Punch: the seat's own cooldown bookkeeping. It runs even when
+	// the hand is idle, so the two seconds count from the punch rather than
+	// from the next press.
+	if (handnum == HAND_RIGHT && modIsFalconPunchEnabled()
+			&& g_Vars.currentplayer->meleecooldown60 > 0) {
+		g_Vars.currentplayer->meleecooldown60 -= g_Vars.lvupdate60;
+	}
+
+	if (handnum == HAND_RIGHT && modIsFalconPunchEnabled()) {
+		struct gset gset;
+
+		gsetPopulateFromCurrentPlayer(handnum, &gset);
+
+		if (gset.weaponnum == WEAPON_UNARMED && gset.weaponfunc == FUNC_PRIMARY) {
+			meleeFalconLungeTick(handnum, &gset);
+		}
+	}
+
 	if (g_Vars.currentplayer->hands[handnum].unk0d0f_02) {
 		s32 doit = true;
 
@@ -1757,8 +2043,13 @@ void handTickAttack(s32 handnum)
 				if (weaponHasFlag2(weaponnum, WEAPONFLAG2_PELLETS)) {
 #ifndef PLATFORM_N64
 					// GoldenEye's shotguns fire NUMBER_SHOTGUN_BULLETS, five
-					// (chrprop.c), where Perfect Dark's fire six
-					s32 pellets = WEAPON_IS_GE(weaponnum) ? 5 : 6;
+					// (chrprop.c), where Perfect Dark's fire six. The DB-Shotgun's
+					// full-clip secondary is one blast of twelve: the same rule for
+					// player and simulant pellets, kept in port/src/dbshotgun.c. The
+					// clip is the one captured before bondgun.c deducted this shot's
+					// rounds, not the spent one this function runs with.
+					s32 pellets = dbShotgunPellets(weaponnum, gset.weaponfunc,
+							g_Vars.currentplayer->hands[handnum].dbshotgunShotClip);
 
 					while (pellets-- > 0) {
 						shotCreate(handnum, true, true, 1, true);
@@ -1781,16 +2072,42 @@ void handTickAttack(s32 handnum)
 			break;
 		case HANDATTACKTYPE_MELEE:
 			chrUncloakTemporarily(g_Vars.currentplayer->prop->chr);
-			handInflictMeleeDamage(handnum, &gset, false);
 
-			// The blow landing, and the one report a swing always makes: the
-			// other melee type below is the arm coming up, which only weapons
-			// with a first person melee animation report at all. Taking the
-			// landing gives the body one swing per attack whatever is being
-			// swung, which is what the combo counts.
+			{
+				bool falconpunch = modIsFalconPunchEnabled()
+						&& weaponnum == WEAPON_UNARMED && gset.weaponfunc == FUNC_PRIMARY;
+				bool locked = false;
+
+				if (falconpunch) {
+					locked = meleeFalconLockOn();
+
+					// One press, one lunge: the fist rests for two seconds
+					// from the swing, whether or not a target was in the cone.
+					// The state machine (bondgun.c) keeps the hand out of the
+					// swing until it clears.
+					g_Vars.currentplayer->meleecooldown60 = ZOM_FALCON_COOLDOWN;
+
+					// Nothing to lunge at: the held-back fist swings at the
+					// normal fire time, so a plain punch still animates.
+					if (!locked) {
+						meleeFalconStartPunchAnim(handnum, &gset);
+					}
+				}
+
+				handInflictMeleeDamage(handnum, &gset, false);
+
+				// The blow landing, and the one report a swing always makes:
+				// the other melee type below is the arm coming up, which only
+				// weapons with a first person melee animation report at all.
+				// Taking the landing gives the body one swing per attack
+				// whatever is being swung, which is what the combo counts.
+				// A Falcon lunge plays its body swing with the delayed fist.
 #ifndef PLATFORM_N64
-			chrPlayPunchAnimation(g_Vars.currentplayer->prop->chr);
+				if (!falconpunch || !locked) {
+					chrPlayPunchAnimation(g_Vars.currentplayer->prop->chr);
+				}
 #endif
+			}
 			break;
 		case HANDATTACKTYPE_MELEENOUNCLOAK:
 			handInflictMeleeDamage(handnum, &gset, true);
@@ -2857,6 +3174,12 @@ void propsTestForPickup(void)
 				case PROPTYPE_SMOKE:
 					break;
 				}
+			} else if (prop->obj && (prop->obj->type == OBJTYPE_AMMOCRATE
+					|| prop->obj->type == OBJTYPE_MULTIAMMOCRATE)) {
+				// --pickup-trace: a crate that is still regenerating is never
+				// tested, which from the sofa looks exactly like one that
+				// refuses the player
+				objTracePickupRefusal(prop, "regenerating");
 			}
 
 			propExecuteTickOperation(prop, op);

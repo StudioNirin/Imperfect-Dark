@@ -33,6 +33,7 @@
 #include "game/bondgun.h"
 #include "game/game_0b0fd0.h"
 #include "gebean.h"
+#include "dbshotgun.h"
 #include "modborrow.h"
 #include "gexplus.h"
 #include "gexplusrom.h"
@@ -4093,6 +4094,10 @@ void modSwapFinish(void)
 
 	// The files were emptied, aliases with them, and the lists are the new mod's
 	gebeanPoolRefresh();
+
+	// The DB-Shotgun's alias is one of those the swap emptied: take a fresh slot
+	// and put it back on its model state and first-person rows (dbshotgun.c).
+	dbShotgunModelsRefresh();
 
 	videoResetTextureCache();
 

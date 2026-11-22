@@ -675,6 +675,14 @@ f32 gsetGetDamage(struct gset *gset)
 			if (weaponHost(gset->weaponnum) == WEAPON_REAPER) {
 				damage *= LVUPDATE60FREAL();
 			}
+
+			// Falcon Punch: a clean front hit has to land about four of
+			// the eight damage units a player has. BLUNTIMPACT's front
+			// multiplier and the torso's x2 cancel, so five raw does it.
+			if (gset->weaponnum == WEAPON_UNARMED && gset->weaponfunc == FUNC_PRIMARY
+					&& modIsFalconPunchEnabled()) {
+				damage = 5.0f;
+			}
 		}
 
 		if ((func->type & 0xff) == INVENTORYFUNCTYPE_THROW) {

@@ -155,6 +155,15 @@ endif()
 
 message(STATUS "Version: ${VERSION_ROMID}, hash ${VERSION_HASH}, branch ${VERSION_BRANCH}")
 
+# Model packs are read beside the executable (modelpack.c's MODELPACK_DIR), so
+# a pack shipped with the game has to be staged into the build tree at configure
+# time. The DB-Shotgun's mesh is a tracked model pack rather than a file under
+# build/: a CI checkout has no build/ until cmake makes one, and a pack left in
+# build/ would never reach the dev release the updater downloads.
+if(EXISTS "${CMAKE_SOURCE_DIR}/model-packs")
+  file(COPY "${CMAKE_SOURCE_DIR}/model-packs" DESTINATION "${CMAKE_BINARY_DIR}")
+endif()
+
 configure_file("${CMAKE_SOURCE_DIR}/port/include/versioninfo.h.in" "${CMAKE_BINARY_DIR}/port/include/versioninfo.h" @ONLY)
 
 # The patch notes (patchnotes.txt; the top of that file says how to add an

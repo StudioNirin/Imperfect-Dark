@@ -25,7 +25,7 @@
 #   netscenariotest.sh [BIN]   BIN a file name in build/ (pd.x86_64) or a path
 #
 # Env: OUT (build/netscen-out), PORT (27260), MODDIR (mod_allinone),
-# CASES (all: htb htm pac koh ctc htbteams pacteams htmloss pacloss), STAGE (0x32 Skedar),
+# CASES (all: htb htm pac koh ctc lms htbteams pacteams htmloss pacloss), STAGE (0x32 Skedar),
 # CHECKONLY (1: only the checks, on the last run's files).
 # Exit status: 0 all good, 1 a check failed, 2 a run failed to start.
 set -u
@@ -34,7 +34,7 @@ BUILD=${BUILD:-$ROOT/build}
 OUT=${OUT:-$BUILD/netscen-out}; PORT=${PORT:-27260}
 MODDIR=${MODDIR:-mod_allinone}
 STAGE=${STAGE:-0x32}
-CASES=${CASES:-htb htm pac koh ctc htbteams pacteams htmloss pacloss}
+CASES=${CASES:-htb htm pac koh ctc lms htbteams pacteams htmloss pacloss}
 BIN=${1:-pd.x86_64}
 case $BIN in /*) ;; */*) BIN=$(realpath "$BIN") ;; *) BIN=$BUILD/$BIN ;; esac
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
@@ -444,6 +444,7 @@ run() {
 		pac)      runcase pac 3 0 1 "pac()" "v=1 " ;;
 		koh)      runcase koh 4 2 2 "koh()" "hud=1" "" "--net-test-simteam 1" ;;
 		ctc)      runcase ctc 5 2 2 "ctc()" "t[0-3]=c" "capture()" ;;
+		lms)      runcase lms 7 0 2 "" "" "" "--net-test-lives 2" ;;
 		htbteams) runcase htbteams 1 2 1 "htb(1)" "hb=1 ht=[1-9][0-9][0-9]" ;;
 		pacteams) runcase pacteams 3 2 1 "pac()" "v=1 " ;;
 		# a lossy link (the client's --net-sim: drop %, delay ms, jitter ms):
@@ -464,6 +465,7 @@ for c in $CASES; do
 	pac|pacteams|pacloss) check "$c" 3 ;;
 	koh) check "$c" 4 ;;
 	ctc) check "$c" 5 ;;
+	lms) check "$c" 7 ;;
 	esac
 done
 

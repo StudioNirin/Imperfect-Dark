@@ -14,6 +14,7 @@
 #include "game/modalarm.h"
 #include "game/modoptions.h"
 #include "game/mplayer/mplayer.h"
+#include "game/mplayer/scenarios.h"
 #include "game/options.h"
 #include "bss.h"
 #include "data.h"
@@ -302,6 +303,16 @@ void mpstatsRecordDeath(s32 aplayernum, s32 vplayernum)
 			vmpchr->killcounts[vmpindex]++;
 		}
 
+#ifndef PLATFORM_N64
+		if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_LASTMANSTANDING && !NET_CLIENT) {
+			lmsHandleDeath(aplayernum, vplayernum);
+		}
+
+		if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_ZOMBIES && !NET_CLIENT) {
+			zombiesHandleDeath(aplayernum, vplayernum);
+		}
+#endif
+
 		if (vplayernum < PLAYERCOUNT()) {
 			prevplayernum = g_Vars.currentplayernum;
 			setCurrentPlayerNum(vplayernum);
@@ -334,6 +345,18 @@ void mpstatsRecordDeath(s32 aplayernum, s32 vplayernum)
 		if (ampchr && vmpindex >= 0) {
 			ampchr->killcounts[vmpindex]++;
 		}
+
+#ifndef PLATFORM_N64
+		// One Shall Stand...: report the life just lost. This sits after the
+		// numdeaths increment above so the message counts the new total.
+		if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_LASTMANSTANDING && !NET_CLIENT) {
+			lmsHandleDeath(aplayernum, vplayernum);
+		}
+
+		if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_ZOMBIES && !NET_CLIENT) {
+			zombiesHandleDeath(aplayernum, vplayernum);
+		}
+#endif
 
 		if (aplayernum >= 0 && aplayernum < PLAYERCOUNT()) {
 			// Attacker was a player

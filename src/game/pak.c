@@ -709,7 +709,7 @@ s32 pakGetBodyLenByType(s8 device, u32 filetype)
 		len = 0x5b;
 		break;
 	case PAKFILETYPE_MPPLAYER:
-		len = 0x4e;
+		len = 0x70;
 		break;
 	case PAKFILETYPE_MPSETUP:
 		len = 0x31;

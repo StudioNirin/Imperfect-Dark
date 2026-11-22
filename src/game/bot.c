@@ -40,6 +40,9 @@
 #include "gesfx.h"
 #include "gexplus.h"
 #include "net/net.h"
+#include "raillaser.h"
+#include "shock.h"
+#include "dbshotgun.h"
 #endif
 
 #define PICKUPCRITERIA_DEFAULT  0
@@ -127,7 +130,9 @@ void botReset(struct chrdata *chr, u8 respawning)
 			chr->lift = NULL;
 			chr->height = 185;
 
-			for (i = 0; i < 33; i++) {
+			// The whole reserve, not the 33 the stock game had: see botmgr.c's
+			// allocation, which is the other half of this array's lifetime
+			for (i = 0; i < NUM_AMMOTYPES; i++) {
 				aibot->ammoheld[i] = 0;
 			}
 
@@ -461,6 +466,9 @@ void botTryDodge(struct chrdata *chr)
 
 void botSpawn(struct chrdata *chr, u8 respawning)
 {
+	// Zombies: a converted simulant comes back in its new body.
+	zombiesPrepareBotSpawn(chr);
+
 	f32 thing;
 	struct prop *prop;
 	struct defaultobj *obj;
@@ -497,6 +505,24 @@ void botSpawn(struct chrdata *chr, u8 respawning)
 		func0f02e9a0(chr, 0);
 
 #ifndef PLATFORM_N64
+		// Zombies: the survivors among the simulants get the same kit as the
+		// players - a PD Shotgun and a Falcon 2, each with half its spare
+		// ammo. The infected fight with their fists, and botSpawn()'s reset
+		// takes the kit off a sim the zombies caught at the round turn.
+		// mpGetSpawnWeapon() returns -1 here (the slots were cleared), so
+		// handle it like the player's scenario branch does.
+		if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_ZOMBIES) {
+			if (!zombiesIsInfected(chr)) {
+				botinvGiveSingleWeapon(chr, WEAPON_SHOTGUN);
+				botinvGiveSingleWeapon(chr, WEAPON_FALCON2);
+				botactGiveAmmoByType(aibot, AMMOTYPE_SHOTGUN,
+						bgunGetAmmoCapacityForWeapon(WEAPON_SHOTGUN, FUNC_PRIMARY) / 2);
+				botactGiveAmmoByType(aibot, AMMOTYPE_PISTOL,
+						bgunGetAmmoCapacityForWeapon(WEAPON_FALCON2, FUNC_PRIMARY) / 2);
+				botinvSwitchToWeapon(chr, WEAPON_SHOTGUN, FUNC_PRIMARY);
+			}
+		}
+
 		const s32 spawnweapon = modCanChrSpawnArmed() ? mpGetSpawnWeapon() : -1;
 
 		if (spawnweapon >= 0) {
@@ -545,6 +571,18 @@ u32 botPickupProp(struct prop *prop, struct chrdata *chr)
 	if (!chr || !chr->aibot) {
 		return 0;
 	}
+
+#ifndef PLATFORM_N64
+	// Zombies: the infected never touch a gun or its ammo - neither what
+	// survives a disarm on the floor nor anything else. Their one attack is
+	// the punch; a Skedar walking around with a shotgun breaks the mode.
+	if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_ZOMBIES
+			&& zombiesIsInfected(chr)
+			&& (obj->type == OBJTYPE_WEAPON || obj->type == OBJTYPE_AMMOCRATE
+					|| obj->type == OBJTYPE_MULTIAMMOCRATE)) {
+		return 0;
+	}
+#endif
 
 	dprint();
 
@@ -612,7 +650,7 @@ u32 botPickupProp(struct prop *prop, struct chrdata *chr)
 #endif
 			dprint();
 
-			for (i = 0; i != 19; i++) {
+			for (i = 0; i < (s32) ARRAYCOUNT(crate->slots); i++) {
 				qty = crate->slots[i].quantity;
 
 				if (qty) {
@@ -621,6 +659,16 @@ u32 botPickupProp(struct prop *prop, struct chrdata *chr)
 
 				if (qty) {
 					botactGiveAmmoByType(chr->aibot, i + 1, qty);
+				}
+			}
+
+			// A bot that cannot see past the record's nineteen pairs stands in an
+			// arena beside a crate of plasma bolts and never takes one (types.h).
+			for (i = 0; prop->extrapairs != NULL && i < prop->extrapairs->count; i++) {
+				qty = prop->extrapairs->pairs[i].quantity;
+
+				if (qty) {
+					botactGiveAmmoByType(chr->aibot, prop->extrapairs->pairs[i].ammotype, qty);
 				}
 			}
 
@@ -747,6 +795,17 @@ bool botTestPropForPickup(struct prop *prop, struct chrdata *chr)
 		return false;
 	}
 
+#ifndef PLATFORM_N64
+	// Zombies: an infected simulant does not fetch guns either, so it never
+	// walks toward one (the pick-up itself is refused in botPickupProp()).
+	if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_ZOMBIES
+			&& zombiesIsInfected(chr)
+			&& (obj->type == OBJTYPE_WEAPON || obj->type == OBJTYPE_AMMOCRATE
+					|| obj->type == OBJTYPE_MULTIAMMOCRATE)) {
+		return false;
+	}
+#endif
+
 	dprint();
 
 	if (prop->timetoregen != 0) {
@@ -840,7 +899,7 @@ bool botTestPropForPickup(struct prop *prop, struct chrdata *chr)
 			return false;
 		}
 
-		for (i = 0; i < 0x13; i++) {
+		for (i = 0; i < (s32) ARRAYCOUNT(crate2->slots); i++) {
 			weaponnum = botactGetWeaponByAmmoType(chr, i + 1);
 
 			if (crate2->slots[i].quantity > 0) {
@@ -852,6 +911,20 @@ bool botTestPropForPickup(struct prop *prop, struct chrdata *chr)
 						botinvGiveProp(chr, prop);
 					}
 
+					break;
+				}
+			}
+		}
+
+		// A crate whose only ammunition is past the record's nineteen pairs is
+		// still worth walking to, or a bot walks past a crate of plasma bolts.
+		if (ignore1 && prop->extrapairs != NULL) {
+			for (i = 0; i < prop->extrapairs->count; i++) {
+				s32 ammotype = prop->extrapairs->pairs[i].ammotype;
+
+				if (prop->extrapairs->pairs[i].quantity > 0
+						&& botactGetAmmoQuantityByType(chr->aibot, ammotype, false) < bgunGetCapacityByAmmotype(ammotype)) {
+					ignore1 = false;
 					break;
 				}
 			}
@@ -1494,6 +1567,15 @@ f32 botCalculateMaxSpeed(struct chrdata *chr)
 
 #ifndef PLATFORM_N64
 	speed *= botGetStatScale(chr, BOTSTAT_SPEED);
+
+	// Zombies: the infected sims chase at the survivors' sprint speed as
+	// their base, the same half again bondwalk.c gives the infected players.
+	// Applied here rather than at botTickMovement's call so the waypoint
+	// timings that also read this speed plan the run the bot then makes.
+	if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_ZOMBIES
+			&& zombiesIsInfected(chr)) {
+		speed *= ZOMBIE_SPEED_MULT;
+	}
 #endif
 
 	if (botGuessCrouchPos(chr) == CROUCHPOS_SQUAT) {
@@ -1534,7 +1616,14 @@ void bot0f1921f8(struct chrdata *chr, f32 *move)
 		return;
 	}
 
-	if (g_Vars.lvframe60 < 145) {
+	if (g_Vars.lvframe60 < 145
+#ifndef PLATFORM_N64
+			// Zombies: the round's countdown holds the simulants standing
+			// still exactly as the match's first seconds do (above); the
+			// attacks go quiet beside this in botTickUnpaused.
+			|| zombiesCountdownActive()
+#endif
+			) {
 		move[0] = 0;
 		move[1] = 0;
 		return;
@@ -2320,6 +2409,16 @@ void botScheduleReload(struct chrdata *chr, s32 handnum)
 {
 	chr->aibot->timeuntilreload60[handnum] = AIBOTPREF(chr->aibot->weaponnum).reloaddelay * (PAL ? 50 : 60);
 
+	if (raillaserOwn(chr->aibot->weaponnum)) {
+		// Reloading resets the charge, which is what the player's hand does as
+		// well (bgunTickMaulerCharge()). It belongs here rather than only in the
+		// firing loop because an empty magazine never reaches that loop: a
+		// Rail-Laser holds one shot, so the press that emptied it is followed by a
+		// reload, and a charge left standing through it would be spent the moment
+		// the next one began.
+		chr->aibot->maulercharge[handnum] = 0;
+	}
+
 	if (AIBOTPREF(chr->aibot->weaponnum).allowpartialreloaddelay) {
 		s32 capacity = botactGetClipCapacityByFunction(chr->aibot->weaponnum, chr->aibot->gunfunc);
 
@@ -2464,10 +2563,24 @@ struct prop *botFindPickup(struct chrdata *chr, s32 criteria)
 						crate = (struct multiammocrateobj *)prop->obj;
 						sqdist2 = chrGetSquaredDistanceToCoord(chr, &prop->pos);
 
-						for (i = 0; i < 19; i++) {
-							s32 ammotype = i + 1;
+						// The record's nineteen pairs and, after them, whatever the crate's
+						// prop carries past the record (types.h). No type is counted twice:
+						// slots[] is only ever indexed by a type inside the nineteen, and a
+						// pair list only ever holds types past them (setup.c).
+						for (i = 0; i < (s32) ARRAYCOUNT(crate->slots)
+								+ (prop->extrapairs != NULL ? prop->extrapairs->count : 0); i++) {
+							s32 ammotype;
+							s32 quantity;
 
-							if (crate->slots[i].quantity > 0) {
+							if (i < (s32) ARRAYCOUNT(crate->slots)) {
+								ammotype = i + 1;
+								quantity = crate->slots[i].quantity;
+							} else {
+								ammotype = prop->extrapairs->pairs[i - (s32) ARRAYCOUNT(crate->slots)].ammotype;
+								quantity = prop->extrapairs->pairs[i - (s32) ARRAYCOUNT(crate->slots)].quantity;
+							}
+
+							if (quantity > 0) {
 								weaponnum = botactGetWeaponByAmmoType(chr, ammotype);
 
 								if (weaponnum > 0) {
@@ -3909,7 +4022,12 @@ void botTickUnpaused(struct chrdata *chr)
 				// the dodge is never seen.
 				if (aibot->skrocket == NULL && aibot->changeguntimer60 <= 0
 #ifndef PLATFORM_N64
+						// Zombies: the countdown's hold covers attacks as
+						// well as feet - punches and shots both wait for
+						// the fight to open (movement is held in the
+						// simulant's move function).
 						&& !botIsRolling(chr)
+						&& !zombiesCountdownActive()
 #endif
 						) {
 					if (aibot->ismeleeweapon) {
@@ -4072,34 +4190,70 @@ void botTickUnpaused(struct chrdata *chr)
 								}
 							}
 						}
-					} else if (chr->weapons_held[i] && aibot->loadedammo[i] > 0) {
+					} else if (chr->weapons_held[i] && aibot->loadedammo[i] >= shockAmmoCostForFunc(aibot->weaponnum, aibot->gunfunc)
+							* dbShotgunAmmoCost(aibot->weaponnum, aibot->gunfunc, aibot->loadedammo[i])) {
 						// Handle firing a regular weapon
 						bool canshoot = false;
 
 						if (weaponGetNumTicksPerShot(aibot->weaponnum, aibot->gunfunc) <= 0) {
-							// Increment the mauler charge and deplete ammo as
-							// the charge amount crosses each whole number.
-							// Yes, this is actually implemented for bots.
-							if (weaponHost(aibot->weaponnum) == WEAPON_MAULER
-									&& aibot->gunfunc == FUNC_SECONDARY
-									&& aibot->loadedammo[i] >= 2) {
+							// Increment the charge and deplete ammo as the charge amount
+							// crosses each whole number. Yes, this is actually implemented
+							// for bots - for the Mauler, which is the only gun that has
+							// ever come through here, and whose player-side rule is
+							// bgunTickMaulerCharge(): the charge fills whenever its charged
+							// function is the selected one, and it pays a magazine round for
+							// each unit of it.
+							//
+							// The Rail-Laser charges here as well, on the same field of a
+							// simulant's state, and by its own rule rather than the Mauler's:
+							// while the shot is being taken (weaponChargeFunction()), at its
+							// own length (raillaserChargeRate60(), which is the Instagib
+							// length too), paying nothing on the way up because its magazine
+							// holds the one round that shot is billed for - and back to
+							// nothing when the press stops, so a simulant cannot carry a
+							// charge from one fight into the next.
+							s32 chargefunc = weaponChargeFunction(aibot->weaponnum);
+							s32 chargeneeds = weaponHost(aibot->weaponnum) == WEAPON_MAULER ? 2 : 1;
+							bool charging = chargefunc >= 0 && chargefunc == aibot->gunfunc
+									&& aibot->loadedammo[i] >= chargeneeds;
+
+							if (charging) {
 								s32 newchargei;
 								s32 oldchargei = aibot->maulercharge[i];
 
-								aibot->maulercharge[i] += g_Vars.lvupdate60freal * 0.05f;
+								if (weaponHost(aibot->weaponnum) == WEAPON_MAULER) {
+									aibot->maulercharge[i] += g_Vars.lvupdate60freal * 0.05f;
 
-								if (aibot->maulercharge[i] > 5) {
-									aibot->maulercharge[i] = 5;
+									if (aibot->maulercharge[i] > 5) {
+										aibot->maulercharge[i] = 5;
+									}
+								} else {
+									aibot->maulercharge[i] += g_Vars.lvupdate60freal * raillaserChargeRate60();
+
+									if (aibot->maulercharge[i] > raillaserChargeFull()) {
+										aibot->maulercharge[i] = raillaserChargeFull();
+									}
 								}
 
 								newchargei = aibot->maulercharge[i];
 
-								if (newchargei != oldchargei) {
+								if (weaponHost(aibot->weaponnum) == WEAPON_MAULER && newchargei != oldchargei) {
 									aibot->loadedammo[i]--;
 								}
+							} else if (raillaserOwn(aibot->weaponnum)) {
+								// The press let go: the charge is gone with it.
+								aibot->maulercharge[i] = 0;
 							}
 
-							if (aibot->nextbullettimer60[i] <= 0) {
+							if (aibot->nextbullettimer60[i] <= 0
+									&& (!raillaserOwn(aibot->weaponnum)
+										|| aibot->maulercharge[i] >= raillaserChargeFull())) {
+								// The wait the player is held to as well, and the reason this
+								// gun's charge is not simply decoration on a simulant's shot:
+								// its damage does not scale with the charge, so a half charge
+								// in simulant hands would be a full-strength shot a second and
+								// a half early, and the target's only answer to a railgun is
+								// that window.
 								canshoot = true;
 							}
 						} else {

@@ -398,6 +398,22 @@ struct mpweapon g_MpWeapons[NUM_MPWEAPONS] = {
 	// out of five, so the hand-out is one and bgunGetSpawnAmmoQuantity()
 	// doubles it to the cap.
 	/*0x51*/ { WEAPON_RAILLASER,          AMMOTYPE_RAIL,        1,   0, 0, 1, 0,                   MODEL_CHRLASER,         512 },
+	// The Bowcaster (invitems.c). Nothing unlocks it, so it is in the lists
+	// with no feature behind it, and it is drawn on the crossbow's floor model
+	// until one of its own. Thirty bolts in the magazine; the hand-out is one
+	// magazine, which bgunGetSpawnAmmoQuantity() tops up to the cap.
+	/*0x52*/ { WEAPON_BOWCASTER,         AMMOTYPE_BOWCASTER,   30,  0, 0, 1, 0,                   MODEL_CHRCROSSBOW,      256 },
+	// The Shock Rifle (invitems.c). Same standing as the two above: nothing
+	// unlocks it. It is drawn on the AR34's model, which is also the first-person
+	// body it borrows (playermgrGetModelOfWeapon), until it has one of its own.
+	// Fifty cells in the magazine, so the hand-out is one magazine and
+	// bgunGetSpawnAmmoQuantity() tops it up to the cap.
+	/*0x53*/ { WEAPON_SHOCKRIFLE,        AMMOTYPE_SHOCK,       50,  0, 0, 1, 0,                   MODEL_CHRAR34,          256 },
+	// The DB-Shotgun (invitems.c). Appended like the three above, with no
+	// unlock feature. It fires the existing shotgun ammunition and wears the
+	// alias model state, which falls back to FILE_GSHOTGUN until the pack's
+	// mesh is loaded. Its two-round magazine is a crate's hand-out of sixteen.
+	/*0x54*/ { WEAPON_GESHOTGUN,         AMMOTYPE_SHOTGUN,     16,  0, 0, 1, 0,                   MODEL_PD_GESHOTGUN,     256 },
 #endif
 };
 
@@ -913,6 +929,17 @@ void mpInit(bool resetplayers)
 	s32 i;
 	s32 j;
 
+#ifndef PLATFORM_N64
+	extern void bowcasterInitNames(void);
+	bowcasterInitNames();
+
+	extern void shockInitNames(void);
+	shockInitNames();
+
+	extern void dbShotgunInitNames(void);
+	dbShotgunInitNames();
+#endif
+
 	g_MpSetup.scenario = MPSCENARIO_COMBAT;
 	g_MpSetup.stagenum = STAGE_MP_SKEDAR;
 	g_MpSetup.options = MPOPTION_DISPLAYTEAM
@@ -1197,6 +1224,37 @@ s32 mpGetPlayerRankings(struct ranking *rankings)
 			scenarioCalculatePlayerScore(mpchr, i, &score, &deaths);
 
 			rankablescore = (score + 0x8000) << 16 | (0xffff - deaths);
+
+			// One Shall Stand...: score is remaining lives, so the low half
+			// of the rankable score is free to break a tie on kills. The
+			// displayed score and deaths stay as the scenario reports them.
+			if (g_MpSetup.scenario == MPSCENARIO_LASTMANSTANDING) {
+				s32 kills = mpchr->killcounts[i];
+
+				if (kills > 0xffff) {
+					kills = 0xffff;
+				}
+
+				rankablescore = ((score + 0x8000) << 16) | (u32) kills;
+			}
+
+			// Zombies: points decide; ties go to the most infections and
+			// then the fewest deaths. chr index is the final stable order.
+			if (g_MpSetup.scenario == MPSCENARIO_ZOMBIES) {
+				s32 infections = g_ScenarioData.zombies.infections[i];
+				s32 tiedeaths = deaths;
+
+				if (infections > 0xff) {
+					infections = 0xff;
+				}
+				if (tiedeaths > 0xff) {
+					tiedeaths = 0xff;
+				}
+
+				rankablescore = ((score + 0x8000) << 16)
+						| (u32) ((infections << 8) | (0xff - tiedeaths));
+			}
+
 			dstindex = 0;
 			found = false;
 
@@ -1223,7 +1281,7 @@ s32 mpGetPlayerRankings(struct ranking *rankings)
 			count++;
 
 			// Write the new figures
-			rankablescores[dstindex] = (score + 0x8000) << 16 | (0xffff - deaths);
+			rankablescores[dstindex] = rankablescore;
 			scores[dstindex] = score;
 			mpchrs[dstindex] = mpchr;
 			chrnums[dstindex] = i;
@@ -1712,6 +1770,11 @@ s32 mpGetSpawnWeapon(void)
 {
 	s32 count = 0;
 	s32 i;
+
+	// Zombies is fists only: no spawn gun for players or simulants.
+	if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_ZOMBIES) {
+		return -1;
+	}
 
 	if (modGetSpawnWeapon() == SPAWNWEAPON_OFF) {
 		return -1;
@@ -3233,7 +3296,8 @@ Gfx *mpRenderModalText(Gfx *gdl)
 #endif
 
 	if (g_NetMode == NETMODE_CLIENT && netSpecOn()) return netSpecRenderText(gdl); // netplay: a spectator's keys, not the camera player's prompt
-	if (g_NetMode != NETMODE_NONE && netSpecDeadOn() && g_MpSetup.paused == MPPAUSEMODE_UNPAUSED) return netSpecRenderText(gdl); // netplay: a dead co-op player's, watching (netspec.c)
+	if (netSpecDeadOn() && (g_NetMode != NETMODE_NONE || g_MpSetup.scenario == MPSCENARIO_LASTMANSTANDING)
+			&& g_MpSetup.paused == MPPAUSEMODE_UNPAUSED) return netSpecRenderText(gdl); // a dead co-op or eliminated LMS player's, watching (netspec.c)
 
 #ifndef PLATFORM_N64
 	// A GoldenEye match says both in GoldenEye's words and font, green in the
@@ -3646,7 +3710,7 @@ struct mpweaponset g_MpWeaponSets[12] = {
 #if (VERSION == VERSION_JPN_FINAL) && defined(PLATFORM_N64)
 	{ /*0x0b*/ L_MPWEAPONS_044, { WEAPON_TIMEDMINE,        WEAPON_CROSSBOW,    WEAPON_TIMEDMINE,   WEAPON_CROSSBOW,       WEAPON_MPSHIELD, WEAPON_DISABLED }, { MPFEATURE_WEAPON_CROSSBOW,        0,                           0,                              0                       }, WEAPON_TIMEDMINE,   WEAPON_TIMEDMINE,   WEAPON_TIMEDMINE, WEAPON_TIMEDMINE,      WEAPON_MPSHIELD, WEAPON_DISABLED }, // Close Combat
 #else
-	{ /*0x0b*/ L_MPWEAPONS_044, { WEAPON_COMBATKNIFE,      WEAPON_COMBATKNIFE, WEAPON_TIMEDMINE,   WEAPON_CROSSBOW,       WEAPON_MPSHIELD, WEAPON_DISABLED }, { MPFEATURE_WEAPON_CROSSBOW,        0,                           0,                              0                       }, WEAPON_COMBATKNIFE, WEAPON_COMBATKNIFE, WEAPON_TIMEDMINE, WEAPON_TIMEDMINE,      WEAPON_MPSHIELD, WEAPON_DISABLED }, // Close Combat
+	{ /*0x0b*/ L_MPWEAPONS_044, { WEAPON_COMBATKNIFE,      WEAPON_BOWCASTER,   WEAPON_TIMEDMINE,   WEAPON_CROSSBOW,       WEAPON_MPSHIELD, WEAPON_DISABLED }, { MPFEATURE_WEAPON_CROSSBOW,        0,                           0,                              0                       }, WEAPON_COMBATKNIFE, WEAPON_BOWCASTER,   WEAPON_TIMEDMINE, WEAPON_TIMEDMINE,      WEAPON_MPSHIELD, WEAPON_DISABLED }, // Close Combat
 #endif
 };
 
@@ -5811,9 +5875,15 @@ s32 func0f18d0e8(s32 arg0)
 	return -1;
 }
 
+// One bit per weapon number (types.h's GUNFUNCS_BYTES), saved whole so every
+// weapon's function choice - this fork's appended guns included - survives a
+// reload. The gunfuncs block is the last thing in the player file, so widening
+// it only grows the body's tail; pakGetBodyLenByType gives the file room for it.
+#define GUNFUNC_SAVEBITS (GUNFUNCS_BYTES * 8)
+
 void mpplayerfileLoadGunFuncs(struct savebuffer *buffer, s32 playernum)
 {
-	s32 bitsremaining = 35;
+	s32 bitsremaining = GUNFUNC_SAVEBITS;
 	s32 i = 0;
 
 	while (bitsremaining > 0) {
@@ -5832,7 +5902,7 @@ void mpplayerfileLoadGunFuncs(struct savebuffer *buffer, s32 playernum)
 
 void mpplayerfileSaveGunFuncs(struct savebuffer *buffer, s32 playernum)
 {
-	s32 bitsremaining = 35;
+	s32 bitsremaining = GUNFUNC_SAVEBITS;
 	s32 i = 0;
 
 	while (bitsremaining > 0) {
@@ -6479,18 +6549,34 @@ void mpsetupfileLoadWad(struct savebuffer *buffer, u8 version)
 	}
 
 	if (version >= MPSETUP_VERSION_RANDOMFILTERS) {
-		const s32 numfilters = version >= MPSETUP_VERSION_RAILLASER ? NUM_MPWEAPONS : NUM_MPWEAPONS - 1;
+		const s32 numfilters = version >= MPSETUP_VERSION_GESHOTGUN ? NUM_MPWEAPONS
+			: version >= MPSETUP_VERSION_SHOCKRIFLE ? NUM_MPWEAPONS - 1
+			: version >= MPSETUP_VERSION_BOWCASTER ? NUM_MPWEAPONS - 2
+			: version >= MPSETUP_VERSION_RAILLASER ? NUM_MPWEAPONS - 3 : NUM_MPWEAPONS - 4;
 
 		for (i = 0; i < numfilters; i++) {
 			g_MpWeaponSetRandomFilters[i] = (u8) savebufferReadBits(buffer, 1);
 		}
 
-		// The Rail-Laser's row, for a file that predates it: selected, on the same
-		// reasoning as the rows the u64 could not hold below - a file that cannot
-		// name the row cannot have excluded it either - and a decoded block has to
-		// stand equal to a live setup for mpsetups.c to re-encode it.
+		// The Rail-Laser's, Bowcaster's and Shock Rifle's rows, for a file that
+		// predates them: selected, on the same reasoning as the rows the u64
+		// could not hold below - a file that cannot name a row cannot have
+		// excluded it either - and a decoded block has to stand equal to a live
+		// setup for mpsetups.c to re-encode it.
 		if (version < MPSETUP_VERSION_RAILLASER) {
-			g_MpWeaponSetRandomFilters[NUM_MPWEAPONS - 1] = 1;
+			g_MpWeaponSetRandomFilters[MPWEAPON_RAILLASER] = 1;
+		}
+
+		if (version < MPSETUP_VERSION_BOWCASTER) {
+			g_MpWeaponSetRandomFilters[MPWEAPON_BOWCASTER] = 1;
+		}
+
+		if (version < MPSETUP_VERSION_SHOCKRIFLE) {
+			g_MpWeaponSetRandomFilters[MPWEAPON_SHOCKRIFLE] = 1;
+		}
+
+		if (version < MPSETUP_VERSION_GESHOTGUN) {
+			g_MpWeaponSetRandomFilters[MPWEAPON_GESHOTGUN] = 1;
 		}
 	}
 	else {
@@ -6675,9 +6761,13 @@ void mpsetupfileSaveWad(struct savebuffer *buffer, u8 version)
 		// One bit per row, so that a table wider than a u64 keeps all of itself:
 		// every GoldenEye row, a ROM hack's own pistols and the cheat guns sit past
 		// the 64th, and a u64 here wrote none of them and read back the default.
-		// Version 6 adds the Rail-Laser's bit, which moves everything below it by
-		// one bit, so an older file is read with the width it was written at.
-		const s32 numfilters = version >= MPSETUP_VERSION_RAILLASER ? NUM_MPWEAPONS : NUM_MPWEAPONS - 1;
+		// Version 6 adds the Rail-Laser's bit, 8 the Bowcaster's, 9 the Shock
+		// Rifle's and 10 the DB-Shotgun's, each moving everything below it by one
+		// bit, so an older file is read with the width it was written at.
+		const s32 numfilters = version >= MPSETUP_VERSION_GESHOTGUN ? NUM_MPWEAPONS
+			: version >= MPSETUP_VERSION_SHOCKRIFLE ? NUM_MPWEAPONS - 1
+			: version >= MPSETUP_VERSION_BOWCASTER ? NUM_MPWEAPONS - 2
+			: version >= MPSETUP_VERSION_RAILLASER ? NUM_MPWEAPONS - 3 : NUM_MPWEAPONS - 4;
 
 		for (i = 0; i < numfilters; i++) {
 			savebufferOr(buffer, g_MpWeaponSetRandomFilters[i] != 0 ? 1 : 0, 1);

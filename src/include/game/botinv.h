@@ -28,7 +28,8 @@ void botinvDropAll(struct chrdata *chr, u32 weaponnum);
 void botinvDropOne(struct chrdata *chr, u32 weaponnum);
 
 
-#define BOTINV_MAX_WEAPONPREFS 128
+// Defined in constants.h beside the enum it is derived from (a row per weapon
+// number, so a number appended to the enum cannot be asked of a short table)
 s32 botinvGetNumWeaponPreferences(void);
 
 #endif

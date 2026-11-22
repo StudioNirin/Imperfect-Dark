@@ -433,6 +433,55 @@ s32 setupCountCommandType(u32 type)
 	return count;
 }
 
+/**
+ * A pair for an ammo type the ROM's crate record has no room for.
+ *
+ * An arena's crate is nineteen { modelnum, quantity } pairs and that length is
+ * the stride the setup stream is walked by (props.h, setupGetCmdLength()), so a
+ * fork ammunition type - AMMOTYPE_RAIL, AMMOTYPE_BOWCASTER, and every one after
+ * them - cannot have a pair there. Those go on the crate's prop as a list
+ * (types.h), and this is where a spot's row adds one. The list is sized to the
+ * spot that needs it rather than to the number of ammo types the game has, and
+ * comes from the stage pool, which is emptied with the level: a crate's pairs
+ * belong to that level's setup, and a crate prop outlives none of it.
+ */
+static void setupAddAmmoCratePair(struct prop *prop, s32 ammotype, s32 quantity)
+{
+	struct ammocratepairs *pairs = prop->extrapairs;
+	s32 i;
+
+	if (ammotype <= 0 || quantity <= 0) {
+		return;
+	}
+
+	if (pairs == NULL) {
+		pairs = mempAlloc(ALIGN16(sizeof(struct ammocratepairs) + 2 * sizeof(struct ammocratepair)),
+				MEMPOOL_STAGE);
+		pairs->count = 0;
+		prop->extrapairs = pairs;
+	}
+
+	for (i = 0; i < pairs->count; i++) {
+		if (pairs->pairs[i].ammotype == ammotype) {
+			pairs->pairs[i].quantity = quantity;
+			return;
+		}
+	}
+
+	// Two is every pair an mpweapon row can name. A row that ever grew a third
+	// would find its ammunition dropped here rather than run off the end.
+	if (pairs->count >= 2) {
+		sysLogPrintf(LOG_WARNING,
+				"setup: ammo type %d has no room in the crate prop's pair list of %d", ammotype,
+				pairs->count);
+		return;
+	}
+
+	pairs->pairs[pairs->count].ammotype = ammotype;
+	pairs->pairs[pairs->count].quantity = quantity;
+	pairs->count++;
+}
+
 void setupCreateObject(struct defaultobj *obj, s32 cmdindex)
 {
 	f32 f0;
@@ -2522,6 +2571,7 @@ void setupCreateProps(s32 stagenum)
 					{
 						struct multiammocrateobj *crate = (struct multiammocrateobj *)obj;
 						s32 ammoqty = 1;
+						s32 extrapairs = 0;
 						s32 i;
 
 						if (g_Vars.normmplayerisrunning && g_SetupCurMpLocation >= 0) {
@@ -2531,12 +2581,15 @@ void setupCreateProps(s32 stagenum)
 							// Bounded by the array and not by a hand-typed 19, because the
 							// array is the ROM's own command size (props.h): nineteen pairs,
 							// one an ammo type minus one, and a type past the nineteenth has
-							// no slot in an arena's crate at all. This fork's AMMOTYPE_RAIL is
-							// 0x21, so the old `type < 20` guard dropped it silently and the
-							// crate beside a Rail-Laser's weapon spot held nothing. Where
-							// a spot names a type the crate cannot carry, the gun's own pickup
-							// gives the ammunition instead - the same answer as the Laser and
-							// the Moonraker, which have no ammunition type of their own.
+							// no pair in an arena's crate at all. This fork's AMMOTYPE_RAIL is
+							// 0x21 and its AMMOTYPE_BOWCASTER 0x22, so the old `type < 20` guard
+							// dropped both silently and the crate beside such a spot was drawn
+							// holding nothing - and was never offered either, because a crate
+							// with nothing in it is not a thing to pick up (objTestForPickup).
+							// A type the record cannot hold goes on the crate's prop instead
+							// (types.h), which both the pickup paths and the bots read. The
+							// Laser and the Moonraker have no ammunition type of their own, so
+							// their spots still carry nothing, as they always have.
 							if (mpweapon->priammotype > 0
 									&& mpweapon->priammotype <= (s32)ARRAYCOUNT(crate->slots)) {
 								crate->slots[mpweapon->priammotype - 1].quantity = ammoqty;
@@ -2547,13 +2600,26 @@ void setupCreateProps(s32 stagenum)
 								crate->slots[mpweapon->secammotype - 1].quantity = mpweapon->secammoqty;
 							}
 
-							if (mpweapon->priammotype > (s32)ARRAYCOUNT(crate->slots)
-									|| mpweapon->secammotype > (s32)ARRAYCOUNT(crate->slots)) {
-								sysLogPrintf(LOG_WARNING,
-										"setup: weapon spot at location %d wants ammo type %d/%d in a crate of %d slots; "
-										"the gun's own pickup carries it",
+							// Both halves of a row can name a type the record has no pair
+							// for, and unlike the record these pairs are not one deep, so
+							// count them rather than choosing. No row the game has does it
+							// today; a row that ever did is stocked by the two writes after
+							// the crate is built.
+							if (mpweapon->priammotype > (s32)ARRAYCOUNT(crate->slots)) {
+								extrapairs++;
+							}
+
+							if (mpweapon->secammotype > (s32)ARRAYCOUNT(crate->slots)) {
+								extrapairs++;
+							}
+
+							if (extrapairs > 0) {
+								sysLogPrintf(LOG_NOTE,
+										"setup: weapon spot at location %d wants ammo type %d/%d in a crate of %d pairs; "
+										"%d of them %s carried on the crate's prop",
 										g_SetupCurMpLocation, mpweapon->priammotype, mpweapon->secammotype,
-										(s32)ARRAYCOUNT(crate->slots));
+										(s32)ARRAYCOUNT(crate->slots), extrapairs,
+										extrapairs > 1 ? "are" : "is");
 							}
 						}
 
@@ -2565,6 +2631,20 @@ void setupCreateProps(s32 stagenum)
 							}
 
 							setupCreateObject(obj, index);
+
+							// Both of the row's halves, not one: a row is free to name a
+							// type past the nineteen in either, and only the ones the record
+							// has no pair for are written here - a type inside the nineteen
+							// is already in slots[], and naming it twice would hand the
+							// player its ammunition twice.
+							if (g_Vars.normmplayerisrunning && g_SetupCurMpLocation >= 0) {
+								struct mpweapon *mpweapon = mpGetMpWeaponByLocation(g_SetupCurMpLocation);
+
+								if (mpweapon != NULL) {
+									setupAddAmmoCratePair(obj->prop, mpweapon->priammotype, ammoqty);
+									setupAddAmmoCratePair(obj->prop, mpweapon->secammotype, mpweapon->secammoqty);
+								}
+							}
 						}
 					}
 					break;

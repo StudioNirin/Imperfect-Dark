@@ -537,3 +537,217 @@ Probe recipe: gdb on `bgunTickHand` giving the gun (`invGiveSingleWeapon`, `bgun
   them the port now fires too (getank.c `tankFireOnFoot()`). The shell starts at the
   eye, 30 units along the line: started at the player's prop it went off on him. Without the cheat
   there are none, as on the cartridge.
+
+## The fork's own guns, and every table a new weapon number has to appear in (2026-11-21)
+
+`WEAPON_RAILLASER` (0x87), `WEAPON_BOWCASTER` and its `WEAPON_BOWCASTERBOLT`
+(0x88, 0x89) and `WEAPON_SHOCKRIFLE` with its `WEAPON_SHOCKORB` (0x8a, 0x8b) are
+appended past GoldenEye's block, each hosting itself (`weaponHost()` is identity
+for them, so the look they borrow is not the number they behave as) except the
+Bowcaster, which hosts on the crossbow on purpose. Their ammunition
+is its own type each: `AMMOTYPE_RAIL`, `AMMOTYPE_BOWCASTER`, `AMMOTYPE_SHOCK`, with
+`NUM_AMMOTYPES` derived from the newest (`constants.h`), which is what lets the next
+gun append without a sweep of counts.
+
+Adding one is a checklist, and the reason it is written down is that most of the
+items fail *silently*: no log line, no crash, just a gun that is invisible, or
+mute, or unnamed. `tools/ci/raillaser.sh`, `tools/ci/shock.sh` and
+`tools/ci/forkbots.sh` are the gate for this list, and each of its source checks has
+been proved to fail by mutation.
+
+- **A body holding it** (`playermgrGetModelOfWeapon()`, `playermgr.c:865`): the
+  default answers -1 for anything past `WEAPON_PSYCHOSISGUN`, which is the whole
+  fork block, so an unnamed number is a body holding nothing.
+- **The beam or tracer a player sees** (`bondgun.c:9812`, `bgunCreateFx()`), and
+  the **equip sound** (`bondgun.c:4010`): whitelists, not fallbacks. A number that
+  is not named draws nothing however many beam flags its row sets - the Rail-Laser
+  fired invisibly for a week that way.
+- **The beam other players see** (`chraction.c:12978`, `makebeam`), plus
+  `WEAPONFLAG3_CHRSHOTBEAM` on the row: one is the code, the other the permission.
+- **Ammunition** (`g_AmmoTypes[]` in `bondgun.c` for the carry cap, and the row's
+  `clipsize`), and its **words** (`propobj.c`): `ammotypeGetDeterminer()`,
+  `ammotypeGetPickupName()`, `ammotypePlayPickupSound()`, the three pickup
+  quantity tables, and on PAL/JPN a `var8006a944pf` row whose text the static
+  initialiser cannot carry, so `ammotypePortNames()` rewrites it at run time - a
+  loop now, since it has more than one fork row to fill and stopped at the first
+  until the second arrived. A type missing from a name switch is a pickup message
+  that reads "Picked up .".
+- **Combat Simulator presence** (`g_MpWeapons[]`, `mplayer.c`), the curated random
+  list's two width ternaries (`mplayer.c:6544`, `:6754`) with a new
+  `MPSETUP_VERSION_*`, and a `port/include/net/netproto.h` bump: the row appends one
+  bit to the list and one byte to `RULES.randomfilters`, and both fields' width is
+  what a peer or an older file reads first.
+- **Ammo crates need nothing new**: the growable `prop->extrapairs` list
+  (`props.h`, `setup.c`) carries any type past the ROM's 19-pair record, simulants
+  included. The record's stride is load-bearing (`setupGetCmdLength()`), which is
+  why it is a list and not a wider record.
+- **A saved mode choice**: `gunfuncBitIndex()` (`data.h`) is the weapon number
+  itself, and `GUNFUNCS_BYTES` sizes the per-player `gunfuncs` block, so each of
+  these guns remembers its own primary/secondary independently of the gun whose
+  body it borrows.
+
+**The bot preference table was short of the enum (found with the Shock Rifle,
+fixed).** `g_AibotWeaponPreferences[]` (`botinv.c:29`) is indexed by weapon number
+- by `AIBOTPREF()` (`data.h:643`), by `botinvScoreWeapon()`, and by the mod
+importer, which clamps a mod's row count to `botinvGetNumWeaponPreferences()` - and
+its length was a literal 128. GoldenEye's block escapes that only because
+GoldenEye has its own array and its own branch of the macro; the fork's own numbers
+escape nothing, so a simulant scoring a dropped gun read up to six rows past a
+128-row table. The table's own comment had been warning about exactly this. It is
+`BOTINV_MAX_WEAPONPREFS` now (`constants.h:5093`), derived from `NUM_WEAPONS` and
+floored at the 128 it was so a mod's rows keep their numbers, with
+`_Static_assert(BOTINV_MAX_WEAPONPREFS >= NUM_WEAPONS)` beside it
+(`botinv.c:169`): rows past the last real weapon are zero-filled, which is already
+the right answer for a gun a bot may not use.
+
+**What a simulant needs in order to actually use one (2026-11-21).** Those zero
+rows are also the wrong answer for a gun you have just dealt it, and the failure is
+silent in the same way as every other missing row: `botinvScoreWeapon()` reads a
+row's four scores only when the row's `haspriammogoal` / `hassecammogoal` flag for
+that firing function matches what the caller asked, so a flag-clear row answers 0
+however good its scores are - and a gun that scores 0 is never wanted, never walked
+to, never fired. A guard handed one by the Randomizer stands holding it.
+
+The fourteen columns, in the order the initialiser writes them (`types.h:6148`):
+four scores, of which `unk00` / `unk01` are the ones ordinary calls read and
+`unk02` / `unk03` only the one call that scores a *dual-wield* pickup
+(`botinv.c`'s `arg4`); the two goal flags; the two `BOTDISTCFG_*` distance bands,
+which are how far a simulant tries to stand from what it is shooting;
+`targetammopri` / `targetammosec`, the amount of that gun's ammunition it stops
+hunting at (set one above `bgunGetCapacityByAmmotype()` for the type and the
+simulant never stops going after crates); `criticalammopri` / `criticalammosec`,
+the amount it will leave a barely-held hill for, which the caller clamps to 1;
+`reloaddelay` in seconds, three bits so 8 is 0, scaled by
+`allowpartialreloaddelay` in `botScheduleReload()` against how much of the clip is
+missing. A row is written by designated initialiser (`[WEAPON_RAILLASER] = ...`)
+rather than by position: these numbers sit past the stock list's `0x5d`, and the
+numbers in between are GoldenEye's, whose rows live in another array because
+`AIBOTPREF()` branches for them.
+
+`botinvScoreWeapon()` switches on `weaponHost()`, which is the right seam for
+everything a copy really inherits and a trap for the rest. The Bowcaster hosts on
+the crossbow, so the crossbow's case scored it: 49 for the primary, a figure
+written for a gun that fires one bolt which sticks in whatever it hits and can be
+walked back and pulled out again. `botScoringWeapon()` now routes that one number
+to a case of its own, which keeps the crossbow's judgement about not spending a
+slow bolt on a blurred target and none of its numbers. The Rail-Laser and the Shock
+Rifle host themselves, so no case answers for them and their rows are the whole
+decision - which is what a `case`-less gun looks like from the outside, and why
+`--test-forkbots` scores all three through the scorer rather than reading the table.
+
+`WEAPONFLAG_AICANUSE` is not what lets a simulant shoot. It is read by
+`playerChooseThirdPersonAnimation()` (`player.c:9329`, where a gun without it makes
+the wield mode `WIELDMODE_UNARMED`) and by the firing poses at `chraction.c:2293`,
+so what a gun without it loses is the animation: anyone seen from behind holds it in
+bare hands. All four of the hosts these guns stand on carry it, so all three carry
+it, and the row is left to decide what a simulant makes of the gun.
+
+A simulant's charge is `aibot->maulercharge[]` (`bot.c`) rather than a player's
+`hand->matmot1`, and the firing loop only reaches the charge for a gun with no fixed
+ticks per shot; `tools/ci/raillaser.sh` pins that the Rail-Laser's primary qualifies,
+because a gun given ticks there stops charging with nothing logged.
+`weaponChargeFunction()` (`raillaser.c`) says which function of a charging gun the
+press belongs to - Mauler secondary, Rail-Laser primary, -1 for anything else - and
+both the simulant's loop and the shot that clears the accumulator in `chraction.c`
+ask it, so the two guns cannot drift apart about whose press is whose. The Mauler
+pays a magazine round for every unit the charge crosses and so needs two in the
+magazine to start; the Rail-Laser has one shot a magazine and pays that one when the
+shot leaves, so the bot's rule splits by gun. Only the Mauler's shot carries the
+figure into `gset.unk063a`, whose damage multiplier this gun deliberately does not
+have - and that is why the wait is not decoration: its damage is the same at any
+charge, so a simulant not held to the wait gets the same kill a second and a half
+early, and that window is a target's only answer to a railgun.
+`WEAPONFLAG2_BOTLIMITLESS` is how bot.c keeps the Moonraker's clip at 999; the
+Rail-Laser's row must not carry it, and the flag is pinned present and absent in the
+same test. What is *not* decided is whether a charging simulant should be audible:
+the rising charge loop is hung off the player's hand, so today a bot's 90-tick
+wind-up is invisible, which is an open question rather than a decision.
+
+`tools/ci/forkbots.sh` (`--test-forkbots`) is the gate for this: table, scorer seam,
+flags, and the simulant's charge as far as a self-test can reach it, with the charge
+itself gated at the source. It also pins the two things a bot could get wrong in its
+own shot path, both of which were live bugs: a fork gun missing from `chrTickShoot()`'s
+launcher arm has its second function resolved as an instant trace (the Shock Rifle's
+orb fired as a beam carrying the orb's damage number, bouncing nothing), and a
+Bowcaster in bot hands created the stock `WEAPON_BOLT`, which embedded in the wall
+and came back as crossbow ammunition.
+
+**Tuning after the first playtest (2026-11-21).** The beam had the Falcon 2's
+and the sniper's re-fire (16 ticks on a tap, 32 held), which felt too quick for
+a hitscan shot with no spread and a 50-round clip. It now carries the Magnum's
+timing: `unk24 = 8`, `unk25 = 16`, `recoverytime60 = 20` and `unk27 = -1`, so
+both a tap and a held trigger repeat after 44 ticks (0.73s). The wait is
+`unk24 + unk25 + recoverytime60` in `bgun0f09aba4()` and the first immediate
+shot comes from `bgun0f09a3f8()`, where `unk27 >= 0` used to let a fresh press
+jump the queue; with it negative there is no quick re-press.
+
+The orb costs five cells a shot (`shockAmmoCostForFunc()`, shock.c). That is a
+separate figure from `hand->shotstotake`, which is the **number of projectiles**
+as well as the old ammo figure: setting it to five would lob five orbs. The
+cost is read in four places, the player's ready check and deduction (bondgun.c)
+and a simulant's gate and deduction (bot.c, chraction.c), so a bot does not pay
+four cells less than a person. The ready check refuses a shot that cannot pay
+for a whole orb, which is why the deduction branch for a cost above one never
+has to go negative. Ten orbs to a clip, twenty to the full reserve.
+
+The orb's own `scale` is 1.2 and `objTestHit()` hit-tests that scaled box, so it
+is the knob for how easy a beam is to land on it; the detonation that makes a
+near miss tolerable is stage 3 and is not in yet. It travels about 130 units a
+second, bounces at 0.9 restitution, and frees itself after five seconds.
+
+Two things that look like bugs in a self-test and are not. The ROM's language
+banks are not loaded at `--test-*` time, so `ammotypeGetDeterminer()` and
+`ammotypeGetPickupName()` with a stock string (including the plural "s" the
+function appends) segfault there: only port-bank text at quantity 1 is safe to ask
+for, and the rest is gated at the source instead. And
+`bgunGetAmmoTypeForWeapon(weaponnum, FUNC_SECONDARY)` answers 0 for any gun whose
+two modes share one reserve - the engine indexes `ammos[func]` rather than the
+function's `ammoindex` - which the AR34 does and so does the Shock Rifle.
+
+## The DB-Shotgun, and its model pack (2026-11-22)
+
+`WEAPON_GESHOTGUN` (0x8c) is a fourth gun of this fork's own, appended after
+`WEAPON_SHOCKORB`. It is the GoldenEye shotgun's mesh fitted to the stock PD
+Shotgun's space (`models-custom/db-shotgun-game.obj`, 2398 vertices / 2728 faces,
+groups `node0`, `part1_if1`, `part2`, six `bean_N_0x...` materials), but it needs
+**no GoldenEye release**: the fit is baked in, the ammunition is the existing
+`AMMOTYPE_SHOTGUN`, and its model is a port alias `PpdDbShotgunZ` over
+`FILE_GSHOTGUN` rather than anything in the XBLA pack. The stock PD Shotgun and
+the GE shotgun (when that mod is installed) are unchanged, because the alias is
+a second file number and the stock row still names the stock file.
+
+It is the two-round shotgun. The primary is one six-pellet blast for one round;
+the secondary, **only while the two-round magazine is full**, is one shot of
+twelve pellets for two rounds. With one round left the secondary is the ordinary
+six-pellet single. The PD Shotgun's `FUNCFLAG_BURST2` is deliberately dropped
+from the secondary clone: the engine's double is two bursts of six over two
+frames, where this is one shot whose pellets and price are decided together.
+Those two figures live in one place, `port/src/dbshotgun.c`
+(`dbShotgunIsDouble` / `dbShotgunPellets` / `dbShotgunAmmoCost`): the pellet
+helper is called where `prop.c` creates the shots, the price where `bondgun.c`
+checks readiness and deducts, and a simulant's gate and deduction call it too
+(`bot.c`, `chraction.c`), so a bot's double costs what a player's does.
+`hand->dbshotgunShotClip` carries the pre-deduction clip from `bondgun.c` to
+`prop.c`, which runs later in the frame with the rounds already spent. The Model
+state `MODEL_PD_GESHOTGUN = MODEL_PD_RAILLASER + 1` is filled by
+`dbShotgunModelsRefresh()` at startup and again after a mod swap empties every
+alias slot.
+
+The fitted mesh is **not enabled by default**. It ships as a model pack under
+the build directory, `build/model-packs/dbshotgun/n64/PpdDbShotgunZ.obj` plus
+`PpdDbShotgunZ.mtl` and the six PNGs in its `shotgun/` subdirectory (the MTL's
+`map_Kd shotgun/<name>.png` paths resolve there). To use it, put
+
+```
+Mod.LoadModels=1
+Mod.ModelPack=dbshotgun
+```
+
+in `pd.ini`, or switch **Mod.LoadModels** on and pick **dbshotgun** in the
+Options menu's model-pack dropdown. With neither, the gun fires exactly as
+described above and is drawn on the stock PD Shotgun's file. The alias is over a
+stock file, so it is always registered; only the mesh comes from the pack.
+
+`--test-dbshotgun` (`tools/ci/dbshotgun.sh`) checks the alias and state, the
+two-round row, all three firing states, the untouched stock Shotgun and the MP
+row at both setup widths.

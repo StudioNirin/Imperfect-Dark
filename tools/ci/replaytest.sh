@@ -34,6 +34,17 @@
 # pass --skip-cutscenes: Attack Ship's opening runs past frame 1400, and a
 # case that hashes only a cutscene tests very little.
 #
+# Budgets, since rungate.sh asks for measured ones. Measured 2026-11-21 on the dev
+# box: `self` is two runs of every case, and the two GoldenEye cases cost ten minutes
+# each here for nothing, because "not converted" is only found out by running the
+# binary until its own 600s timeout expires - so a box without the converted GoldenEye
+# ROM should ask for CASES="match solo optmatch optsolo randrun randmission".
+# randmission is the one case near its budget: it is a fixed-step sim so the frames
+# always advance, but its wall cost swings with what else the box is doing (1200 of
+# its 1500 frames in 450s otherwise idle, the same 1200 in 900s with another heavy
+# job on the machine), so treat one randmission timeout with no differing hash line as
+# a load reading rather than a divergence - re-run it alone before believing it.
+#
 # Goldens recorded before merge/f3-0930b (b937e8f6f) are stale for gesolo: Bond's
 # body is GoldenEye's 0.97 since 59ec20502, which moves the player's prop y
 # and so the hash from frame 600 on Dam. Re-record gesolo (CASES=gesolo record)
@@ -96,10 +107,21 @@ caseargs() {
 caseframes() {
 	case $1 in
 	randrun) echo $((FRAMES < 750 ? FRAMES : 750)) ;;
-	# the dealt mission's player dies at frame ~1608 (seed 12345) and the
-	# endscreen stops the level's frame count there, so --exit-frame past it
-	# is never reached and the run only ends at the timeout
-	randmission) echo $((FRAMES < 1500 ? FRAMES : 1500)) ;;
+	# Two things keep this case short and they are easy to mistake for each other.
+	# One: the dealt mission's player dies in it, and the endscreen stops the
+	# level's frame count there, so --exit-frame past the death is never reached.
+	# That was recorded at ~1608 (seed 12345) when the case was written and at
+	# ~1210 more recently, on the 2026-11-18 binary as well, so it is not
+	# something this tree introduced. Two: the case is simply slow - its 1200th
+	# frame arrived at 450s on an otherwise idle box, 900s with another heavy job
+	# running, and a 1500s probe with the model server busy got to 1100 having
+	# never reached a death at all. So a case that stops short of its cap is
+	# either of those, and only the statehash lines say which: a frozen counter
+	# leaves no new line, a slow one leaves lines that just run out of time.
+	# 1200 sits below both recorded deaths and inside the wall budget, which is
+	# what makes it a cap rather than a guess. If the death moves back late,
+	# raise it with the death, and raise the budget with it.
+	randmission) echo $((FRAMES < 1200 ? FRAMES : 1200)) ;;
 	*) echo "$FRAMES" ;;
 	esac
 }
@@ -123,7 +145,11 @@ run() {
 	case $c in ge*) moddir= ;; esac
 	local ini; ini=$(caseini "$c")
 	[ -n "$ini" ] && printf '[Mod]\n%s\n' "$ini" > "$save/pd.ini"
-	( cd "$BUILD" && timeout -k 5 $((frames / 10 + 300)) "$bin" $moddir \
+	# wall budget, not a frame budget: a fixed-step sim still takes its frames at
+	# real speed when the box is busy, and randmission's 1200 frames were measured
+	# at 450s idle and 900s with another heavy job running. A run that outruns this
+	# is reported as a timeout, which is a load reading, not a divergence.
+	( cd "$BUILD" && timeout -k 5 $((frames / 3 + 900)) "$bin" $moddir \
 		--savedir "$save" --skip-intro --no-sound $(caseargs "$c") \
 		--rng-seed "$SEED" --fixed-step --state-hash "$STEP" --exit-frame "$frames" \
 		${EXTRA:-} > "$log" 2>&1 )
@@ -246,4 +272,19 @@ check)
 *)
 	sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
+# One thing the cases cannot show from the outside, and which looks exactly like a
+# busy box: a run that reaches the end of a mission or a match asks the game to
+# save, and if the memory-pak slot has nothing behind it the game draws "Error
+# Saving Game ... press R" over the end screen. The end screen holds the level's
+# frame count still, so the case does not fail - it stops advancing and dies at the
+# wall clock, with a matching hash for every frame it did reach. menutick.c skips
+# that page for a run whose video driver says nobody is watching; keep the skip, and
+# if a case is ever given a cap above its own death this is what makes the run
+# finish rather than time out.
+if ! grep -qF '&& !menuSavePromptHasNobody())' "$ROOT/src/game/menutick.c" \
+		|| ! grep -qF 'getenv("SDL_VIDEODRIVER")' "$ROOT/src/game/menutick.c"; then
+	echo "FAIL menutick.c no longer skips the end-of-match save prompt for an unsupervised run"
+	[ $status -eq 0 ] && status=1
+fi
+
 exit $status

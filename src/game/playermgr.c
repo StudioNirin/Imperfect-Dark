@@ -622,6 +622,10 @@ void playermgrAllocatePlayer(s32 index)
 	g_Vars.players[index]->rollspeed.y = 0;
 	g_Vars.players[index]->rollspeed.z = 0;
 	g_Vars.players[index]->rolltime60 = 0;
+	g_Vars.players[index]->meleelungeprop = NULL;
+	g_Vars.players[index]->meleelungetime60 = 0;
+	g_Vars.players[index]->meleecooldown60 = 0;
+	g_Vars.players[index]->meleefalconanimstarted = false;
 #endif
 	g_Vars.players[index]->pausemode = PAUSEMODE_UNPAUSED;
 	g_Vars.players[index]->pausetime60 = 0;
@@ -858,6 +862,23 @@ s32 playermgrGetModelOfWeapon(s32 weapon)
 		// Not in the default: that answers -1 for anything past WEAPON_PSYCHOSISGUN,
 		// which is the whole of this fork's block, so a number appended there is a
 		// body holding nothing until it is named beside its own model.
+	case WEAPON_SHOCKRIFLE:
+		// The AR34's body, matching the first-person row it is posed for
+		// (invitem_shockrifle), until the gun has a model of its own.
+		model = MODEL_CHRAR34;
+		break;
+	case WEAPON_GESHOTGUN:
+#ifndef PLATFORM_N64
+		// The DB-Shotgun's own state, filled by dbShotgunModelsRefresh() from
+		// the PpdDbShotgunZ alias over FILE_GSHOTGUN. Its fileid falls back to
+		// the stock PD Shotgun's file until the alias exists, so this answer is
+		// always a loaded model; the stock Shotgun's own answer below is not
+		// touched. The MP row names the same state as the floor copy.
+		model = MODEL_PD_GESHOTGUN;
+#else
+		model = MODEL_CHRSHOTGUN;
+#endif
+		break;
 	case WEAPON_COMBATKNIFE:      model = MODEL_CHRKNIFE; break;
 	case WEAPON_TRANQUILIZER:     model = MODEL_CHRDRUGGUN; break;
 	case WEAPON_PSYCHOSISGUN:     model = MODEL_CHRDRUGGUN; break;

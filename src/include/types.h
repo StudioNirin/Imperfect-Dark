@@ -280,6 +280,24 @@ struct prop;
 struct explosion;
 
 /**
+ * Ammunition the ROM's multi-ammo crate record has no pair for (struct prop).
+ *
+ * Indexed the way the record's own slots are, in that an entry names the ammo
+ * type it holds, so one type answers with the same pair whichever half of a
+ * crate it lives in. Allocated from the stage pool by setup.c, which is freed
+ * with the level: a crate's pairs are that level's.
+ */
+struct ammocratepair {
+	/*0x00*/ u8 ammotype;
+	/*0x02*/ s16 quantity;
+};
+
+struct ammocratepairs {
+	/*0x00*/ s32 count;
+	/*0x04*/ struct ammocratepair pairs[];
+};
+
+/**
  * Most, if not all, entity types (chrs, objs, weapons etc) have a pointer to a
  * prop struct. The struct contains properties that most entities have in
  * common such as coords and a room number. You can think of it as generic
@@ -324,6 +342,28 @@ struct prop {
 	/*0x3f*/ u8 active : 1;
 	/*0x40*/ struct wallhit *opawallhits; // opaque
 	/*0x44*/ struct wallhit *xluwallhits; // translucent
+
+	/**
+	 * A multi-ammo crate's pairs past the record's own nineteen.
+	 *
+	 * The ROM's crate record is nineteen { modelnum, quantity } pairs, pair one
+	 * being ammo type one (props.h), and that length is the stride the setup
+	 * stream is walked by - `setupGetCmdLength()` answers with sizeof the record,
+	 * and the same walk reads GoldenEye's own stage files, so widening the record
+	 * misaligns every command after the first crate it holds. A type past the
+	 * nineteenth, which is what any new ammunition type of this fork is, has
+	 * nowhere to be written there, and the crate beside such a weapon spot was
+	 * drawn holding nothing at all - and a crate with nothing in it is never
+	 * offered, so it read as a bug in the gun.
+	 *
+	 * So the pairs the record cannot carry live here instead, as a list, sized to
+	 * the one spot that needs it (setup.c) and read by both halves of the pickup
+	 * and by the bots. NULL on every prop that is not such a crate, and zeroed on
+	 * allocation because props are recycled. Held on the prop rather than on the
+	 * crate object because that object sits inside the parsed stream, where the
+	 * next command follows it at the record's stride.
+	 */
+	/*0x48*/ struct ammocratepairs *extrapairs;
 };
 
 struct packedpad {
@@ -2481,6 +2521,12 @@ struct hand {
 	 */
 	u8 animquarter;
 #endif
+
+	// DB-Shotgun (port/src/dbshotgun.c): the clip still held when the shot was
+	// decided. Captured before bondgun.c deducts the two rounds of a full
+	// double, because handsTickAttack() creates the pellets later in the frame
+	// with the clip already spent. Only read for WEAPON_GESHOTGUN.
+	s32 dbshotgunShotClip;
 };
 
 struct texpool {
@@ -3108,6 +3154,19 @@ struct player {
 	// 7 to 60 (currentPlayerGetGunZoomFov())
 	f32 gecamerazoom;
 #endif
+	// Falcon Punch: the target the lock-on picked and the ticks left to
+	// close the gap. bondforcespeed carries the lunge itself and is already
+	// in the net snapshots; this pair only decides when the hit lands.
+	struct prop *meleelungeprop;
+	s16 meleelungetime60;
+	// Falcon Punch's lockout, in 60Hz ticks: one press is one lunge and
+	// then the fist rests. Written when the swing fires, read by the melee
+	// state machine (bondgun.c) which refuses a fresh swing until it clears.
+	s16 meleecooldown60;
+	// The fist is held back during a lunge and the swing is played as the
+	// hit lands instead of before the dash. Set when the lunge starts,
+	// cleared when that delayed animation is started.
+	bool meleefalconanimstarted;
 };
 
 struct ailist {
@@ -4416,6 +4475,18 @@ struct mpchrconfig {
 	/*0x40*/ s16 unk40;
 };
 
+/**
+ * The per-player weapon function-choice (primary/secondary) bitmap, one bit per
+ * weapon number: bit N of gunfuncs[] is the saved function for weapon N, read
+ * and written through gunfuncBitIndex() (data.h). Sized by weapon number rather
+ * than one bit per stock weapon so every weapon - this fork's appended guns
+ * included - owns a distinct bit with no per-weapon bookkeeping, and a weapon
+ * that hosts on another (the Bowcaster on the crossbow) keeps a bit of its own.
+ * 32 bytes covers weapon numbers 0..255, so the roster can grow without
+ * touching the layout again.
+ */
+#define GUNFUNCS_BYTES 32
+
 struct mpplayerconfig {
 	/*0x00*/ struct mpchrconfig base;
 	/*0x44*/ u8 controlmode;
@@ -4442,7 +4513,7 @@ struct mpplayerconfig {
 	/*0x94*/ u8 medals;
 	/*0x95*/ u8 title;
 	/*0x96*/ u8 newtitle;
-	/*0x97*/ u8 gunfuncs[6];
+	/*0x97*/ u8 gunfuncs[GUNFUNCS_BYTES];
 	/*0x9d*/ u8 handicap;
 };
 
@@ -4638,6 +4709,23 @@ struct scenariodata_ctc {
 	/*0x58*/ struct prop *tokens[4];
 };
 
+struct scenariodata_zombies {
+	s32 round;
+	s32 roundtime60;
+	s32 phase;
+	s32 phasetime60;
+	bool inited;
+	u8 infected[MAX_MPCHRS];
+	u8 startedas[MAX_MPCHRS];
+	s16 score[MAX_MPCHRS];
+	s16 infections[MAX_MPCHRS];
+	bool bodystale[MAX_LOCAL_PLAYERS];
+	// The body a simulant came to the match in, remembered when the mode
+	// takes it into Skedar so the round turn can hand it back. -1 = none.
+	s32 homebody[MAX_MPCHRS];
+	s32 homehead[MAX_MPCHRS];
+};
+
 struct scenariodata {
 	union {
 		struct scenariodata_htb htb;
@@ -4645,6 +4733,7 @@ struct scenariodata {
 		struct scenariodata_pac pac;
 		struct scenariodata_koh koh;
 		struct scenariodata_ctc ctc;
+		struct scenariodata_zombies zombies;
 	};
 };
 

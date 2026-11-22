@@ -14,6 +14,7 @@
 #include "game/hudmsg.h"
 #include "game/menu.h"
 #include "game/inv.h"
+#include "game/lv.h"
 #include "game/playermgr.h"
 #include "game/game_1531a0.h"
 #include "game/mplayer/setup.h"
@@ -47,9 +48,17 @@
  * per-hand field.
  */
 s32 g_InstagibCharge60 = TICKS(90);
+
+/**
+ * The starting life count for One Shall Stand... Three by default; the mode's
+ * options slider changes it, and the value travels in the scenario's 32-bit
+ * save word (setup files and net RULES) the way Instagib's charge does.
+ */
+s32 g_LmsStartingLives = 3;
 #ifndef PLATFORM_N64
 #include "modloader.h"
 #include "gexplus.h"
+#include "gebean.h" // the zombies body round-trip repeats botmgr.c's rig pair
 #include "net/net.h"
 #endif
 
@@ -190,6 +199,9 @@ MenuItemHandlerResult menuhandlerMpSlowMotion(s32 operation, struct menuitem *it
 #include "scenarios/hackthatmac.inc"
 #include "scenarios/popacap.inc"
 #include "scenarios/instagib.inc"
+#include "scenarios/lastmanstanding.inc"
+#include "scenarios/plasmaTag.inc"
+#include "scenarios/zombies.inc"
 
 // Define the scenario callbacks
 struct mpscenario g_MpScenarios[] = {
@@ -285,6 +297,63 @@ struct mpscenario g_MpScenarios[] = {
 		NULL,
 		instaReadSave,
 		instaWriteSave,
+	}, {
+		&g_LmsOptionsMenuDialog,
+		lmsInit,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		lmsRenderHud,
+		lmsCalculatePlayerScore,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		lmsReadSave,
+		lmsWriteSave,
+	}, {
+		&g_PlasmaTagOptionsMenuDialog,
+		plasmaTagInit,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		plasmaTagCalculatePlayerScore,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+	}, {
+		&g_ZombiesOptionsMenuDialog,
+		zombiesInit,
+		NULL,
+		NULL,
+		zombiesTick,
+		NULL,
+		zombiesRenderHud,
+		zombiesCalculatePlayerScore,
+		NULL,
+		zombiesRadarChr,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		zombiesReadSave,
+		zombiesWriteSave,
 	},
 };
 
@@ -297,6 +366,9 @@ struct mpscenariooverview g_MpScenarioOverviews[] = {
 	{ L_MPMENU_250, L_MPMENU_257, MPFEATURE_SCENARIO_KOH, true  }, // "King of the Hill", "Hill"
 	{ L_MPMENU_251, L_MPMENU_258, MPFEATURE_SCENARIO_CTC, true  }, // "Capture the Case", "Capture"
 	{ 0, 0, 0, false }, // "Instagib", "Instagib" - patched at runtime by instaInitNames()
+	{ 0, 0, 0, false }, // "One Shall Stand...", "One Shall Stand..." - patched by lmsInitNames()
+	{ 0, 0, 0, false }, // "Plasma Tag", "Plasma Tag" - patched by plasmaTagInitNames()
+	{ 0, 0, 0, false }, // "Zombies", "Zombies" - patched by zombiesInitNames()
 };
 
 // Both tables are indexed by scenario id, so a row added to one and not the
@@ -321,6 +393,46 @@ static void instaInitNames(void)
 	g_MpScenarioOverviews[MPSCENARIO_INSTAGIB].shortname = langAddPortText("Instagib\n");
 }
 
+/**
+ * Patch the One Shall Stand... names with port text IDs. Called with the
+ * Instagib names before the scenario menu or a lobby reads them.
+ */
+static void lmsInitNames(void)
+{
+	static bool done = false;
+	if (done) return;
+	done = true;
+
+	g_MpScenarioOverviews[MPSCENARIO_LASTMANSTANDING].name = langAddPortText("One Shall Stand...\n");
+	g_MpScenarioOverviews[MPSCENARIO_LASTMANSTANDING].shortname = langAddPortText("One Shall Stand...\n");
+}
+
+/**
+ * Patch the Plasma Tag names with port text IDs.
+ */
+static void plasmaTagInitNames(void)
+{
+	static bool done = false;
+	if (done) return;
+	done = true;
+
+	g_MpScenarioOverviews[MPSCENARIO_PLASMATEST].name = langAddPortText("Plasma Tag\n");
+	g_MpScenarioOverviews[MPSCENARIO_PLASMATEST].shortname = langAddPortText("Plasma Tag\n");
+}
+
+/**
+ * Patch the Zombies names with port text IDs.
+ */
+static void zombiesInitNames(void)
+{
+	static bool done = false;
+	if (done) return;
+	done = true;
+
+	g_MpScenarioOverviews[MPSCENARIO_ZOMBIES].name = langAddPortText("Zombies\n");
+	g_MpScenarioOverviews[MPSCENARIO_ZOMBIES].shortname = langAddPortText("Zombies\n");
+}
+
 // The menu's own order of the scenarios. The list walks this rather than the
 // tables' indices, so a row selects the scenario g_ScenarioListOrder[i] names
 // and not i: the ids are what saved setups, challenge records and the rooms'
@@ -336,6 +448,9 @@ static const s8 g_ScenarioListOrder[] = {
 	MPSCENARIO_HACKERCENTRAL,
 	MPSCENARIO_POPACAP,
 	MPSCENARIO_INSTAGIB,
+	MPSCENARIO_LASTMANSTANDING,
+	MPSCENARIO_PLASMATEST,
+	MPSCENARIO_ZOMBIES,
 	MPSCENARIO_KINGOFTHEHILL,
 	MPSCENARIO_CAPTURETHECASE,
 };
@@ -401,6 +516,9 @@ MenuItemHandlerResult scenarioScenarioMenuHandler(s32 operation, struct menuitem
 	bool teamgame = true;
 
 	instaInitNames();
+	lmsInitNames();
+	plasmaTagInitNames();
+	zombiesInitNames();
 
 #ifndef PLATFORM_N64
 	// GE Plus: GoldenEye's scenarios, one group (gexplus.c)
@@ -974,6 +1092,14 @@ void scenarioReset(void)
 	switch (g_MpSetup.scenario) {
 	case MPSCENARIO_KINGOFTHEHILL:
 		g_ScenarioData.koh.hillcount = 0;
+		break;
+	case MPSCENARIO_ZOMBIES:
+		// Ticks can run on a stage that is about to be set up again - the
+		// boot's catch-up before a match's real first frame. Anything the
+		// mode began there, a round's countdown included, was spent before
+		// anyone was watching; start the mode's state from scratch with the
+		// stage.
+		zombiesStageReset();
 		break;
 	case MPSCENARIO_CAPTURETHECASE:
 		for (i = 0; i < ARRAYCOUNT(g_ScenarioData.ctc.spawnpadsperteam); i++) {

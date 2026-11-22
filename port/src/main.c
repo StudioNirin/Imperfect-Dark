@@ -22,6 +22,9 @@
 #include "mpweaponsets.h"
 #include "mpweaponfilters.h"
 #include "raillaser.h"
+#include "shock.h"
+#include "forkbots.h"
+#include "dbshotgun.h"
 #include "bss.h"
 #include "data.h"
 
@@ -100,6 +103,9 @@ s32 g_TestMpWeaponSets = false; // --test-mpweaponsets: the saved weapon sets' s
 s32 g_TestRandomGroups = false; // --test-randomgroups: the random weapon groups' store and the roll they steer (mpweaponfilters.c, mplayer.c)
 s32 g_TestStartArmed = false; // --test-startarmed: what a Start Armed spawn is handed, and how many of it (mpStartArmedSelfTest)
 s32 g_TestRailLaser = false; // --test-raillaser: the Rail-Laser's row, number, charge and saved-setup width (raillaserSelfTest)
+s32 g_TestShock = false; // --test-shock: the Shock Rifle's two modes, orb row, saved-setup width (shockSelfTest)
+s32 g_TestForkBots = false; // --test-forkbots: what a simulant's preference table says of the fork's guns (forkbotSelfTest)
+s32 g_TestDbShotgun = false; // --test-dbshotgun: the alias, the two-round double, the untouched stock Shotgun and saved-setup width (dbShotgunSelfTest)
 s32 g_TestSprint = false; // --test-sprint: a sprint, a trigger inside it, and a switch (lvTestSprintTick)
 s32 g_TestBindFamilies = false; // --test-bindfamilies: which of a command's four bindings is whose (inputBindsSelfTest)
 s32 g_NumPoseAnims = 0;
@@ -347,6 +353,10 @@ int main(int argc, const char **argv)
 	mpWeaponFiltersInit();
 	raillaserInit();
 
+	// The DB-Shotgun's alias over the stock PD Shotgun's file and its model
+	// state, before any self-test reads them (port/src/dbshotgun.c).
+	dbShotgunModelsRefresh();
+
 	if (g_TestMpWeaponSets) {
 		mpWeaponSetsSelfTest();
 	}
@@ -385,6 +395,35 @@ int main(int argc, const char **argv)
 
 	if (g_TestRailLaser) {
 		raillaserSelfTest();
+	}
+
+	// The Shock Rifle's own checks, read beside the Rail-Laser's for the same
+	// reason: it asks the weapon table, the Combat Simulator's rows and the
+	// saved-setup codec, all live by now (port/src/shock.c).
+	g_TestShock = sysArgCheck("--test-shock");
+
+	if (g_TestShock) {
+		shockSelfTest();
+	}
+
+	// What a simulant is allowed to make of the fork's guns, read from the
+	// preference table and from the scorer that reads it. The rows are what make
+	// a guard holding one of these a guard who shoots rather than one who stands
+	// there, and a table that answers 0 for a weapon number fails with nothing
+	// logged at all (port/src/forkbots.c).
+	g_TestForkBots = sysArgCheck("--test-forkbots");
+
+	if (g_TestForkBots) {
+		forkbotSelfTest();
+	}
+
+	// The DB-Shotgun's own checks, read beside the other fork guns' for the same
+	// reason: they ask the weapon table, the alias, the simulant's row and the
+	// saved-setup codec, all live by now (port/src/dbshotgun.c).
+	g_TestDbShotgun = sysArgCheck("--test-dbshotgun");
+
+	if (g_TestDbShotgun) {
+		dbShotgunSelfTest();
 	}
 
 	// Read with the flag above and not with the --test flags further down: this
@@ -650,6 +689,7 @@ PD_CONSTRUCTOR static void gameConfigInit(void)
 	configRegisterInt("Mod.JumpFor", &g_ModOptions.jumpwho, MODWHO_EVERYONE, MODWHO_PLAYERSONLY);
 	configRegisterInt("Mod.CombatRoll", &g_ModOptions.roll, MODROLL_OFF, MODROLL_PLAYERSONLY);
 	configRegisterInt("Mod.MeleeCombos", &g_ModOptions.melee, 0, 1);
+	configRegisterInt("Mod.FalconPunch", &g_ModOptions.falconpunch, 0, 1);
 	configRegisterInt("Mod.FlinchWhenShot", &g_ModOptions.flinch, 0, 1);
 	configRegisterInt("Mod.StartArmed", &g_ModOptions.spawnweapon, SPAWNWEAPON_OFF, SPAWNWEAPON_RANDOM);
 	configRegisterInt("Mod.StartArmedAkimbo", &g_ModOptions.spawnakimbo, 0, 1);

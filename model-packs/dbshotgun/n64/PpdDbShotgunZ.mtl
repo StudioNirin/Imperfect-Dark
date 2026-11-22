@@ -1,0 +1,31 @@
+# Material names kept exactly; pictures are local to this folder.
+newmtl bean_00_0x098EA1A5
+Kd 1 1 1
+map_Kd shotgun/00_0x098EA1A5.png
+map_d shotgun/00_0x098EA1A5.png
+
+newmtl bean_01_0x098E51A5
+Kd 1 1 1
+map_Kd shotgun/01_0x098E51A5.png
+map_d shotgun/01_0x098E51A5.png
+
+newmtl bean_02_0x09BEA1A5
+Kd 1 1 1
+map_Kd shotgun/02_0x09BEA1A5.png
+map_d shotgun/02_0x09BEA1A5.png
+
+newmtl bean_03_0x09BE51A5
+Kd 1 1 1
+map_Kd shotgun/03_0x09BE51A5.png
+map_d shotgun/03_0x09BE51A5.png
+
+newmtl bean_04_0x0D0689B5
+Kd 1 1 1
+map_Kd shotgun/04_0x0D0689B5.png
+map_d shotgun/04_0x0D0689B5.png
+
+newmtl bean_05_0x051D5125
+Kd 1 1 1
+map_Kd shotgun/05_0x051D5125.png
+map_d shotgun/05_0x051D5125.png
+

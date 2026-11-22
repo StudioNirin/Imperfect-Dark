@@ -1099,19 +1099,62 @@ had. The rule: a new ammo type has to be named in **three** switches, and the fa
 is a message that reads like a formatting bug, which is why it invites a hunt in the
 string code rather than in the enum.
 
+The Bowcaster learned the same lesson twice over. It had no case in any of the three, and
+where the crossbow's case sent it to `L_PROPOBJ_045` ("bolt"), a crate beside the gun read
+"some bolts" as though it held crossbow supplies, for ammunition the two guns cannot
+swap. It is a **plasma bolt** (`ammotypeBowcasterText()`), and it needed a determiner case
+of its own rather than the crossbow's "some" group, which would have said "some plasma
+bolt". The NTSC builds name ammunition through those switches; PAL and JPN read a static
+`nameinfo` table instead (`var8006a944pf`), and a static initialiser cannot hold
+`langAddPortText()`, so `ammotypePortNames()` fills the row's words the first time a
+pickup message asks. That table has **no row at all** for `AMMOTYPE_RAIL`, so the
+Moonrailer's message is empty on those two builds - the same class of bug, found and left.
+
 **The crate.** Every multiplayer weapon spot is followed by two multi-ammo crates
 (`mp_setup*.c`), and `setupCreateProps()` stocks the crate beside a spot from the
-spot's own `priammotype` - but only while `priammotype < 20`. An arena's crate is
+spot's own `priammotype` - but only while it fits the record. An arena's crate is
 nineteen `{ modelnum, quantity }` pairs, one an ammo type minus one, and that length is
-the cartridge's command size (`props.h`'s `ammocratemulti`, `setupGetCmdLength()`), so
-it is **not** ours to widen: the converter's generated crates are nineteen pairs, the
-netcode copies them, and a mod's data table counts them. `AMMOTYPE_RAIL` is 0x21, so the
-guard dropped it silently and the crates beside a Moonrailer spot held nothing at all -
-no ammo, no message, nothing to see. The write is now bounded by `ARRAYCOUNT(crate->slots)`
-rather than a hand-typed 20, and says so through `LOG_WARNING` when a spot names a type
-the crate cannot carry. The ammunition then comes from the gun's own pickup, which is
-the same answer the Laser and the Moonraker already have (no ammunition type of their
-own), so the spot is stocked either way.
+not merely cosmetic: `setupGetCmdLength()` answers with `sizeof(struct multiammocrateobj)`,
+and that is the **stride the whole setup stream is walked by** - the same walk reads
+GoldenEye's own stage files (`setup.c:1813` loads a stage's setup by offset and steps
+command to command). Widen the record and every command after the first crate in a stock
+level is read out of alignment, which is the trap in "just raise the nineteen". The
+macro in `props.h` and the struct in `types.h` have to move together for the same reason.
+`AMMOTYPE_RAIL` is 0x21 and `AMMOTYPE_BOWCASTER` 0x22, so both were dropped by the old
+`type < 20` guard, and the crate beside such a spot was drawn **holding nothing at all** -
+and a crate with nothing in it is not a thing to pick up (`objTestForPickup()`'s `ignore`
+scan), so it was never offered either. From the sofa that is indistinguishable from a bug
+in the gun, which is what it was read as.
+
+What the record cannot carry now goes on the crate's **prop** instead, as a list:
+`struct ammocratepair { ammotype, quantity }`, one `extrapairs` pointer per prop
+(`types.h`, NULL from `propAllocate()`, since props are recycled). A list rather than a
+fixed array of every ammo type, because the prop table is `maxprops` deep and sized by
+`sizeof` - a per-prop array of `NUM_AMMOTYPES` pairs would pay for ammunition types on
+every door, camera and lift in the level. `setup.c`'s `setupAddAmmoCratePair()` fills it
+from the spot's row after the crate is built, from the stage pool, so it is gone with the
+level; it writes only the types the record has no pair for, so a type inside the nineteen
+is never handed over twice. Both halves of the pickup read it - `objTestForPickup()`
+offers the crate, `propPickupByPlayer()` gives it through the same `ammoHandlePickup()`
+the record's pairs use - and so do the bots, in three places (`bot.c`: the give, the
+"worth walking to" test, and the interest scan). Those three were hand-typed `19` /
+`0x13` loops, so a bot would have stood beside a crate of plasma bolts and never taken or
+even approached one. Only the prop grows (8 bytes), and the prop crosses the net as an
+index and is allocated by `sizeof` (`varsreset.c`, `netents.c`), so nothing else moves.
+The single-ammo-crate record (`ammocrateobj`) has never had this problem: one type, no table.
+
+So a new ammunition type needs nothing new here: give the spot's `g_MpWeapons` row a
+`priammotype` past the nineteen and its crate carries it, in single-player, co-op, Combat
+Simulator and net alike.
+
+Diagnosing it was the harder half, because every refusal is silent. `--pickup-trace`
+(with `--log`) says which gate refused and with what numbers: `out of space for it` names
+the reserve against the type's capacity, `nothing in it Bond cannot already carry` names
+the empty crate, and `regenerating` in `prop.c` covers the respawn cooldown, which looks
+identical from the sofa. Note that with Infinite Ammo every reserve is full and the crate
+gate - unlike the weapon gate - has no cheat exemption, so every crate reads `out of
+space`. The gun's own pickup remains the other way in (`OBJTYPE_WEAPON`), as it is for
+the Laser and the Moonraker, which have no ammunition type of their own.
 
 ### What the gate sees
 

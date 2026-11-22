@@ -144,7 +144,12 @@ extern s32 var8009d0d8;
 extern struct sndstate *g_BgunAudioHandles[NUM_BGUN_HIT_SOUNDS];
 extern struct fireslot g_Fireslots[20];
 extern struct casing g_Casings[20];
-extern struct boltbeam g_BoltBeams[8];
+// A full-auto Bowcaster puts roughly ten bolts in the air per player over its
+// three-second life, and the pool is shared with crossbow bolts. 256 covers a
+// full room (12 players plus eight bots) firing continuously; a beam is one
+// textured quad and the PC has no reason to skimp on them.
+#define NUM_BOLTBEAMS 256
+extern struct boltbeam g_BoltBeams[NUM_BOLTBEAMS];
 extern struct lasersight g_LaserSights[MAX_PLAYERS];
 extern struct model *g_ModelSlots;
 extern struct anim *g_AnimSlots;

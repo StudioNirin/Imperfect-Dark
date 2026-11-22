@@ -43,6 +43,7 @@ struct modoptions g_ModOptions = {
 	MODWHO_EVERYONE,          // jumpwho
 	MODROLL_EVERYONE,         // roll: the dodge is this fork's own control now, so a new install has it
 	false,                    // melee
+	true,                     // falconpunch: the reworked punch, on until unticked (user)
 	false,                    // flinch
 	SPAWNWEAPON_OFF,          // spawnweapon
 	1,                        // spawnakimbo: a pair, so an Akimbo install spawns what it always did
@@ -227,6 +228,28 @@ bool modIsMeleeComboEnabled(void)
 #endif
 
 	return g_ModOptions.melee != 0;
+}
+
+#ifndef PLATFORM_N64
+bool g_ModFalconDebug = false; // --falcon-debug: autopunch + lunge tracing, see pdmain.c
+#endif
+
+/**
+ * Whether the unarmed punch is the lock-on lunge rather than the stock swing.
+ *
+ * Off in a trial for the same reason jump, roll and melee combos are: it is a
+ * move a player can use on a route, and a board has to mean the same thing on
+ * every machine that runs it. Elsewhere it follows the tickbox (default on).
+ */
+bool modIsFalconPunchEnabled(void)
+{
+#ifndef PLATFORM_N64
+	if (modGhostTrialRulesApply()) {
+		return false;
+	}
+#endif
+
+	return g_ModOptions.falconpunch != 0;
 }
 
 /**

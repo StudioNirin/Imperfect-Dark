@@ -4653,7 +4653,7 @@ static void netTestStartMatch(void)
 			}
 		}
 
-		if (scen >= MPSCENARIO_COMBAT && scen <= MPSCENARIO_CAPTURETHECASE) {
+		if (scen >= MPSCENARIO_COMBAT && scen < NUM_MPSCENARIOS) {
 			g_MpSetup.scenario = scen;
 			g_MpSetup.options |= MPOPTION_HTB_HIGHLIGHTBRIEFCASE | MPOPTION_HTB_SHOWONRADAR | MPOPTION_CTC_SHOWONRADAR
 				| MPOPTION_KOH_HILLONRADAR | MPOPTION_HTM_SHOWONRADAR | MPOPTION_PAC_HIGHLIGHTTARGET | MPOPTION_PAC_SHOWONRADAR;
@@ -4662,6 +4662,15 @@ static void netTestStartMatch(void)
 			// --net-test-hilltime N: King of the Hill's hold, N + 10 seconds
 			if (sysArgGetInt("--net-test-hilltime", -1) >= 0) {
 				g_Vars.mphilltime = sysArgGetInt("--net-test-hilltime", 10);
+			}
+
+			// --net-test-lives N: One Shall Stand...'s starting lives
+			if (sysArgGetInt("--net-test-lives", -1) >= 0) {
+				g_LmsStartingLives = sysArgGetInt("--net-test-lives", 3);
+
+				if (g_LmsStartingLives < 1 || g_LmsStartingLives > 9) {
+					g_LmsStartingLives = 3;
+				}
 			}
 
 			// the time limit ends it unless a score limit was asked for

@@ -3219,7 +3219,9 @@ void lvTick(void)
 
 	// Handle MP match ending
 	if (g_Vars.normmplayerisrunning && STAGE_IS_LEVEL(g_Vars.stagenum)) {
-		if (g_MpTimeLimit60 > 0) {
+		// Zombies runs its own per-round clock in the scenario; the engine's
+		// match limit would end the whole match at the first round timeout.
+		if (g_MpTimeLimit60 > 0 && g_MpSetup.scenario != MPSCENARIO_ZOMBIES) {
 			s32 elapsed = g_StageTimeElapsed60;
 			s32 nexttime = g_Vars.lvupdate60 + g_StageTimeElapsed60;
 			s32 warntime = TICKS(g_MpTimeLimit60) - TICKS(3600);
@@ -3271,7 +3273,9 @@ void lvTick(void)
 				}
 			}
 
-			if (g_MpScoreLimit > 0) {
+			// One Shall Stand...'s score is remaining lives, so a score limit
+			// has no meaning there; its own match-over rule ends the match.
+			if (g_MpScoreLimit > 0 && g_MpSetup.scenario != MPSCENARIO_LASTMANSTANDING && g_MpSetup.scenario != MPSCENARIO_ZOMBIES) {
 				struct ranking rankings[MAX_MPCHRS];
 				s32 count = mpGetPlayerRankings(rankings);
 
@@ -3282,7 +3286,7 @@ void lvTick(void)
 				}
 			}
 
-			if (g_MpTeamScoreLimit > 0) {
+			if (g_MpTeamScoreLimit > 0 && g_MpSetup.scenario != MPSCENARIO_LASTMANSTANDING && g_MpSetup.scenario != MPSCENARIO_ZOMBIES) {
 				struct ranking rankings[MAX_MPCHRS];
 				s32 count = mpGetTeamRankings(rankings);
 
@@ -3296,6 +3300,16 @@ void lvTick(void)
 #ifndef PLATFORM_N64
 			// You Only Live Twice (GE Plus): one chr with a life left
 			if (gexPlusMatchOver()) {
+				g_NumReasonsToEndMpMatch++;
+			}
+
+			// One Shall Stand...: end as soon as one chr still has a life.
+			if (lmsMatchOver()) {
+				g_NumReasonsToEndMpMatch++;
+			}
+
+			// Zombies: the match ends once the last round is over.
+			if (zombiesMatchOver()) {
 				g_NumReasonsToEndMpMatch++;
 			}
 #endif

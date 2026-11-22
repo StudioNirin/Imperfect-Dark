@@ -9,6 +9,7 @@
 #include "gewatch.h"
 #include "gexplus.h"
 #include "gegadgets.h"
+#include "raillaser.h"
 #endif
 #include "game/bondwalk.h"
 #include "game/cheats.h"
@@ -2368,6 +2369,21 @@ void bmoveProcessInput(bool allowc1x, bool allowc1y, bool allowc1buttons, bool i
 	// fired anyway 112 lines later, in the same frame (user, 2026-11-12).
 	bmoveSprintFireGate(&movedata);
 	bgunSetLeftTrigger(movedata.fireleft);
+
+	// --falcon-debug (pdmain.c): hold the trigger in so the Falcon gate can
+	// be measured headless. Debug aid only; the two-second lockout is what
+	// turns this into one lunge every two seconds. Zombies now arms everyone
+	// with guns, so the debug seat has to put them away to throw a punch.
+	if (g_ModFalconDebug && g_Vars.currentplayernum == 0
+			&& g_Vars.currentplayer->pausemode == PAUSEMODE_UNPAUSED) {
+		movedata.triggeron = true;
+		if (bgunGetWeaponNum(HAND_RIGHT) != WEAPON_UNARMED) {
+			bgunEquipWeapon2(HAND_RIGHT, WEAPON_UNARMED);
+		}
+		if (bgunGetWeaponNum(HAND_LEFT) != WEAPON_NONE) {
+			bgunEquipWeapon2(HAND_LEFT, WEAPON_NONE);
+		}
+	}
 #endif
 	bgunTickGameplay(movedata.triggeron);
 
@@ -2436,7 +2452,11 @@ void bmoveProcessInput(bool allowc1x, bool allowc1y, bool allowc1buttons, bool i
 			zoomfov = currentPlayerGetGunZoomFov();
 		}
 
-		if (weaponHost(bgunGetWeaponNum(HAND_RIGHT)) == WEAPON_AR34
+		// The AR34 and the Moonrailer both put their zoom on the secondary
+		// function: a full firing-function clone whose selection winds the
+		// view in, while the aim input stays a plain aim.
+		if ((weaponHost(bgunGetWeaponNum(HAND_RIGHT)) == WEAPON_AR34
+					|| raillaserOwn(bgunGetWeaponNum(HAND_RIGHT)))
 				&& g_Vars.currentplayer->hands[HAND_RIGHT].gset.weaponfunc == FUNC_SECONDARY) {
 			zoomfov = currentPlayerGetGunZoomFov();
 		}

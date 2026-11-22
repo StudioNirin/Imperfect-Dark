@@ -143,3 +143,14 @@ logging every `gfx_dp_fill_rectangle`, `gfx_dp_texture_rectangle` and
 `gfx_sp_tri_emit` in `gfx_pc.cpp` whose screen box covered one pixel in the
 middle of the blob, and diffing the list with the dropdown open against the
 list with it closed; reading the menu code found four wrong answers first.
+
+## `textRender()`'s colour word is alpha, red, green, blue
+`textRender()`'s colour argument is read as `0xAARRGGBB`: the engine's own red
+text words follow it (`0xff0000ff` - the paused overlay's flash, the blood),
+and the alpha *parameter* is separate. Not every colour array in the game is
+in that order: the radar's `g_TeamColours` (radar.c) is the swapped order,
+which `radarDrawDot()` reorders itself - hand one of its words to
+`textRender()` and it draws invisible black with zero alpha. The Zombies HUD
+(`src/game/mplayer/scenarios/zombies.inc`) keeps a `ZOM_TEXT_RED 0xff0000ff`
+for its centre notices for exactly this reason, while its radar hook still
+passes `g_TeamColours[0]` to `radarDrawDot()`, where it is correct.

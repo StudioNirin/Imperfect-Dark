@@ -19,6 +19,7 @@
 #include "types.h"
 #include <string.h>
 #include "gexplus.h"
+#include "game/mplayer/scenarios.h"
 
 /**
  * Bodies that are left lying where they fell.
@@ -417,6 +418,11 @@ void modBodiesTick(void)
 			// You Only Live Twice (GoldenEye): chrTickDead() holds a simulant
 			// twice dead here for good, and this was getting it up anyway
 			if (gexPlusLivesSpent(chr)) {
+				continue;
+			}
+
+			// One Shall Stand...: the same, for a simulant whose lives are spent.
+			if (lmsLivesSpent(chr)) {
 				continue;
 			}
 

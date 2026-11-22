@@ -3223,6 +3223,24 @@ MenuItemHandlerResult menuhandlerMpAkimbo(s32 operation, struct menuitem *item, 
 }
 
 /**
+ * Falcon Punch: the unarmed punch as a lock-on lunge. Same value as the
+ * checkbox in Dab's Mod Options, so no second setting or wire field is
+ * needed. The Weapons page is shared by netplay and the Combat Simulator.
+ */
+MenuItemHandlerResult menuhandlerMpFalconPunch(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GET:
+		return g_ModOptions.falconpunch;
+	case MENUOP_SET:
+		g_ModOptions.falconpunch = data->checkbox.value ? 1 : 0;
+		break;
+	}
+
+	return 0;
+}
+
+/**
  * Akimbo Start?: whether the gun Start Armed hands out comes as a pair.
  *
  * Not the row above it: Mod.Akimbo also decides what a player may dual-wield
@@ -3511,6 +3529,14 @@ struct menuitem g_MpWeaponsMenuItems[] = {
 		(uintptr_t)"Akimbo Start?\n",
 		0,
 		menuhandlerMpAkimboStart,
+	},
+	{
+		MENUITEMTYPE_CHECKBOX,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Falcon Punch\n",
+		0,
+		menuhandlerMpFalconPunch,
 	},
 	{
 		MENUITEMTYPE_CHECKBOX,

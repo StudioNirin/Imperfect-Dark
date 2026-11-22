@@ -1,4 +1,8 @@
 #include <ultra64.h>
+#ifndef PLATFORM_N64
+#include <stdlib.h> // menuSavePromptHasNobody() reads the video driver from the environment
+#include <string.h>
+#endif
 #include "constants.h"
 #include "game/bossfile.h"
 #include "game/game_006900.h"
@@ -71,6 +75,26 @@ void menuCountDialogs(void)
 		}
 	}
 }
+
+#ifndef PLATFORM_N64
+/**
+ * Whether this run has nobody to answer a save error.
+ *
+ * A match or mission that ends while the game is trying to save to a memory-pak
+ * slot with nothing behind it puts "Error Saving Game - please insert the
+ * Controller Pak ... press R" over the end screen, and the end screen stops the
+ * level's frame count: an unsupervised run sits there, not crashed and not
+ * finished, waiting for a key press from a person who is not in front of it. The
+ * video driver is how those runs say what they are, and it is the same reading the
+ * update notice uses to decide not to interrupt anybody (port/src/updatemenu.c).
+ */
+static bool menuSavePromptHasNobody(void)
+{
+	const char *driver = getenv("SDL_VIDEODRIVER");
+
+	return driver && strcmp(driver, "offscreen") == 0;
+}
+#endif
 
 void menuTick(void)
 {
@@ -749,8 +773,15 @@ void menuTick(void)
 #ifndef PLATFORM_N64
 					// netplay: a machine that joined from the command line
 					// may have no agent file loaded; saving none put up "insert
-					// the Controller Pak" over its end screen after every match
-					if (g_NetMode == NETMODE_NONE || g_GameFileGuid.fileid)
+					// the Controller Pak" over its end screen after every match.
+					//
+					// And a run with no display to press R on does not get the
+					// page at all, for the same reason in a different shape: the
+					// end screen holds the frame count still, so a gate that
+					// reaches a mission's end would wait out its timeout for a key
+					// press nobody is going to make.
+					if ((g_NetMode == NETMODE_NONE || g_GameFileGuid.fileid)
+							&& !menuSavePromptHasNobody())
 #endif
 					func0f0fd548(4);
 				}

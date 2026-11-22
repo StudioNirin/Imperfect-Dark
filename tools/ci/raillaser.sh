@@ -3,8 +3,10 @@
 #
 # The fork's own gun (patchnotes 90), which the weapon list calls Moonrailer: a
 # Moonraker Laser's look, one shot a
-# magazine out of five, a trigger held one and a half seconds to fire it, and
-# the AR34's zoom on the aim input (invitems.c, port/src/raillaser.c). Its
+# magazine out of five, a trigger held one and a half seconds to fire it. It has
+# two scopes: the aim input's own zoom (kept from the first pass) and an
+# AR34-style Use Scope secondary whose saved choice lives in a spare bit of
+# gunfuncs[], since its weapon number is past the array's stock range. Its
 # charge is the Mauler's machine - bgunTickMaulerCharge() widened to the new
 # number by weaponChargesLikeMauler() - because the rising loop, the red build
 # over the model and the shot's pitched-down voice all read the one field that
@@ -187,19 +189,32 @@ grep -qF 'ammoheldarr[NUM_AMMOTYPES]' "$ROOT/src/include/types.h" || fail "a pla
 # golden bullet's, since no language file has one for a type the ROM never had.
 grep -qF 'case AMMOTYPE_RAIL:        textnum = ammotypeRailText();' "$ROOT/src/game/propobj.c" || fail "the Rail ammo pickup has no name again"
 grep -qF 'static u16 ammotypeRailText(void)' "$ROOT/src/game/propobj.c" || fail "the Rail ammo pickup's name has no port text helper"
-grep -A60 'void ammotypeGetDeterminer' "$ROOT/src/game/propobj.c" | grep -qF 'case AMMOTYPE_RAIL' || fail "the Rail ammo pickup has no determiner, so the message is 'Picked up .'"
+awk '/^void ammotypeGetDeterminer/,/^}/' "$ROOT/src/game/propobj.c" | grep -qF 'case AMMOTYPE_RAIL' || fail "the Rail ammo pickup has no determiner, so the message is 'Picked up .'"
 grep -A40 'void ammotypePlayPickupSound' "$ROOT/src/game/propobj.c" | grep -qF 'case AMMOTYPE_RAIL' || fail "a Rail ammo pickup makes no sound"
 
-# An arena's multi-ammo crate has nineteen slots, one an ammo type minus one, and
-# that is the cartridge's command size (props.h, setupGetCmdLength()) - it is not
-# ours to widen, and the converter's generated crates are nineteen pairs too. A
-# weapon spot whose type has no slot therefore stocks nothing:
-# AMMOTYPE_RAIL is 0x21, so the old `type < 20` guard dropped it silently and the
-# crates beside a Rail-Laser spot were empty. The writer is bounded by the array
-# and says so; the gun's own pickup carries the ammunition instead.
-grep -qF 'mpweapon->priammotype <= (s32)ARRAYCOUNT(crate->slots)' "$ROOT/src/game/setup.c" || fail "a weapon spot's primary ammo type is not bounded by the crate's slots"
-grep -qF 'mpweapon->secammotype <= (s32)ARRAYCOUNT(crate->slots)' "$ROOT/src/game/setup.c" || fail "a weapon spot's secondary ammo type is not bounded by the crate's slots"
-grep -qF 'mpweapon->priammotype < 20' "$ROOT/src/game/setup.c" && fail "the crate's slot bound is the old hand-typed 20 again"
+# An arena's multi-ammo crate has nineteen pairs, one an ammo type minus one, and
+# that is the stride the setup stream is walked by: setupGetCmdLength() answers with
+# sizeof the record, and the same walk reads GoldenEye's own stage files, so widening
+# the record misaligns a stock level from its first crate onwards. A weapon spot whose
+# type is past the nineteenth: AMMOTYPE_RAIL is 0x21 and its AMMOTYPE_BOWCASTER 0x22,
+# and so is every type added after them. The old `type < 20` guard dropped both
+# silently and the crate beside such a spot was drawn holding nothing at all - and, a
+# crate with nothing in it being no thing to pick up, was never offered either, which
+# reads as a bug in the gun. The writer is bounded by the array; what the record cannot
+# carry goes on the crate's prop as a list (struct ammocratepairs, types.h), which both
+# halves of the pickup read and the bots see. The gun's own pickup stays the other way in.
+grep -qF 'mpweapon->priammotype <= (s32)ARRAYCOUNT(crate->slots)' "$ROOT/src/game/setup.c" || fail "a weapon spot's primary ammo type is not bounded by the crate's pairs"
+grep -qF 'mpweapon->secammotype <= (s32)ARRAYCOUNT(crate->slots)' "$ROOT/src/game/setup.c" || fail "a weapon spot's secondary ammo type is not bounded by the crate's pairs"
+grep -qF 'mpweapon->priammotype < 20' "$ROOT/src/game/setup.c" && fail "the crate's pair bound is the old hand-typed 20 again"
+grep -qF 'setupAddAmmoCratePair(obj->prop, mpweapon->secammotype, mpweapon->secammoqty);' "$ROOT/src/game/setup.c" || fail "a type past the crate's nineteen pairs is not put on the prop, so the crate beside the spot holds nothing"
+grep -qF 'prop->extrapairs = NULL;' "$ROOT/src/game/prop.c" || fail "a crate's extra pairs are not cleared on allocation, so a reused prop carries the last crate's ammunition"
+awk '/^s32 objTestForPickup/,/^}$/' "$ROOT/src/game/propobj.c" | grep -q 'prop->extrapairs' || fail "the pickup test still sees only the record's nineteen pairs, so a Bowcaster crate is never offered"
+awk '/^s32 propPickupByPlayer/,/^}$/' "$ROOT/src/game/propobj.c" | grep -q 'ammoHandlePickup(prop->extrapairs' || fail "the pickup gives only the record's nineteen pairs, so an offered crate hands over no plasma bolts"
+# The bots read the same record, and one hand-typed bound there is a bot that will not
+# pick up, or will not walk to, a crate whose ammunition is past the record's nineteen.
+awk '/case OBJTYPE_MULTIAMMOCRATE:/,/case OBJTYPE_SHIELD:/' "$ROOT/src/game/bot.c" | grep -q 'prop->extrapairs' || fail "a bot taking a multi crate still ignores pairs past the record's nineteen"
+grep -qF 'ignore1 && prop->extrapairs != NULL' "$ROOT/src/game/bot.c" || fail "a bot still ignores a crate whose only ammunition is past the record's nineteen"
+grep -qE 'for \(i = 0; i != 19; i\+\+\)|for \(i = 0; i < 0x13; i\+\+\)|for \(i = 0; i < 19; i\+\+\)' "$ROOT/src/game/bot.c" && fail "a bot's crate loop is a hand-typed nineteen again"
 
 # Instagib bends three things outside the gun itself, and each is a line a
 # later edit can quietly undo. The ammunition: it is ticked per player in
@@ -228,6 +243,70 @@ if [ "$between" -lt 3 ]; then
 	exit 1
 fi
 grep -qF 'scenario > 7' "$ROOT/port/src/mpsetups.c" || fail "mpsetupLiveVersion no longer notices a scenario past the 3-bit field - such a setup would be written unreadable"
+
+# One Shall Stand... The life count rides in the scenario's 32 bits (setup and
+# RULES), elimination reuses the GE Plus hooks, and the two guards Instagib
+# left behind have to accept the eighth mode too.
+grep -qF '#define MPSCENARIO_LASTMANSTANDING   7' "$ROOT/src/include/constants.h" || fail "One Shall Stand... has no scenario id"
+grep -qF '#define NUM_MPSCENARIOS             10' "$ROOT/src/include/constants.h" || fail "NUM_MPSCENARIOS did not grow for Zombies"
+grep -qF 'lmsLivesSpent' "$ROOT/src/game/player.c" || fail "an LMS player can still restart after its lives are spent"
+grep -qF 'lmsMatchOver' "$ROOT/src/game/lv.c" || fail "LMS never ends when one player is left"
+grep -qF 'scenario <= MPSCENARIO_CAPTURETHECASE' "$ROOT/src/game/challenge.c" && fail "the challenge unlock guard still stops at the last ROM scenario"
+grep -qF 'scen <= MPSCENARIO_CAPTURETHECASE' "$ROOT/port/src/net/netsession.c" && fail "--net-test-scenario still cannot start One Shall Stand..."
+grep -qF 'LMS_LIVES' "$ROOT/port/src/net/netscen.c" || fail "LMS elimination state is not in the net scenario block"
+
+# The Bowcaster: a crossbow in the hand, a bouncing plasma bolt in the air.
+# Its bolt has its own number (or it would stick in walls and be collectible),
+# the reload puts ten bolts in per cycle, and its magazine is thirty.
+grep -qF 'WEAPON_BOWCASTER,' "$ROOT/src/include/constants.h" || fail "the Bowcaster has no weapon number"
+grep -qF '#define AMMOTYPE_BOWCASTER' "$ROOT/src/include/constants.h" || fail "the Bowcaster has no ammo of its own"
+grep -qF 'WEAPON_BOWCASTERBOLT' "$ROOT/src/game/bondgun.c" || fail "the Bowcaster still fires a sticking crossbow bolt"
+grep -qF 'weaponnum == WEAPON_BOWCASTER ? 10 : 1' "$ROOT/src/game/bondgun.c" || fail "the Bowcaster does not load ten bolts per reload cycle"
+grep -qF 'WEAPON_BOWCASTERBOLT' "$ROOT/src/game/propobj.c" || fail "a spent plasma bolt is not stopped from becoming a dropped weapon"
+grep -qF 'FUNCFLAG_PROJECTILE_POWERED' "$ROOT/src/game/invitems.c" || fail "the Bowcaster's bolt is not powered - it will arc into the floor"
+grep -qF 'ten-round reload cycles need the same bound' "$ROOT/src/game/bondgun.c" || fail "the ten-round reload is not clamped to the clip - it can overfill the magazine"
+grep -qF 'MODEL_CHRFLASHBANG' "$ROOT/src/game/invitems.c" || fail "the plasma bolt is not a round glowing ball - it still looks like an arrow"
+grep -qF 'boltbeamSetHeadPos(beamnum, &head)' "$ROOT/src/game/propobj.c" || fail "the plasma bolt's trail does not follow it - the boltbeam ends are never updated in flight"
+grep -qF 'boltbeamSetGlow(beamnum)' "$ROOT/src/game/bondgun.c" || fail "the Bowcaster's beam is not rendered bright and wide"
+grep -qF '#define NUM_BOLTBEAMS 256' "$ROOT/src/include/bss.h" || fail "the boltbeam pool is not large enough for a full room firing continuously"
+grep -qF '180, // timer60: three seconds' "$ROOT/src/game/invitems.c" || fail "the plasma bolt's lifetime is not three seconds"
+grep -qF 'backwards for knockback and backshot detection' "$ROOT/src/game/propobj.c" || fail "the plasma bolt's knockback uses the hit normal instead of the travel direction"
+grep -qF 's32 boltweapon = hand->gset.weaponnum == WEAPON_BOWCASTER' "$ROOT/src/game/bondgun.c" || fail "the crossbow host branch does not pick the plasma bolt itself - branch order is load-bearing again"
+
+# Its ammunition has to be named in each of the pickup message's switches, and in
+# its own words: the crossbow's word is "bolt", and what the Bowcaster fires is a
+# plasma bolt (propobj.c's three switches, plus the PAL and JPN name table, which
+# cannot carry port text where it is written - see ammotypePortNames()).
+awk '/^void ammotypeGetDeterminer/,/^}/' "$ROOT/src/game/propobj.c" | grep -q 'AMMOTYPE_BOWCASTER' || fail "the Bowcaster's ammunition has no determiner - the pickup message reads \"Picked up .\""
+awk '/^void ammotypeGetPickupName/,/^}/' "$ROOT/src/game/propobj.c" | grep -q 'ammotypeBowcasterText' || fail "the Bowcaster's ammunition is named with the crossbow's word - the crate says \"bolts\""
+awk '/^void ammotypePlayPickupSound/,/^}/' "$ROOT/src/game/propobj.c" | grep -q 'AMMOTYPE_BOWCASTER' || fail "a Bowcaster ammunition pickup is silent - the one pickup class with no sound"
+grep -qF 'info->id == AMMOTYPE_BOWCASTER' "$ROOT/src/game/propobj.c" || fail "the PAL and JPN ammo name table still gives the Bowcaster the crossbow's word"
+
+# Plasma Tag: Bowcasters only, infinite ammo, half health, fast-motion option.
+grep -qF 'MPSCENARIO_PLASMATEST' "$ROOT/src/include/constants.h" || fail "Plasma Tag has no scenario id"
+grep -qF 'MPSCENARIO_PLASMATEST' "$ROOT/src/game/player.c" || fail "Plasma Tag does not hand out a Bowcaster or set half health"
+grep -qF 'MPSCENARIO_PLASMATEST' "$ROOT/src/game/bondgun.c" || fail "Plasma Tag does not keep the Bowcaster's ammunition full"
+grep -qF 'weapon->weaponnum == WEAPON_BOWCASTERBOLT' "$ROOT/src/game/propobj.c" || fail "the plasma bolt does not register damage on characters"
+grep -qF 'g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_INSTAGIB' "$ROOT/src/game/player.c" || fail "Instagib's spawn gun leaks into single-player missions"
+grep -qF 'g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_PLASMATEST' "$ROOT/src/game/player.c" || fail "Plasma Tag's spawn gun leaks into single-player missions"
+grep -qF 'g_MpSetup.scenario == MPSCENARIO_INSTAGIB ? g_InstagibCharge60 : TICKS(90)' "$ROOT/port/src/raillaser.c" || fail "the Instagib charge time leaks into other scenarios"
+grep -qF 'g_LmsNetBlockSeen' "$ROOT/port/src/net/netscen.c" || fail "the LMS net block's arrival is not marked - zero lives reads as no block"
+grep -qF 'g_LmsNetBlockSeen' "$ROOT/src/game/mplayer/scenarios/lastmanstanding.inc" || fail "the LMS lives display ignores the net block marker"
+
+# The Moonrailer's scope is the AR34's pattern: a full firing-function clone on
+# FUNC_SECONDARY, with bondmove winding the view in when that function is active.
+# The aim input itself stays a plain aim (no MANUALZOOM), and both functions carry
+# their own port text names.
+grep -qF '&invfunc_raillaser_charge, &invfunc_raillaser_usescope' "$ROOT/src/game/invitems.c" || fail "the Moonrailer has no Use Scope secondary function"
+grep -qF 'INVAIMFLAG_MANUALZOOM | INVAIMFLAG_ACCURATESINGLESHOT' "$ROOT/src/game/invitems.c" || fail "the Moonrailer's aim-input scope was lost - it should keep the zoom it always had"
+grep -qF 'raillaserOwn(bgunGetWeaponNum(HAND_RIGHT))' "$ROOT/src/game/bondmove.c" || fail "the Moonrailer's secondary does not wind the view in like the AR34's"
+grep -qF 'gunfuncBitIndex' "$ROOT/src/include/constants.h" || fail "the function-toggle macros still index gunfuncs by weapon number - the Moonrailer's alt button is a no-op"
+grep -qF 'GUNFUNC_BIT_RAILLASER' "$ROOT/src/include/data.h" || fail "the Moonrailer has no saved function-choice bit"
+grep -qF 'return weaponnum;' "$ROOT/src/include/data.h" || fail "the function choice no longer gives each weapon number its own bit - the Bowcaster would share the crossbow's"
+grep -qF 'u8 gunfuncs[GUNFUNCS_BYTES]' "$ROOT/src/include/types.h" || fail "the function-choice bitmap is not sized from the weapon numbers it must cover"
+grep -qF '#define GUNFUNC_SAVEBITS (GUNFUNCS_BYTES * 8)' "$ROOT/src/game/mplayer/mplayer.c" || fail "the player-file save width does not cover the per-weapon function bits - the alt choice is lost on reload"
+grep -qF 'Rail Shot' "$ROOT/port/src/raillaser.c" || fail "the Moonrailer's primary has no Rail Shot name"
+grep -qF 'Use Scope' "$ROOT/port/src/raillaser.c" || fail "the Moonrailer's secondary has no Use Scope name"
 
 # What a stage says, both halves of what the gun is wearing. The pickup line is the
 # only report a state whose file is 0 gets - such a state is legal and draws nothing,

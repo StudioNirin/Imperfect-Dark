@@ -12,6 +12,7 @@
 #include "game/botcmd.h"
 #include "game/botinv.h"
 #include "game/mplayer/mplayer.h"
+#include "game/mplayer/scenarios.h"
 #include "game/propobj.h"
 #include "bss.h"
 #include "lib/rng.h"
@@ -152,12 +153,58 @@ struct aibotweaponpreference g_AibotWeaponPreferences[BOTINV_MAX_WEAPONPREFS] = 
 	/*0x5b*/ { 220, 220, 0,   0,   0, 0, BOTDISTCFG_DEFAULT,        BOTDISTCFG_DEFAULT,        0,             0,   0,  0,  1, 0 }, // WEAPON_MPSHIELD
 	/*0x5c*/ { 0,   0,   0,   0,   0, 0, BOTDISTCFG_DEFAULT,        BOTDISTCFG_DEFAULT,        0,             0,   0,  0,  1, 0 }, // WEAPON_DISABLED
 	/*0x5d*/ { 0,   0,   0,   0,   0, 0, BOTDISTCFG_DEFAULT,        BOTDISTCFG_DEFAULT,        0,             0,   0,  0,  1, 0 }, // WEAPON_SUICIDEPILL
+
+	// This fork's own guns, written by name rather than slotted in by position:
+	// the numbers they were appended to (WEAPON_RAILLASER, constants.h) sit past
+	// the stock list's 0x5d, and the numbers between belong to GoldenEye, whose
+	// rows are built from the ROM and live in g_GeAibotWeaponPreferences
+	// (AIBOTPREF(), data.h). A row here is what makes a simulant able to want the
+	// gun at all: botinvScoreWeapon() reads its scores only when the goal flag
+	// for the function matches, so a zero row is a gun no simulant picks up,
+	// holds, or fires, however it was dealt.
+	//
+	// A charged shot, one per magazine: the same shape as the rocket launcher's,
+	// so the same low goals. Five shells is the whole reserve (g_AmmoTypes,
+	// bondgun.c), so "top up at two" is two shots in hand, and a bot that fires
+	// is empty again at once - one second, and nothing partial to scale it by.
+	// The primary keeps its distance: a hitscan railgun is at its best where the
+	// target cannot answer it, which is the Farsight's own distance config.
+	[WEAPON_RAILLASER]           = { 180, 188, 0,   0,   1, 0, BOTDISTCFG_FARSIGHT,       BOTDISTCFG_DEFAULT,        2,             0,   1,  0,  1, 0 },
+	// The crossbow's plasma-bolt twin, so the crossbow's shape, with the goals
+	// raised for a hundred-bolt reserve to its 69 and a clip that fills over
+	// three cycles, which is why the partial-reload delay is the crossbow's too.
+	// Its second function is the crossbow's second shot, so it carries a score
+	// for the same reason the crossbow does (botinvScoreWeapon's own reading of
+	// this gun is the row, not the crossbow's: see botScoringWeapon()).
+	[WEAPON_BOWCASTER]           = { 116, 180, 0,   0,   1, 1, BOTDISTCFG_DEFAULT,        BOTDISTCFG_DEFAULT,        20,            20,  6,  6,  4, 1 },
+	// A beam that always lands and an orb that must be detonated to be worth
+	// much, so between the Moonraker it borrows its body from and the Superdragon
+	// it shares the stand-off-with-explosives config with. One cell per shot for
+	// either function out of one hundred, so both goals are the same number, and
+	// half the reserve is the Devastator's ratio.
+	[WEAPON_SHOCKRIFLE]          = { 152, 180, 0,   0,   1, 1, BOTDISTCFG_DEFAULT,        BOTDISTCFG_SHOOTEXPLOSIVE, 50,            50,  10, 10, 2, 0 },
+	// The DB-Shotgun: the stock PD Shotgun's shape, since it is that gun with a
+	// two-round magazine and a fitted mesh. Both modes get a goal flag and a
+	// score so a simulant actually wants one; the goals and critical amounts
+	// sit inside the hundred-shell shotgun reserve, and the two-round clip
+	// reloads in the shotgun's six seconds with partial delays allowed. It hosts
+	// itself, so botinvScoreWeapon() reads this row rather than a borrowed case.
+	[WEAPON_GESHOTGUN]           = { 140, 156, 0,   0,   1, 1, BOTDISTCFG_PISTOL,         BOTDISTCFG_PISTOL,         18,            18,   8,  8,  6, 1 },
 };
 
 s32 botinvGetNumWeaponPreferences(void)
 {
 	return BOTINV_MAX_WEAPONPREFS;
 }
+
+// The length exists for this one read (AIBOTPREF(), data.h): every weapon number
+// a simulant can be asked about has a row. GoldenEye's block was the first to
+// sit past the 128 the table used to be, and answers it with its own array; the
+// fork's own guns have no such branch, so the table had to grow. Checked
+// against the enum rather than written as a number, so the next gun appended
+// moves the bound with it instead of past it.
+_Static_assert(BOTINV_MAX_WEAPONPREFS >= NUM_WEAPONS,
+		"a simulant preference row for every weapon number there is");
 
 /**
  * Remove all items from the bot's inventory.
@@ -495,14 +542,40 @@ s32 mpGetWeaponSlotByWeaponNum(s32 weaponnum)
  * Weapon scoring is used to determine if a weapon is better than another,
  * which affects whether the bot engages in combat or seeks a better weapon.
  */
+/**
+ * The number botinvScoreWeapon's switch reads a gun as.
+ *
+ * Its host's (weaponHost()), for everything the copy really does share - the
+ * firing function, the animations, the inventory cycle - except where the host's
+ * case here is written for a detail the copy does not have.
+ */
+static s32 botScoringWeapon(s32 weaponnum)
+{
+	// The Bowcaster hosts on the crossbow, and the crossbow's case below scores
+	// the crossbow: one shot, which sticks in whatever it hits and can be walked
+	// back and pulled out again, so a simulant on the lowest difficulty is better
+	// off without it and the primary is worth 49 rather than what its row says.
+	// The Bowcaster's bolt bounces, is spent, and its clip holds thirty, so
+	// neither judgement is about this gun: it is scored on its own row.
+	if (weaponnum == WEAPON_BOWCASTER) {
+		return WEAPON_BOWCASTER;
+	}
+
+	return weaponHost(weaponnum);
+}
+
 void botinvScoreWeapon(struct chrdata *chr, s32 weaponnum, s32 funcnum, s32 arg3, bool arg4, s32 *dst1, s32 *dst2, bool comparewithtarget, bool arg8)
 {
 	s32 score1 = 0;
 	s32 score2 = 0;
 	s32 extra = 0;
 
-	// @dangerous: Array overflow can occur if more weapons are added to the
-	// game without extending the preferences table
+	// The table this indexes is sized from the weapon enum (BOTINV_MAX_WEAPONPREFS,
+	// constants.h) rather than written out, because this is the read a weapon
+	// number past its end used to reach: GoldenEye's guns first, which are why
+	// AIBOTPREF() has a GoldenEye branch at all, and then this fork's own, which
+	// have no branch and no row until the bound followed the enum. A mod's
+	// imported rows are clamped to the same number (port/src/moddata.c).
 	if (arg3 < 0
 			|| (!funcnum && arg3 == AIBOTPREF(weaponnum).haspriammogoal)
 			|| (funcnum && arg3 == AIBOTPREF(weaponnum).hassecammogoal)) {
@@ -548,7 +621,10 @@ void botinvScoreWeapon(struct chrdata *chr, s32 weaponnum, s32 funcnum, s32 arg3
 
 	// Missing from this list:
 	// Mauler, K7 Avenger, AR34, sniper rifle, Farsight, laser, grenade
-	switch (weaponHost(weaponnum)) {
+	// and this fork's Rail-Laser and Shock Rifle, which is deliberate: neither has
+	// a quirk of the host's to un-inherit, so their rows are the whole decision.
+	// The Bowcaster is here because the crossbow's case is not (botScoringWeapon).
+	switch (botScoringWeapon(weaponnum)) {
 	case WEAPON_UNARMED:
 		if (comparewithtarget && funcnum != FUNC_PRIMARY) {
 			if (chr->target != -1
@@ -732,6 +808,17 @@ void botinvScoreWeapon(struct chrdata *chr, s32 weaponnum, s32 funcnum, s32 arg3
 			}
 		}
 		break;
+	case WEAPON_BOWCASTER:
+		// The crossbow's one judgement, without its numbers: a bolt that has to
+		// cross the room is wasted on a target under a blur drug whichever gun
+		// fired it, so the primary is set aside there too. Everywhere else this
+		// gun is scored by its own row, which is why the scores are left alone.
+		if (funcnum == FUNC_PRIMARY && comparewithtarget && chr->target != -1
+				&& chrGetTargetProp(chr)->chr->blurdrugamount > TICKS(3500)) {
+			score1 = 0;
+			score2 = 0;
+		}
+		break;
 	case WEAPON_TRANQUILIZER:
 		if (comparewithtarget) {
 			s32 bluramount = 0;
@@ -877,6 +964,19 @@ s32 botinvGetDistConfig(s32 weaponnum, s32 funcnum)
 bool botinvAllowsWeapon(struct chrdata *chr, s32 weaponnum, s32 funcnum)
 {
 	bool allow = true;
+
+#ifndef PLATFORM_N64
+	// Zombies: an infected simulant's only unarmed function is the punch.
+	// The disarm function is the same unarmed melee but FUNCFLAG_DISARM -
+	// it yanks the survivor's gun and zeroes the damage that would turn
+	// them, spending the one-hit convert on a weapon take. The scorer tries
+	// both functions, so this is where the second one is refused.
+	if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_ZOMBIES
+			&& funcnum != FUNC_PRIMARY && weaponHost(weaponnum) == WEAPON_UNARMED
+			&& zombiesIsInfected(chr)) {
+		return false;
+	}
+#endif
 
 	if (chr->aibot->config->type == BOTTYPE_FIST) {
 		if (funcnum != FUNC_PRIMARY) {

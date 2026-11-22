@@ -50,6 +50,7 @@
 #include "game/training.h"
 #include "game/lang.h"
 #include "game/mplayer/mplayer.h"
+#include "game/mplayer/scenarios.h"
 #include "game/pak.h"
 #include "game/options.h"
 #include "game/propobj.h"
@@ -81,6 +82,8 @@
 #include "gewatch.h"
 #include "geslappers.h"
 #include "raillaser.h"
+#include "shock.h"
+#include "dbshotgun.h"
 #include "modloader.h"
 #endif
 
@@ -1337,6 +1340,16 @@ bool bgunHandHasHands(s32 handnum)
 }
 #endif
 
+/**
+ * Rounds added by one cycle of an incremental reload. The crossbow and
+ * shotgun load one at a time; the Bowcaster's thirty-round magazine fills in
+ * three cycles of ten bolts. Zero from the callers means "fill the magazine".
+ */
+static s32 bgunIncrementalReloadAmount(struct hand *hand)
+{
+	return hand->gset.weaponnum == WEAPON_BOWCASTER ? 10 : 1;
+}
+
 s32 bgun0f098ca0(s32 funcnum, struct handweaponinfo *info, struct hand *hand)
 {
 	s32 result = 3;
@@ -1380,7 +1393,7 @@ s32 bgun0f098ca0(s32 funcnum, struct handweaponinfo *info, struct hand *hand)
 	return result;
 }
 
-void bgun0f098df8(s32 weaponfunc, struct handweaponinfo *info, struct hand *hand, u8 onebullet, u8 checkunequipped)
+void bgun0f098df8(s32 weaponfunc, struct handweaponinfo *info, struct hand *hand, u8 reloadamount, u8 checkunequipped)
 {
 	struct weaponfunc *func = weaponGetFunction(&hand->gset, weaponfunc);
 
@@ -1404,22 +1417,22 @@ void bgun0f098df8(s32 weaponfunc, struct handweaponinfo *info, struct hand *hand
 #endif
 			}
 
-			if (onebullet) {
-				amount = 1;
+			if (reloadamount > 0) {
+				amount = reloadamount;
 			}
 
 			if (amount > g_Vars.currentplayer->ammoheldarr[hand->ammotypes[ammoindex]]) {
 				amount = g_Vars.currentplayer->ammoheldarr[hand->ammotypes[ammoindex]];
 			}
 
-#if VERSION >= VERSION_JPN_FINAL
 			// In most versions of the game, reloading the shotgun while going
 			// through a teleport in Deep Sea will cause the shotgun to load
-			// more ammo than its capacity. JPN Final fixes this here.
+			// more ammo than its capacity. JPN Final fixed this here; the
+			// Bowcaster's ten-round reload cycles need the same bound on every
+			// version, so its last cycle cannot push past the thirty-round clip.
 			if (amount > hand->clipsizes[ammoindex] - hand->loadedammo[ammoindex]) {
 				amount = hand->clipsizes[ammoindex] - hand->loadedammo[ammoindex];
 			}
-#endif
 
 			hand->loadedammo[ammoindex] += amount;
 			g_Vars.currentplayer->ammoheldarr[hand->ammotypes[ammoindex]] -= amount;
@@ -1980,7 +1993,7 @@ s32 bgunTickIncReload(struct handweaponinfo *info, s32 handnum, struct hand *han
 					if ((hand->stateflags & HANDSTATEFLAG_00000010) == 0) {
 						s32 value;
 
-						bgun0f098df8(hand->gset.weaponfunc, info, hand, 1, 0);
+						bgun0f098df8(hand->gset.weaponfunc, info, hand, bgunIncrementalReloadAmount(hand), 0);
 						hand->stateflags |= HANDSTATEFLAG_00000010;
 						value = bgun0f098ca0(hand->gset.weaponfunc, info, hand);
 
@@ -2219,10 +2232,20 @@ s32 bgun0f09a3f8(struct hand *hand, struct weaponfunc *func)
 	}
 
 	if (hand->triggeron || (hand->stateflags & HANDSTATEFLAG_00000010) == 0 || burst) {
+		// One price per shot: five cells for the Shock Rifle's orb, two rounds
+		// for a full DB-Shotgun double, one for everything else. Both helpers
+		// answer one for every other gun, so their product is the game's old
+		// figure wherever neither of those two is the gun in hand. For the
+		// DB-Shotgun a clip of one cannot pay the two-round price, so this
+		// check falls through to the single blast rather than refusing it.
 		if (func->ammoindex >= 0
-				&& hand->loadedammo[func->ammoindex] == 0
+				&& hand->loadedammo[func->ammoindex]
+					< shockAmmoCostForFunc(hand->gset.weaponnum, hand->gset.weaponfunc)
+						* dbShotgunAmmoCost(hand->gset.weaponnum, hand->gset.weaponfunc,
+								hand->loadedammo[func->ammoindex])
 				&& hand->ammotypes[func->ammoindex] >= 0) {
-			// Clip is empty
+			// The clip is empty, or too short for the whole shot. For every
+			// other gun the cost is one, which is the same test as before.
 			return -1;
 		}
 
@@ -2318,6 +2341,11 @@ void bgun0f09a6f8(struct handweaponinfo *info, s32 handnum, struct hand *hand, s
 
 	hand->firing = true;
 
+	// Captured before the deduction below: handsTickAttack() (prop.c) creates
+	// the DB-Shotgun's pellets later in the frame with the clip already spent,
+	// and needs to know whether this was a full-clip (twelve-pellet) double.
+	hand->dbshotgunShotClip = func->ammoindex >= 0 ? hand->loadedammo[func->ammoindex] : 0;
+
 	if ((func->type & 0xff00) == 0x100) {
 		struct weaponfunc_shootauto *autofunc = (struct weaponfunc_shootauto *) func;
 		f32 tmp;
@@ -2391,12 +2419,27 @@ void bgun0f09a6f8(struct handweaponinfo *info, s32 handnum, struct hand *hand, s
 		bgunRumble(handnum, info->weaponnum);
 
 		if (usesammo && func->ammoindex >= 0) {
-			hand->loadedammo[func->ammoindex] -= hand->shotstotake;
+			s32 ammocost = shockAmmoCostForFunc(hand->gset.weaponnum, hand->gset.weaponfunc)
+					* dbShotgunAmmoCost(hand->gset.weaponnum, hand->gset.weaponfunc,
+							hand->dbshotgunShotClip);
 
-			if (hand->loadedammo[func->ammoindex] < 0) {
-				// Note: loadedammo is negative
-				hand->shotstotake += hand->loadedammo[func->ammoindex];
-				hand->loadedammo[func->ammoindex] = 0;
+			if (ammocost == 1) {
+				// Every gun but one: this block is the engine's, unchanged, down
+				// to the negative loadedammo it uses to trim a burst that ran out.
+				hand->loadedammo[func->ammoindex] -= hand->shotstotake;
+
+				if (hand->loadedammo[func->ammoindex] < 0) {
+					// Note: loadedammo is negative
+					hand->shotstotake += hand->loadedammo[func->ammoindex];
+					hand->loadedammo[func->ammoindex] = 0;
+				}
+			} else {
+				// One orb for five cells, or one DB-Shotgun shot for two rounds.
+				// The empty/short-clip check above has already refused a shot that
+				// cannot pay for the whole thing, so the clip cannot go negative
+				// here. shotstotake stays 1: it is the count of projectiles to make,
+				// not the price of making them.
+				hand->loadedammo[func->ammoindex] -= hand->shotstotake * ammocost;
 			}
 		}
 
@@ -3011,10 +3054,30 @@ u32 var80070130 = 0x00000000;
 bool bgunTickIncAttackingMelee(s32 handnum, struct hand *hand)
 {
 	struct weaponfunc *func = gsetGetWeaponFunction(&hand->gset);
+	// The Falcon Punch holds its fire animation back until the lunge lands.
+	bool falconpunch = false;
+#ifndef PLATFORM_N64
+	falconpunch = modIsFalconPunchEnabled()
+			&& hand->gset.weaponnum == WEAPON_UNARMED
+			&& hand->gset.weaponfunc == FUNC_PRIMARY;
+#endif
 
 	if (func == NULL) {
 		return true;
 	}
+
+#ifndef PLATFORM_N64
+	// Falcon Punch: one press is one lunge. The hand stays out of the swing
+	// state machine for as long as the fist rests - gating the entry rather
+	// than the strike, so a swing already on its way never freezes half
+	// way through - and when the lockout clears the button has been asked
+	// for again. The punch's own function only; the disarm reads as the
+	// same melee and must not care.
+	if (falconpunch && hand->stateminor == HANDSTATEMINOR_ATTACK_MELEE_0
+			&& g_Vars.currentplayer->meleecooldown60 > 0) {
+		return false;
+	}
+#endif
 
 	if (weaponHasFlag2(hand->gset.weaponnum, WEAPONFLAG2_MINIGUN)) {
 		if (hand->statecycles == 0) {
@@ -3082,7 +3145,10 @@ bool bgunTickIncAttackingMelee(s32 handnum, struct hand *hand)
 			hand->firing = true;
 			hand->attacktype = HANDATTACKTYPE_MELEENOUNCLOAK;
 
-			if (func->fire_animation) {
+			// A Falcon Punch starts its fist animation at the end of the
+			// lunge, not here; prop.c starts it when the blow lands. A punch
+			// with no target in front starts it at the fire below instead.
+			if (func->fire_animation && !falconpunch) {
 				bgunStartAnimation(func->fire_animation, handnum, hand);
 				hand->unk0cc8_01 = true;
 			}
@@ -3094,7 +3160,10 @@ bool bgunTickIncAttackingMelee(s32 handnum, struct hand *hand)
 #endif
 		}
 
-		if (func->fire_animation) {
+		// With the Falcon animation held back there is no keyframe to wait
+		// for, so the hand goes straight to the strike (and the firing the
+		// prop tick reads). The no-animation weapons take the same branch.
+		if (func->fire_animation && !falconpunch) {
 			if (hand->triggerreleased) {
 				hand->unk0cc8_01 = false;
 			}
@@ -3970,6 +4039,7 @@ s32 bgunTickIncChangeGun(struct handweaponinfo *info, s32 handnum, struct hand *
 					break;
 				case WEAPON_LASER:
 				case WEAPON_RAILLASER:
+				case WEAPON_SHOCKRIFLE: // the same borrowed Laser-family voice
 					sndStart(var80095200, SFX_PICKUP_LASER, 0, -1, -1, -1, -1, -1);
 					break;
 				case WEAPON_COMBATKNIFE:
@@ -5742,7 +5812,9 @@ void bgun0f09ebcc(struct defaultobj *obj, struct coord *coord, RoomNum *rooms, M
 		mtx00015f04(obj->model->scale, matrix1);
 		func0f06a580(obj, coord, matrix1, rooms);
 
-		if (obj->type == OBJTYPE_WEAPON && weaponHost(((struct weaponobj *) obj)->weaponnum) == WEAPON_BOLT) {
+		if (obj->type == OBJTYPE_WEAPON
+				&& (((struct weaponobj *) obj)->weaponnum == WEAPON_BOWCASTERBOLT
+					|| weaponHost(((struct weaponobj *) obj)->weaponnum) == WEAPON_BOLT)) {
 			s32 beamnum = boltbeamFindByProp(objprop);
 
 			if (beamnum == -1) {
@@ -5752,6 +5824,10 @@ void bgun0f09ebcc(struct defaultobj *obj, struct coord *coord, RoomNum *rooms, M
 			if (beamnum != -1) {
 				boltbeamSetHeadPos(beamnum, pos);
 				boltbeamSetTailPos(beamnum, pos);
+
+				if (((struct weaponobj *) obj)->weaponnum == WEAPON_BOWCASTERBOLT) {
+					boltbeamSetGlow(beamnum);
+				}
 			}
 		}
 
@@ -6531,7 +6607,28 @@ void bgunCreateFiredProjectile(s32 handnum)
 #endif
 					weaponnum, g_Vars.currentplayer->prop->chr);
 			} else if (weaponHost(hand->gset.weaponnum) == WEAPON_CROSSBOW) {
-				weapon = weaponCreateProjectileFromWeaponNum(funcdef->projectilemodelnum, WEAPON_BOLT, g_Vars.currentplayer->prop->chr);
+				// One host branch for both: the Bowcaster hosts on the crossbow,
+				// so picking the bolt number here keeps the two from depending
+				// on which branch comes first. The plasma bolt has its own
+				// number or boltLand() would embed it and the pickup code would
+				// hand it back as crossbow ammo.
+				s32 boltweapon = hand->gset.weaponnum == WEAPON_BOWCASTER
+					? WEAPON_BOWCASTERBOLT : WEAPON_BOLT;
+
+				weapon = weaponCreateProjectileFromWeaponNum(funcdef->projectilemodelnum, boltweapon, g_Vars.currentplayer->prop->chr);
+
+				if (weapon) {
+					weapon->gunfunc = hand->gset.weaponfunc;
+				}
+			} else if (weaponHost(hand->gset.weaponnum) == WEAPON_SHOCKRIFLE) {
+				// The orb is its own number for the same reason the bolt above is,
+				// and here it matters twice over. Left to the branch below, the shot
+				// is made from the hand's gset and so carries the *gun's* number,
+				// which means the flags of invitem_shockrifle: a row written to draw
+				// a hitscan beam, on a thing that flies. And the character-hit branch
+				// this shot is heading for, like the detonation check after it, has
+				// to ask which orb it is looking at.
+				weapon = weaponCreateProjectileFromWeaponNum(funcdef->projectilemodelnum, WEAPON_SHOCKORB, g_Vars.currentplayer->prop->chr);
 
 				if (weapon) {
 					weapon->gunfunc = hand->gset.weaponfunc;
@@ -6607,7 +6704,10 @@ void bgunCreateFiredProjectile(s32 handnum)
 						weapon->base.projectile->unk08c = funcdef->reflectangle;
 						weapon->base.projectile->unk098 = funcdef->unk50 * 1.6666666f;
 
-						if (funcdef->soundnum > 0) {
+						// Sound numbers >= 0x8000 are stored as negative s16 (the
+						// high bit marks a config-mapped sound), so a plain > 0
+						// check silences every mapped flight voice.
+						if (funcdef->soundnum != 0 && funcdef->soundnum != -1) {
 							psCreate(NULL, weapon->base.prop, funcdef->soundnum, -1, -1, 0, 0, PSTYPE_NONE, 0, -1.0f, 0, -1, -1.0f, -1.0f, -1.0f);
 						}
 
@@ -6684,7 +6784,7 @@ void bgunCreateFiredProjectile(s32 handnum)
 					weapon->base.projectile->unk08c = funcdef->reflectangle;
 					weapon->base.projectile->unk098 = funcdef->unk50 * 1.6666666f;
 
-					if (funcdef->soundnum > 0) {
+					if (funcdef->soundnum != 0 && funcdef->soundnum != -1) {
 						psCreate(NULL, weapon->base.prop, funcdef->soundnum, -1, -1, 0, 0, PSTYPE_NONE, 0, -1.0f, 0, -1, -1.0f, -1.0f, -1.0f);
 					}
 
@@ -9754,6 +9854,7 @@ void bgunCreateFx(struct hand *hand, s32 handnum, struct weaponfunc *funcdef, s3
 			return;
 		case WEAPON_LASER:
 		case WEAPON_RAILLASER:
+		case WEAPON_SHOCKRIFLE:
 			// A whitelist, not a fallback: a number this switch does not name
 			// draws nothing in the air at all, however many beam flags its row sets
 			// - which is how a Rail-Laser with the Moonraker's beam flags fired for
@@ -14566,12 +14667,14 @@ void bgunSetTriggerOn(s32 handnum, bool on)
 	}
 }
 
-// The bit of the gun's host (weaponHost(), as VALIDWEAPON and FUNCISSEC read
-// it): a GoldenEye gun's own number is past the six bytes of gunfuncs, and
-// its bit landed in the next player's name (0x6d set bit 4 of name[4]:
-// "dabbq", "(ope~)", F3 20261010-035224, -035446)
-#define SETFUNCPRI() g_PlayerConfigsArray[g_Vars.currentplayerstats->mpindex].gunfuncs[(weaponHost(g_Vars.currentplayer->gunctrl.weaponnum) - 1) >> 3] &= ~(1 << ((weaponHost(g_Vars.currentplayer->gunctrl.weaponnum) - 1) & 7))
-#define SETFUNCSEC() g_PlayerConfigsArray[g_Vars.currentplayerstats->mpindex].gunfuncs[(weaponHost(g_Vars.currentplayer->gunctrl.weaponnum) - 1) >> 3] |= 1 << ((weaponHost(g_Vars.currentplayer->gunctrl.weaponnum) - 1) & 7)
+// The per-weapon function bit, indexed through gunfuncBitIndex(). It returns the
+// weapon's own number, so a GoldenEye gun or this fork's appended guns each land
+// on a distinct bit of the widened gunfuncs[] (types.h GUNFUNCS_BYTES), and -1
+// for a number past the roster so VALIDWEAPON() rejects it. (Historically the
+// bitmap was six bytes and a host's own number ran past it, setting a bit in the
+// next player's name - "dabbq", "(ope~)", F3 20261010-035224.)
+#define SETFUNCPRI() g_PlayerConfigsArray[g_Vars.currentplayerstats->mpindex].gunfuncs[gunfuncBitIndex(g_Vars.currentplayer->gunctrl.weaponnum) >> 3] &= ~(1 << (gunfuncBitIndex(g_Vars.currentplayer->gunctrl.weaponnum) & 7))
+#define SETFUNCSEC() g_PlayerConfigsArray[g_Vars.currentplayerstats->mpindex].gunfuncs[gunfuncBitIndex(g_Vars.currentplayer->gunctrl.weaponnum) >> 3] |= 1 << (gunfuncBitIndex(g_Vars.currentplayer->gunctrl.weaponnum) & 7)
 
 /**
  * This is called once B has been held for 25 ticks, or earlier if pressing B+Z.
@@ -14730,19 +14833,32 @@ bool bgunIsUsingSecondaryFunctionForHand(s32 handnum)
 	s32 weaponnum = handnum == HAND_LEFT && player->gunctrl.leftweaponnum > WEAPON_NONE
 		? player->gunctrl.leftweaponnum : player->gunctrl.weaponnum;
 
-	// A GoldenEye gun keeps its host's choice (weaponHost())
-	weaponnum = weaponHost(weaponnum);
+#ifndef PLATFORM_N64
+	// Zombies: the infected's one attack, the punch, converts; the unarmed's
+	// second function - the disarm - disarms without converting, which leaves
+	// the victim armed and the mode's one-hit turn unspent. Whatever the
+	// player's saved function toggle or the alt button holds, the infected
+	// hand fires primary.
+	if (zombiesSeatIsInfected(g_Vars.currentplayernum)) {
+		return false;
+	}
+#endif
 
-	if (weaponnum >= WEAPON_UNARMED && weaponnum <= WEAPON_COMBATBOOST) {
-		s32 index = (weaponnum - 1) >> 3;
-		s32 value = 1 << ((weaponnum - 1) & 7);
+	// A GoldenEye gun keeps its host's choice; the Moonrailer's is a spare bit.
+	{
+		s32 bit = gunfuncBitIndex(weaponnum);
 
-		if (g_PlayerConfigsArray[g_Vars.currentplayerstats->mpindex].gunfuncs[index] & value) {
-			if (player->gunctrl.invertgunfunc == true) {
-				return false;
+		if (bit >= 0) {
+			s32 index = bit >> 3;
+			s32 value = 1 << (bit & 7);
+
+			if (g_PlayerConfigsArray[g_Vars.currentplayerstats->mpindex].gunfuncs[index] & value) {
+				if (player->gunctrl.invertgunfunc == true) {
+					return false;
+				}
+
+				return true;
 			}
-
-			return true;
 		}
 	}
 
@@ -14762,11 +14878,13 @@ void bgunToggleFunctionForHand(s32 handnum)
 	s32 weaponnum = handnum == HAND_LEFT && player->gunctrl.leftweaponnum > WEAPON_NONE
 		? player->gunctrl.leftweaponnum : player->gunctrl.weaponnum;
 
-	// A GoldenEye gun keeps its host's choice (weaponHost())
-	weaponnum = weaponHost(weaponnum);
+	// A GoldenEye gun keeps its host's choice; the Moonrailer's is a spare bit.
+	{
+		s32 bit = gunfuncBitIndex(weaponnum);
 
-	if (weaponnum >= WEAPON_UNARMED && weaponnum <= WEAPON_COMBATBOOST) {
-		g_PlayerConfigsArray[g_Vars.currentplayerstats->mpindex].gunfuncs[(weaponnum - 1) >> 3] ^= 1 << ((weaponnum - 1) & 7);
+		if (bit >= 0) {
+			g_PlayerConfigsArray[g_Vars.currentplayerstats->mpindex].gunfuncs[bit >> 3] ^= 1 << (bit & 7);
+		}
 	}
 }
 
@@ -14775,19 +14893,29 @@ bool bgunIsUsingSecondaryFunction(void)
 	struct player *player = g_Vars.currentplayer;
 	s32 weaponnum = player->gunctrl.weaponnum;
 
-	// A GoldenEye gun keeps its host's choice (weaponHost())
-	weaponnum = weaponHost(weaponnum);
+#ifndef PLATFORM_N64
+	// Zombies: the infected fire primary - the punch that converts. See
+	// bgunIsUsingSecondaryFunctionForHand().
+	if (zombiesSeatIsInfected(g_Vars.currentplayernum)) {
+		return false;
+	}
+#endif
 
-	if (weaponnum >= WEAPON_UNARMED && weaponnum <= WEAPON_COMBATBOOST) {
-		s32 index = (weaponnum - 1) >> 3;
-		s32 value = 1 << ((weaponnum - 1) & 7);
+	// A GoldenEye gun keeps its host's choice; the Moonrailer's is a spare bit.
+	{
+		s32 bit = gunfuncBitIndex(weaponnum);
 
-		if (g_PlayerConfigsArray[g_Vars.currentplayerstats->mpindex].gunfuncs[index] & value) {
-			if (player->gunctrl.invertgunfunc == true) {
-				return false;
+		if (bit >= 0) {
+			s32 index = bit >> 3;
+			s32 value = 1 << (bit & 7);
+
+			if (g_PlayerConfigsArray[g_Vars.currentplayerstats->mpindex].gunfuncs[index] & value) {
+				if (player->gunctrl.invertgunfunc == true) {
+					return false;
+				}
+
+				return true;
 			}
-
-			return true;
 		}
 	}
 
@@ -15066,6 +15194,11 @@ void bgunTickGameplay(bool triggeron)
 		if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_INSTAGIB) {
 			bgunSetAmmoQuantity(AMMOTYPE_RAIL, bgunGetAmmoCapacityForWeapon(WEAPON_RAILLASER, FUNC_PRIMARY));
 		}
+
+		// Plasma Tag: the Bowcaster's ammunition, kept full.
+		if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_PLASMATEST) {
+			bgunSetAmmoQuantity(AMMOTYPE_BOWCASTER, bgunGetAmmoCapacityForWeapon(WEAPON_BOWCASTER, FUNC_PRIMARY));
+		}
 	}
 
 	bgunDecreaseNoiseRadius();
@@ -15205,6 +15338,8 @@ struct ammotype g_AmmoTypes[] = {
 	{ 200,          0, 0  }, // AMMOTYPE_1F
 	{ 10,           0, 0  }, // AMMOTYPE_ECM_MINE
 	{ 5,            0, 0  }, // AMMOTYPE_RAIL: the Rail-Laser's five charged shots (invitems.c)
+	{ 100,          0, 0  }, // AMMOTYPE_BOWCASTER: a hundred spare bolts (invitems.c)
+	{ 100,          0, 0  }, // AMMOTYPE_SHOCK: a hundred spare cells (invitems.c)
 };
 
 _Static_assert(ARRAYCOUNT(g_AmmoTypes) == NUM_AMMOTYPES,

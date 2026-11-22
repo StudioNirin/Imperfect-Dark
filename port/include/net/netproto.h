@@ -255,7 +255,18 @@
 //    two independent challenge datasets a room's match used (0 stock, 1
 //    Challenges+). Clients mark into and name from that dataset; a Plus
 //    completion grants no shared unlocks. Both lists are 30 entries.
-#define NET_PROTOCOL_VERSION 39
+// 40 (weapon function bits): the RULES per-player gunfuncs block widens from 6
+//    bytes to types.h's GUNFUNCS_BYTES, so every weapon number carries its own
+//    primary/secondary choice - this fork's appended guns included, and each of
+//    them independent of the number it hosts on. The block is copied per player.
+// 41 (the Shock Rifle's row): RULES' u8 randomfilters[NUM_MPWEAPONS] is one
+//    byte wider again, NUM_MPWEAPONS having grown for MPWEAPON_SHOCKRIFLE.
+//    Appended, as 36's was, so every row below it keeps its number and only the
+//    tail is new - but the blob's length is what a peer reads first.
+// 42 (the DB-Shotgun's row): RULES' u8 randomfilters[NUM_MPWEAPONS] grows by
+//    one more byte for MPWEAPON_GESHOTGUN. Appended like 36 and 41, so the rows
+//    below keep their numbers, but the blob's length is what a peer reads first.
+#define NET_PROTOCOL_VERSION 42
 
 #define NETMSG_CONNECT    1
 #define NETMSG_ACCEPT     2
@@ -497,7 +508,7 @@
  *   12 x human slot (g_PlayerConfigsArray[0-11]; protocol 10, was 4):
  *     str(14) name, u8 mpheadnum, u8 mpbodynum, s16 headrow, s16 bodyrow
  *     (protocol 15), u8 team, u32 displayoptions,
- *     u8 handicap, u16 options, u8 gunfuncs[6]
+ *     u8 handicap, u16 options, u8 gunfuncs[GUNFUNCS_BYTES]
  *     (never fileguid or career stats)
  *   8 x str(11) teamnames         g_BossFile.teamnames
  *   u8      unlocked[80]          g_MpFeaturesUnlocked
@@ -1062,6 +1073,9 @@
  *            f32 colourfrac[3]
  *          Capture the Case: s16 teamindexes[4], s16 playercounts[4],
  *            s16 baserooms[4], REF5 tokens[4]
+ *          One Shall Stand...: u8 livesleft[92], u8 out[92]
+ *          Zombies: u8 infected[92], s16 score[92], u8 round, u8 phase,
+ *            u16 roundtime60
  *   u32     evseq                 (protocol 7, only with hasscen != 0) the
  *                                 EVENTS messages the host had sent this
  *                                 client in the match before this block

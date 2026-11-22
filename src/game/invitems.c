@@ -2,6 +2,7 @@
 #include "game/chraicommands.h"
 #include "game/prop.h"
 #include "game/inv.h"
+#include "game/lang.h"
 #include "stagesetup.h"
 #include "data.h"
 #include "types.h"
@@ -4286,18 +4287,23 @@ struct weapon invitem_laser = {
  * weapon here that has to be charged by holding the trigger (the gate is in
  * bondgun.c's bgunChargeTick()). A Moonraker Laser's beam and picture, one
  * shot a magazine out of five (AMMOTYPE_RAIL), reloading after each one, and
- * the AR34's zoom on the aim input.
+ * both the aim-input scope it always had and an AR34-style "Use Scope"
+ * secondary: the aim button zooms on its own, and the alt-function button
+ * switches to a firing clone that holds the view in.
  *
  * It borrows the Moonraker's models, hand position, equip animation, firing
  * sound and name text, because that is the look it is going for and the
  * stand-in until it has its own of each: GoldenEye XBLA's Moonraker model
- * over the top of it is the plan (port/src/geraillaser.c). Simulants are shut
- * out by the missing WEAPONFLAG_AICANUSE, which is also what keeps them away
- * from the tables indexed by weapon number below botinv.c's end, and there is
- * no second function: in Perfect Dark a zoom is a mode on the aim input
- * (INVAIMFLAG_MANUALZOOM, bondmove.c), not an alt-fire of its own, and the
- * alt-fire slot of a gun here shoots something and would spend a charged shot
- * to do it. WEAPONFLAG3_FREESHOTS, which is what makes the Moonraker never
+ * over the top of it is the plan (port/src/geraillaser.c). Simulants can be
+ * handed it, and the preference table has a row for it (botinv.c); what they do
+ * with the charge is bot.c's own, since a simulant's charge is its own state
+ * (aibot->maulercharge[]) rather than the player's hand->matmot1. It has two
+ * scopes: the aim input's own manual zoom (unchanged from before) and a
+ * secondary function, the AR34's pattern - a full firing-function clone whose
+ * selection makes bondmove.c hold the view in to zoomfov, so the charged shot
+ * can be fired through it. The choice is kept in a spare bit of gunfuncs[]
+ * (data.h's gunfuncBitIndex), since this weapon's own number is past the
+ * array's stock range. WEAPONFLAG3_FREESHOTS, which makes the Moonraker never
  * run out, is deliberately not copied.
  */
 struct invaimsettings invaimsettings_raillaser = {
@@ -4367,6 +4373,31 @@ struct weaponfunc_shootsingle invfunc_raillaser_charge = {
 	1, // penetration
 };
 
+// The scope is a full firing-function clone, the AR34's pattern (invfunc_ar34_usescope):
+// selecting it is what makes bondmove.c wind the view in, and the charged shot still
+// fires while scoped. Its name is installed as port text by raillaserInit().
+struct weaponfunc_shootsingle invfunc_raillaser_usescope = {
+	INVENTORYFUNCTYPE_SHOOT_SINGLE,
+	L_GUN_132, // name: replaced by "Use Scope" in raillaserInit()
+	0, // unused
+	0, // ammoindex: invammo_raillaser
+	&invnoisesettings_default,
+	NULL, // fire animation: the borrowed model has none, as the primary's note says
+	0, // flags
+	&invrecoilsettings_default,
+	0, // recoverytime60
+	100, // damage
+	0, // spread
+	6, 18, 24, -1,
+	0, // recoildist
+	0, // recoilangle
+	0, // slidemax
+	0, // impactforce
+	3, // duration60
+	SFX_805B, // shootsound: the Mauler's charged shot
+	1, // penetration
+};
+
 struct weapon invitem_raillaser = {
 	FILE_GLASER, // hi model: the Moonraker's, until its own is loaded (geraillaser.c)
 	FILE_GLASERLOD, // lo model: ditto
@@ -4374,7 +4405,7 @@ struct weapon invitem_raillaser = {
 	invanim_laser_unequip, // unequip animation
 	NULL, // pritosec animation
 	NULL, // sectopri animation
-	{ &invfunc_raillaser_charge, NULL }, // functions
+	{ &invfunc_raillaser_charge, &invfunc_raillaser_usescope }, // functions
 	&invammo_raillaser, // pri ammo
 	NULL, // sec ammo
 	&invaimsettings_raillaser,
@@ -4395,9 +4426,14 @@ struct weapon invitem_raillaser = {
 	L_GUN_047, // name: ditto
 	L_GUN_150, // manufacturer: the Moonraker's
 	L_GUN_189, // description: the Moonraker's
-	// The Moonraker's flags, less AICANUSE, because no simulant has the charge
-	// logic a Rail-Laser needs, and WEAPONFLAG2_NORELOADSOUND and
-	// WEAPONFLAG3_FREESHOTS, because it does reload and it does run out. Plus the
+	// The Moonraker's flags, AICANUSE with them: it is the seam the third-person
+	// animations read, so without it a simulant - or Jo seen from behind - holds
+	// this gun in bare hands (playerChooseThirdPersonAnimation, player.c). The
+	// charge is a separate matter from the flag, and is bot.c's own, since a
+	// simulant's charge is its own state (aibot->maulercharge[]) rather than the
+	// player's hand->matmot1. WEAPONFLAG2_NORELOADSOUND and
+	// WEAPONFLAG3_FREESHOTS are off for the same reason as ever, because it does
+	// reload and it does run out. Plus the
 	// Mauler's CHARGEABLE, which is read in one place - the shot's voice is
 	// pitched down by hand->matmot1, the field this gun's charge fills - and
 	// which must not be taken for the Mauler's charge beam: that is
@@ -4424,12 +4460,549 @@ struct weapon invitem_raillaser = {
 	// why the release's mesh looked like it was inside the arm. Every two-handed row
 	// is one without this flag and without DUALFLIP, which is what makes them
 	// centred and never mirrored.
-	WEAPONFLAG_00000040 | WEAPONFLAG_TRACKTIMEUSED | WEAPONFLAG_00000400 | WEAPONFLAG_00002000 | WEAPONFLAG_00008000 | WEAPONFLAG_HASHANDS | WEAPONFLAG_DONTCOUNTSHOTS | WEAPONFLAG_04000000,
-	WEAPONFLAG2_NOWALLHIT | WEAPONFLAG2_LASERHIT | WEAPONFLAG2_LASERBEAM | WEAPONFLAG2_CROSSBEAM | WEAPONFLAG2_LASERFLIGHT | WEAPONFLAG2_BOTLIMITLESS | WEAPONFLAG2_CHARGEABLE, // flags2
+	WEAPONFLAG_AICANUSE | WEAPONFLAG_00000040 | WEAPONFLAG_TRACKTIMEUSED | WEAPONFLAG_00000400 | WEAPONFLAG_00002000 | WEAPONFLAG_00008000 | WEAPONFLAG_HASHANDS | WEAPONFLAG_DONTCOUNTSHOTS | WEAPONFLAG_04000000,
+	// No BOTLIMITLESS, which is on the Moonraker's row: that flag is how bot.c
+	// keeps a simulant's laser clip at 999 (its own line in botConsiderFire), and
+	// this gun has a magazine of one out of a reserve of five and reloads between
+	// them, so a simulant with it is out of ammunition like anyone else.
+	WEAPONFLAG2_NOWALLHIT | WEAPONFLAG2_LASERHIT | WEAPONFLAG2_LASERBEAM | WEAPONFLAG2_CROSSBEAM | WEAPONFLAG2_LASERFLIGHT | WEAPONFLAG2_CHARGEABLE, // flags2
 	0, // unequipped reload index
 	SFX_PICKUP_LASER, // pickup sound: the Moonraker's, until it has its own
 	WEAPONFLAG3_CHRSHOTBEAM, // flags3
 };
+
+/**
+ * The Bowcaster (WEAPON_BOWCASTER): a crossbow in the hand that fires a
+ * bouncing plasma bolt instead of a bolt that sticks in the wall and lies
+ * there as a collectible. It stands on the crossbow's model, animations and
+ * parts, and weaponHost() sends every number-keyed test to the crossbow; the
+ * bolt it fires has a number of its own so the three WEAPON_BOLT behaviours
+ * (boltLand's embed, the ammo pickup, the embedded-bolt wobble) cannot fire.
+ *
+ * The projectile is POWERED so it flies straight instead of arcing to the
+ * floor, with a high reflectangle for a direct bounce and a three second life
+ * after which its own weaponTick branch frees it. The bolt's beam trail is
+ * made in bgun0f09ebcc() alongside the crossbow's.
+ */
+struct inventory_ammo invammo_bowcaster = {
+	AMMOTYPE_BOWCASTER,
+	CASING_NONE,
+	30, // clip size: ten bolts per reload cycle, three cycles to fill
+	invanim_crossbow_reload,
+	AMMOFLAG_INCREMENTALRELOAD,
+};
+
+struct weaponfunc_shootprojectile invfunc_bowcaster_shoot = {
+	INVENTORYFUNCTYPE_SHOOT_PROJECTILE,
+	L_GUN_033, // name: the crossbow's, until a port text of its own
+	0, // unused
+	0, // ammoindex: invammo_bowcaster
+	&invnoisesettings_silenced,
+	invanim_crossbow_shoot,
+	// POWERED avoids gravity; no trajectory assist (a straight bolt) and no
+	// dizzy on impact. NOMUZZLEFLASH is the crossbow's.
+	FUNCFLAG_PROJECTILE_POWERED | FUNCFLAG_NOMUZZLEFLASH,
+	NULL,
+	0, // recoverytime60
+	1, // damage
+	6, // spread
+	3, 12, 15, 0,
+	3,
+	2,
+	0,
+	4,
+	4,
+	SFX_8056, // shootsound: the crossbow's release
+	1,
+	MODEL_CHRFLASHBANG, // projectilemodelnum: a ball, but drawn almost invisible
+	0, // unused
+	0.01, // scale: hide the model entirely - the glow beam and sparks are the shot
+	0, // speed: no continuous acceleration, a steady flight
+	0, // unk50
+	20, // traveldist: about 330 units a second, visible but quicker
+	180, // timer60: three seconds (the field counts 60ths)
+	0.9, // reflectangle: restitution, a near-perfect bounce
+	SFX_8043, // soundnum: the Laser's pulse, as the bolt's flight voice
+};
+
+/**
+ * The Bowcaster's secondary (rapid burst): the same powered plasma bolt as the
+ * primary, but a three-round burst and a faster flight. FUNCFLAG_BURST3 is the
+ * Magsec's pattern - bondgun.c fires the three rounds a few ticks apart and
+ * then plays this function's recovery before the next burst. There is no extra
+ * cooldown past that recovery for now, so the mode can be tested for balance
+ * before a lockout is added.
+ */
+struct weaponfunc_shootprojectile invfunc_bowcaster_burst = {
+	INVENTORYFUNCTYPE_SHOOT_PROJECTILE,
+	L_GUN_033, // name: the crossbow's, until a port text of its own
+	0, // unused
+	0, // ammoindex: invammo_bowcaster
+	&invnoisesettings_silenced,
+	invanim_crossbow_shoot,
+	// As the primary, plus BURST3 for the three-round burst.
+	FUNCFLAG_PROJECTILE_POWERED | FUNCFLAG_NOMUZZLEFLASH | FUNCFLAG_BURST3,
+	NULL,
+	16, // recoverytime60: the Magsec burst's recovery between bursts
+	1, // damage
+	6, // spread
+	3, 12, 15, 0,
+	3,
+	2,
+	0,
+	4,
+	4,
+	SFX_8056, // shootsound: the crossbow's release
+	1,
+	MODEL_CHRFLASHBANG, // projectilemodelnum: a ball, but drawn almost invisible
+	0, // unused
+	0.01, // scale: hide the model entirely - the glow beam and sparks are the shot
+	0, // speed: no continuous acceleration, a steady flight
+	0, // unk50
+	30, // traveldist: the burst bolt's own faster flight, against the primary's 20
+	180, // timer60: three seconds (the field counts 60ths)
+	0.9, // reflectangle: restitution, a near-perfect bounce
+	SFX_8043, // soundnum: the Laser's pulse, as the bolt's flight voice
+};
+
+struct weapon invitem_bowcaster = {
+	FILE_GCROSSBOW, // hi model: the crossbow's
+	FILE_GCROSSBOWLOD,
+	invanim_crosbow_equip,
+	invanim_crossbow_unequip,
+	NULL, // pritosec
+	NULL, // sectopri
+	{ &invfunc_bowcaster_shoot, &invfunc_bowcaster_burst }, // functions
+	&invammo_bowcaster, // pri ammo
+	NULL, // sec ammo
+	&invaimsettings_default,
+	1, // muzzlez
+	11, // posx
+	-15, // posy
+	-21, // posz
+	1, // sway
+	gunviscmds_crossbow,
+	invpartvisibility_crossbow,
+	L_GUN_033, // short name
+	L_GUN_033, // name
+	L_GUN_000, // manufacturer
+	L_GUN_180, // description: the crossbow's, until one of its own
+	// The crossbow's flags, AICANUSE with the rest of them. It is the seam the
+	// third-person animations read - playerChooseThirdPersonAnimation (player.c)
+	// falls back to WIELDMODE_UNARMED without it, and chraction.c picks its
+	// firing poses the same way - so a gun that lacks it is carried in bare
+	// hands by anyone seen from behind, simulant included. The reason it was
+	// left off was the preference table, which was indexed by weapon number and
+	// ended before this appended one; that bound now follows the enum
+	// (BOTINV_MAX_WEAPONPREFS, constants.h), and what a simulant makes of this
+	// gun is decided there rather than by a flag.
+	WEAPONFLAG_ONEHANDED | WEAPONFLAG_AICANUSE | WEAPONFLAG_00000040 | WEAPONFLAG_TRACKTIMEUSED | WEAPONFLAG_00002000 | WEAPONFLAG_HASHANDS,
+	WEAPONFLAG2_UNEQUIPPEDRELOAD, // flags2
+	0, // unequipped reload index
+};
+
+struct weapon invitem_bowcasterbolt = {
+	FILE_GCYCLONE, // hi model: the bolt's, as invitem_bolt
+	FILE_GCYCLONELOD,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	{ &invfunc_bowcaster_shoot, NULL }, // functions
+	&invammo_default, // pri ammo
+	NULL,
+	&invaimsettings_default,
+	1, // muzzlez
+	12.5, // posx
+	-17, // posy
+	-27.5, // posz
+	1, // sway
+	NULL,
+	NULL,
+	L_GUN_048, // short name
+	L_GUN_048, // name
+	L_GUN_000,
+	L_GUN_000,
+	0, // flags
+	// Deliberately no STICKSTOWALL or BLADEHIT: this bolt never embeds and is
+	// never picked up as ammo. Its own weaponTick branch frees it instead.
+	WEAPONFLAG2_PICKUPSINGLE | WEAPONFLAG2_NOPICKUPINFLIGHT, // flags2
+};
+
+/**
+ * Give the Bowcaster its own name in the weapon menus, and its two firing modes
+ * names of their own. The definitions above have to carry a constant language
+ * ID, so the port text is installed once at startup the way the scenario names
+ * are (scenarios.c's instaInitNames). Both firing functions are crossbow copies
+ * that carry L_GUN_033, so without this the primary and the burst show the same
+ * crossbow label and switching to the burst looks like nothing happened.
+ */
+void bowcasterInitNames(void)
+{
+	static bool done = false;
+	u16 name;
+
+	// No bare `return` here: commands.h (pulled in by chraicommands.h)
+	// redefines it as an AI-script macro in this file.
+	if (!done) {
+		done = true;
+
+		name = langAddPortText("Bowcaster\n");
+		g_Weapons[WEAPON_BOWCASTER]->name = name;
+		g_Weapons[WEAPON_BOWCASTER]->shortname = name;
+		g_Weapons[WEAPON_BOWCASTERBOLT]->name = name;
+		g_Weapons[WEAPON_BOWCASTERBOLT]->shortname = name;
+
+		// The two firing modes, shown as the mode label when the alt button
+		// switches between them.
+		invfunc_bowcaster_shoot.base.base.name = langAddPortText("Pulse\n");
+		invfunc_bowcaster_burst.base.base.name = langAddPortText("Burst\n");
+	}
+}
+
+/*
+ * The Shock Rifle (WEAPON_SHOCKRIFLE): this fork's third own gun, and the
+ * first whose two firing modes are a *combination* rather than two versions of
+ * one shot. The primary is an instant-hit plasma beam; the secondary lobs a
+ * large, slow, bouncing orb, and a beam that reaches an orb already in the air
+ * detonates it. That last part is stage 3 of the plan (docs: the Shock Rifle
+ * plan in the knowledge panel); until it lands the two modes are independent.
+ *
+ * The primary is a plain INVENTORYFUNCTYPE_SHOOT_SINGLE, which is what makes it
+ * cheap: every gun of that type is resolved by one trace from the camera
+ * (shotCreate -> shotCalculateHits, prop.c), so the beam needs no projectile and
+ * no custom damage code at all, and gets net lag compensation and shot stats
+ * with it. Its damage is a fixed 1.5, so it needs no charge gate either - the
+ * Rail-Laser's charge is what makes that gun slow to fire, and this one is meant
+ * to answer instantly.
+ *
+ * The orb reuses the Bowcaster bolt's flight (POWERED so it does not arc, a high
+ * reflectangle so it keeps bouncing, its own weapon number so it is never a
+ * collectible) but is a real, scaled model rather than the bolt's near-invisible
+ * stand-in: it has to be big enough to be a target, both to the eye and to the
+ * shot trace that will detonate it. It deliberately does NOT carry
+ * WEAPONFLAG2_EXPLODESWHENSHOT: that flag is the engine's "any bullet detonates
+ * me", and the design says only this gun's own beam sets it off (plus blasts,
+ * which is a separate branch). Putting it on here would make every stray round
+ * in an arena pop every orb.
+ *
+ * The AR34 is the borrowed body: a rifle with a real reload animation and a
+ * muzzle-flash part, which is more of a picture for a rifle than the Moonraker
+ * the Rail-Laser stands on, and whose hitscan rows are the closest neighbours.
+ * Its pose offsets, gun-visibility commands and part visibility come with it, so
+ * the gun sits in the hand the way the AR34 does. A simulant can be handed it:
+ * the preference table has a row for it (botinv.c), and the flag the third-person
+ * animations read is the AR34's, so a simulant holds it as a gun.
+ */
+struct invaimsettings invaimsettings_shockrifle = {
+	20, // the AR34's zoom figure; unused without INVAIMFLAG_MANUALZOOM
+	3,
+	8,
+	15,
+	0.9721,
+	0.9767,
+	SIGHTTRACKTYPE_DEFAULT,
+	5,
+	INVAIMFLAG_AUTOAIM | INVAIMFLAG_ACCURATESINGLESHOT,
+};
+
+struct inventory_ammo invammo_shockrifle = {
+	AMMOTYPE_SHOCK,
+	CASING_NONE,
+	50, // clip size: half the carry cap, so a refill is two crates' worth
+	invanim_ar34_reload, // the borrowed model's own reload (invitem_ar34)
+	0, // flags
+};
+
+struct weaponfunc_shootsingle invfunc_shockrifle_beam = {
+	INVENTORYFUNCTYPE_SHOOT_SINGLE,
+	L_GUN_016, // name: the AR34's, until shockInitNames() installs "Beam"
+	0, // unused
+	0, // ammoindex: invammo_shockrifle
+	&invnoisesettings_default,
+	NULL, // fire animation: the AR34's own firing function names none either, and
+		// the shot's picture is the model's muzzle-flash part plus the tracer
+	0, // flags: a muzzle flash is wanted here, so no FUNCFLAG_NOMUZZLEFLASH
+	&invrecoilsettings_default,
+	20, // recoverytime60: the Magnum's, and with the 8 + 16 below it the beam
+		// waits 44 ticks (0.73s) between shots, the Magnum's own cadence. The
+		// first press still answers at once, but unk27 = -1 takes away the quick
+		// re-press a tap used to get, so tapping and holding repeat at the same
+		// rate - and this hitscan, zero-spread shot no longer outpaces the
+		// Magnum whose pace it borrowed.
+	1.5, // damage: a hair under the K7's 1.5 per shot... at it, in fact, and
+		// between the Magsec's 1.1 and the AR34's 1.4 per-round burst damage
+	0, // spread: a beam goes exactly where the crosshair is
+	8, 16, 0, -1,
+	6, // recoildist
+	2, // recoilangle
+	0, // slidemax
+	0, // impactforce
+	3, // duration60
+	SFX_8043, // shootsound: the Moonraker's pulse, the tree's plasma-voice
+	1, // penetration
+};
+
+struct weaponfunc_shootprojectile invfunc_shockrifle_ball = {
+	INVENTORYFUNCTYPE_SHOOT_PROJECTILE,
+	L_GUN_016, // name: replaced by "Orb" in shockInitNames()
+	0, // unused
+	0, // ammoindex: invammo_shockrifle
+	&invnoisesettings_silenced,
+	NULL, // fire animation: as the primary's
+	// POWERED so the orb flies flat instead of arcing to the floor within a
+	// metre, and NOMUZZLEFLASH because the muzzle flash belongs to the beam.
+	FUNCFLAG_PROJECTILE_POWERED | FUNCFLAG_NOMUZZLEFLASH,
+	NULL,
+	0, // recoverytime60
+	2.5, // damage: on a direct hit, applied by the orb's own chr-hit branch
+		// (stage 2). Above the Callisto's high-impact 2.4: a slow, aimable shot
+	0, // spread
+	3, 12, 15, 0,
+	3,
+	2,
+	0,
+	4,
+	4,
+	SFX_8073, // shootsound: the Devastator's grenade launch, a lobbed shot's voice
+	1, // penetration
+	MODEL_CHRGRENADE, // projectilemodelnum: an orb that exists. Loaded by
+		// modelmgrLoadProjectileModeldefs() from this row the way the Rocket
+		// Launcher's MODEL_CHRDYROCKETMIS is, so a placed gun brings its own shot
+	0, // unused
+	1.2, // scale: large. The bolt's 0.01 hid its model on purpose; this one is the
+		// shot's picture, and objTestHit() hit-tests these boxes, so a small mesh
+		// would be a beam that passes through the orb
+	0, // speed: no continuous acceleration, a steady flight
+	0, // unk50
+	8, // traveldist: slow against the Bolt's 20 (about 130 units a second), so the
+		// orb hangs in the air long enough to be shot at
+	300, // timer60: five seconds, then its own weaponTick branch frees it
+	0.9, // reflectangle: restitution, a near-perfect bounce off surfaces
+	SFX_8043, // soundnum: the Laser's pulse, as the orb's flight voice
+};
+
+struct weapon invitem_shockrifle = {
+	FILE_GAR34, // hi model: the AR34's, until it has one of its own
+	FILE_GAR34LOD,
+	invanim_ar34_reload, // equip animation: as the AR34's own row
+	NULL, // unequip animation: as the AR34's own row
+	NULL, // pritosec
+	NULL, // sectopri
+	{ &invfunc_shockrifle_beam, &invfunc_shockrifle_ball }, // functions
+	&invammo_shockrifle, // pri ammo
+	NULL, // sec ammo
+	&invaimsettings_shockrifle,
+	1, // muzzlez
+	11.5, // posx: the AR34's pose, which is what the model above is posed for
+	-25.7, // posy
+	-30.5, // posz
+	1, // sway
+	gunviscmds_ar34,
+	invpartvisibility_ar34,
+	L_GUN_016, // short name
+	L_GUN_016, // name
+	L_GUN_000, // manufacturer
+	L_GUN_165, // description: the AR34's, until one of its own
+	// The AR34's flags, AICANUSE with them for the same reason the Bowcaster
+	// carries it: it is what the third-person animation reads, and without it the
+	// gun is held in bare hands. Whether a simulant wants the gun at all is the
+	// preference table's decision (its row for WEAPON_SHOCKRIFLE, botinv.c).
+	WEAPONFLAG_AICANUSE | WEAPONFLAG_00000040 | WEAPONFLAG_TRACKTIMEUSED | WEAPONFLAG_00000400 | WEAPONFLAG_00002000 | WEAPONFLAG_00004000 | WEAPONFLAG_HASHANDS | WEAPONFLAG_DETERMINER_S_AN | WEAPONFLAG_DETERMINER_F_AN | WEAPONFLAG_04000000,
+	// The beam's look: NOWALLHIT keeps the shot from also marking the wall behind
+	// what it hit, and the LASER set is what draws a beam rather than a bullet
+	// tracer (weaponHasFlag2, gunfx.c's beamRender).
+	WEAPONFLAG2_NOWALLHIT | WEAPONFLAG2_LASERHIT | WEAPONFLAG2_LASERBEAM | WEAPONFLAG2_CROSSBEAM | WEAPONFLAG2_LASERFLIGHT,
+	0, // unequipped reload index
+	SFX_PICKUP_LASER, // pickupsound
+	WEAPONFLAG3_CHRSHOTBEAM, // flags3: without this, other players see no tracer
+};
+
+struct weapon invitem_shockorb = {
+	FILE_GCYCLONE, // hi model: the dropped-item stand-in, as the Bolt's
+	FILE_GCYCLONELOD,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	{ &invfunc_shockrifle_ball, NULL }, // functions
+	&invammo_default, // pri ammo
+	NULL,
+	&invaimsettings_default,
+	1, // muzzlez
+	12.5, // posx
+	-17, // posy
+	-27.5, // posz
+	1, // sway
+	NULL,
+	NULL,
+	L_GUN_048, // short name
+	L_GUN_048, // name
+	L_GUN_000,
+	L_GUN_000,
+	0, // flags
+	// Deliberately no STICKSTOWALL or BLADEHIT, as the Bolt: this orb never
+	// embeds and is never picked up as ammo. And deliberately no
+	// WEAPONFLAG2_EXPLODESWHENSHOT, which the Rocket Launcher's rounds carry -
+	// that flag is "any bullet sets me off", and only this gun's beam is meant
+	// to. Its own weaponTick branch frees it when it times out.
+	WEAPONFLAG2_PICKUPSINGLE | WEAPONFLAG2_NOPICKUPINFLIGHT, // flags2
+};
+
+/**
+ * Give the Shock Rifle its own name in the weapon menus, and its two firing
+ * modes names of their own - the same job bowcasterInitNames() does, for the
+ * same reason: the rows above have to carry a constant language id, so the port
+ * text goes in once at startup (scenarios.c's instaInitNames pattern). Both
+ * borrowed their model's gun name, so without this the two modes would show as
+ * one AR34 label and switching between them would look like nothing happened.
+ */
+void shockInitNames(void)
+{
+	static bool done = false;
+	u16 name;
+
+	// No bare `return` here: commands.h redefines it as an AI-script macro.
+	if (!done) {
+		done = true;
+
+		name = langAddPortText("Shock Rifle\n");
+		g_Weapons[WEAPON_SHOCKRIFLE]->name = name;
+		g_Weapons[WEAPON_SHOCKRIFLE]->shortname = name;
+		g_Weapons[WEAPON_SHOCKORB]->name = name;
+		g_Weapons[WEAPON_SHOCKORB]->shortname = name;
+
+		invfunc_shockrifle_beam.base.base.name = langAddPortText("Beam\n");
+		invfunc_shockrifle_ball.base.base.name = langAddPortText("Orb\n");
+	}
+}
+
+/**
+ * The DB-Shotgun (WEAPON_GESHOTGUN): the GE shotgun's mesh fitted to the stock
+ * PD Shotgun's space, but no part of the GoldenEye release is needed to fire
+ * it. Its two functions are clones of the PD Shotgun's, with two deliberate
+ * differences. The secondary drops FUNCFLAG_BURST2: the engine's two-frame
+ * double would make two shots of six pellets, where this gun makes ONE shot of
+ * twelve. The number of pellets and the two-round price of that one shot are
+ * decided by port/src/dbshotgun.c (dbShotgunPellets/dbShotgunAmmoCost) from the
+ * clip still held when the trigger is pulled, so a full clip gives the full
+ * double and a single round gives the ordinary six-pellet blast. The ammo row
+ * is otherwise the PD Shotgun's with a two-round magazine, so the incremental
+ * reload still works one shell at a time.
+ *
+ * hi_model/lo_model are set at startup to the port alias PpdDbShotgunZ over
+ * FILE_GSHOTGUN (port/src/dbshotgun.c); FILE_GSHOTGUN here is only the fallback
+ * for the moment before that alias exists. The stock PD Shotgun's own row is
+ * untouched, so it keeps the stock model.
+ */
+
+struct weaponfunc_shootsingle invfunc_geshotgun_single = {
+	INVENTORYFUNCTYPE_SHOOT_SINGLE,
+	L_GUN_089, // name: replaced by "Single Blast" in dbShotgunInitNames
+	0, // unused
+	0, // ammoindex
+	&invnoisesettings_loudest,
+	invanim_shotgun_singleshot, // fire animation
+	0, // flags
+	&invrecoilsettings_default,
+	0, // recoverytime60
+	0.6, // damage
+	30, // spread
+	20, 28, 0, 0,
+	0, // recoildist
+	0, // recoilangle
+	0, // slidemax
+	4, // impactforce
+	0, // duration60
+	SFX_FIRE_SHOTGUN, // shootsound
+	1, // penetration
+};
+
+struct weaponfunc_shootsingle invfunc_geshotgun_double = {
+	INVENTORYFUNCTYPE_SHOOT_SINGLE,
+	L_GUN_105, // name: replaced by "Double Blast" in dbShotgunInitNames
+	0, // unused
+	0, // ammoindex
+	&invnoisesettings_loudest,
+	invanim_shotgun_doubleshot, // fire animation
+	// Deliberately no FUNCFLAG_BURST2: the PD Shotgun's double fires two bursts
+	// of six over two frames; this gun fires one shot, whose pellet count (12)
+	// and round price (2) are decided in port/src/dbshotgun.c.
+	0, // flags
+	&invrecoilsettings_default,
+	0, // recoverytime60
+	0.6, // damage
+	16, // spread
+	20, 28, 0, 0,
+	0, // recoildist
+	0, // recoilangle
+	0, // slidemax
+	4, // impactforce
+	0, // duration60
+	SFX_FIRE_SHOTGUN, // shootsound
+	1, // penetration
+};
+
+struct inventory_ammo invammo_geshotgun = {
+	AMMOTYPE_SHOTGUN,
+	CASING_SHOTGUN,
+	2, // clip size: the DB-Shotgun's two-round magazine, not the PD Shotgun's nine
+	invanim_shotgun_reload, // reload animation
+	AMMOFLAG_INCREMENTALRELOAD, // flags
+};
+
+struct weapon invitem_geshotgun = {
+	FILE_GSHOTGUN, // hi model: replaced by the PpdDbShotgunZ alias at startup
+	FILE_GSHOTGUN, // lo model: the alias serves both looks
+	invanim_shotgun_singleshot, // equip animation
+	NULL, // unequip animation
+	NULL, // pritosec animation
+	NULL, // sectopri animation
+	{ &invfunc_geshotgun_single, &invfunc_geshotgun_double }, // functions
+	&invammo_geshotgun, // pri ammo
+	NULL, // sec ammo
+	&invaimsettings_default,
+	1, // muzzlez
+	12, // posx
+	-16.7, // posy
+	-21, // posz
+	1, // sway
+	gunviscmds_shotgun, // gunviscmds
+	invpartvisibility_shotgun, // part visibility
+	L_GUN_025, // short name: replaced by "DB-Shotgun" in dbShotgunInitNames
+	L_GUN_025, // name: replaced by "DB-Shotgun" in dbShotgunInitNames
+	L_GUN_149, // manufacturer
+	L_GUN_173, // description
+	WEAPONFLAG_AICANUSE | WEAPONFLAG_00000040 | WEAPONFLAG_TRACKTIMEUSED | WEAPONFLAG_00000400 | WEAPONFLAG_00002000 | WEAPONFLAG_00004000 | WEAPONFLAG_HASHANDS,
+	WEAPONFLAG2_UNEQUIPPEDRELOAD | WEAPONFLAG2_PUMPACTION | WEAPONFLAG2_SHOTGUNDAMAGE | WEAPONFLAG2_PELLETS, // flags2
+	1, // unequipped reload index
+	0, // pickup sound
+	WEAPONFLAG3_SHOTGUNMODEL | WEAPONFLAG3_SHELLPARTS, // flags3
+};
+
+/**
+ * Give the DB-Shotgun its own display name (the ROM's "Shotgun" text is not
+ * reused) and its two functions their own names, the same way shock.c and
+ * bowcaster.c install port text. The rows above carry constant language ids,
+ * so the port text goes in once at startup from mpInit().
+ */
+void dbShotgunInitNames(void)
+{
+	static bool done = false;
+	u16 name;
+
+	// No bare `return` here: commands.h redefines it as an AI-script macro.
+	if (!done) {
+		done = true;
+
+		name = langAddPortText("DB-Shotgun\n");
+		g_Weapons[WEAPON_GESHOTGUN]->name = name;
+		g_Weapons[WEAPON_GESHOTGUN]->shortname = name;
+
+		invfunc_geshotgun_single.base.base.name = langAddPortText("Single Blast\n");
+		invfunc_geshotgun_double.base.base.name = langAddPortText("Double Blast\n");
+	}
+}
 #endif
 
 struct modelpartvisibility invpartvisibility_classic[] = {
@@ -6515,6 +7088,11 @@ struct weapon *g_Weapons[] = {
 	[WEAPON_LASER            ] = &invitem_laser,
 #ifndef PLATFORM_N64
 	[WEAPON_RAILLASER        ] = &invitem_raillaser,
+	[WEAPON_BOWCASTER        ] = &invitem_bowcaster,
+	[WEAPON_BOWCASTERBOLT    ] = &invitem_bowcasterbolt,
+	[WEAPON_SHOCKRIFLE       ] = &invitem_shockrifle,
+	[WEAPON_SHOCKORB         ] = &invitem_shockorb,
+	[WEAPON_GESHOTGUN        ] = &invitem_geshotgun,
 #endif
 	[WEAPON_GRENADE          ] = &invitem_grenade,
 	[WEAPON_NBOMB            ] = &invitem_nbomb,

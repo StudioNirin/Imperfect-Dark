@@ -51,6 +51,14 @@ bool raillaserCharging(f32 charge, s32 spent);
 bool weaponChargesLikeMauler(s32 weaponnum);
 
 /**
+ * Which firing function the charge belongs to - the Mauler's secondary, this
+ * gun's primary - or -1 for a gun that charges nothing. Every test for "is this
+ * press charging" asks this, the player's and a simulant's alike (bot.c), so the
+ * two guns cannot disagree about which press is whose.
+ */
+s32 weaponChargeFunction(s32 weaponnum);
+
+/**
  * The model a Rail-Laser lying on the floor, or held by a body, is drawn from:
  * its own model state where the release's Moonraker is on it, and `fallback`
  * where it is not. The Combat Simulator's weapon spots and the Randomizer's

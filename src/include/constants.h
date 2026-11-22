@@ -181,10 +181,11 @@ s32 langpackIsCjk(void);
 #define VIEWCOUNT()         PLAYERCOUNT()
 #endif
 
-// A GoldenEye gun keeps its host's choice of function (weaponHost()): the
-// saved bits run to WEAPON_COMBATBOOST
-#define VALIDWEAPON()       (weaponHost(g_Vars.currentplayer->gunctrl.weaponnum) >= WEAPON_UNARMED && weaponHost(g_Vars.currentplayer->gunctrl.weaponnum) <= WEAPON_COMBATBOOST)
-#define FUNCISSEC()         (VALIDWEAPON() && (g_PlayerConfigsArray[g_Vars.currentplayerstats->mpindex].gunfuncs[(weaponHost(g_Vars.currentplayer->gunctrl.weaponnum) - 1) >> 3] & (1 << ((weaponHost(g_Vars.currentplayer->gunctrl.weaponnum) - 1) & 7))))
+// A GoldenEye gun keeps its host's choice of function (weaponHost()). The
+// Moonrailer hosts itself past the saved stock range, so its choice uses a
+// spare bit; gunfuncBitIndex() (data.h) maps a weapon to that bit or -1.
+#define VALIDWEAPON()       (gunfuncBitIndex(g_Vars.currentplayer->gunctrl.weaponnum) >= 0)
+#define FUNCISSEC()         (gunfuncBitIndex(g_Vars.currentplayer->gunctrl.weaponnum) >= 0 && (g_PlayerConfigsArray[g_Vars.currentplayerstats->mpindex].gunfuncs[gunfuncBitIndex(g_Vars.currentplayer->gunctrl.weaponnum) >> 3] & (1 << (gunfuncBitIndex(g_Vars.currentplayer->gunctrl.weaponnum) & 7))))
 
 #ifndef PLATFORM_N64
 // Whether next/previous weapon stops at an inventory item: the guns below
@@ -395,10 +396,12 @@ s32 langpackIsCjk(void);
 #define AMMOTYPE_1F           0x1f
 #define AMMOTYPE_ECM_MINE     0x20
 #define AMMOTYPE_RAIL         0x21
+#define AMMOTYPE_BOWCASTER    0x22
+#define AMMOTYPE_SHOCK        0x23
 // Every ammo type the game can hold: g_AmmoTypes (bondgun.c), the player's
 // ammoheldarr (types.h) and the randomizer's carry-over copy (modrun.c) all
 // have to be this wide, and the _Static_assert by g_AmmoTypes says so
-#define NUM_AMMOTYPES         (AMMOTYPE_RAIL + 1)
+#define NUM_AMMOTYPES         (AMMOTYPE_SHOCK + 1)
 
 // GoldenEye's golden bullets (its AMMO_GGUN), which only its Golden Gun
 // fires, in the port. The dart row is GoldenEye's leftover AMMO_DARTS, which
@@ -2514,6 +2517,11 @@ s32 langpackIsCjk(void);
 // moves with the version, and a saved setup or a hard-coded 0x1e2 would be wrong
 // for one of the three builds.
 #define MODEL_PD_RAILLASER          (MODEL_GE_FIRST + NUM_GE_WEAPONS)
+// The next state is this fork's DB-Shotgun, on a port alias over the stock PD
+// Shotgun's file (port/src/dbshotgun.c) rather than anything in the GE release.
+// It is one past the Moonrailer's and still inside GoldenEye's walked range but
+// outside every bound that asks whether an index is one of GoldenEye's guns.
+#define MODEL_PD_GESHOTGUN          (MODEL_PD_RAILLASER + 1)
 // And from a fixed number whatever the version, so a setup file can name
 // them: the GoldenEye remake's prop models, GoldenEye's model number plus
 // this, filled for a stage by its mod's `models` block (modloader.c). Room for
@@ -3380,6 +3388,9 @@ s32 langpackIsCjk(void);
 #define MPSCENARIO_KINGOFTHEHILL    4
 #define MPSCENARIO_CAPTURETHECASE   5
 #define MPSCENARIO_INSTAGIB          6
+#define MPSCENARIO_LASTMANSTANDING   7
+#define MPSCENARIO_PLASMATEST        8
+#define MPSCENARIO_ZOMBIES           9
 
 // Every scenario the two tables in scenarios.c hold, in neither case in menu
 // order (the menu has its own order there). Anything that asks whether a
@@ -3387,7 +3398,7 @@ s32 langpackIsCjk(void);
 // clamp - counts with this rather than naming the last id, so a new mode is
 // not a guard to remember to widen. scenarios.c asserts both tables are this
 // wide.
-#define NUM_MPSCENARIOS             7
+#define NUM_MPSCENARIOS             10
 
 #define MPSETUPMENU_ADVSETUP 1
 #define MPSETUPMENU_GENERAL  2
@@ -3483,7 +3494,12 @@ s32 langpackIsCjk(void);
 // cartridges have: appended, so no saved index, saved set or match's RULES
 // moves, and past what the randomizer rolls like the two groups above it
 #define MPWEAPON_RAILLASER        (MPWEAPON_GE_SILVERPP7 + 3)
-#define NUM_MPWEAPONS             (MPWEAPON_RAILLASER + 1)
+#define MPWEAPON_BOWCASTER        (MPWEAPON_RAILLASER + 1)
+// and the Shock Rifle (WEAPON_SHOCKRIFLE), appended past it for the same reason
+#define MPWEAPON_SHOCKRIFLE       (MPWEAPON_BOWCASTER + 1)
+// and the DB-Shotgun (WEAPON_GESHOTGUN), the fourth of this fork's own rows
+#define MPWEAPON_GESHOTGUN        (MPWEAPON_SHOCKRIFLE + 1)
+#define NUM_MPWEAPONS             (MPWEAPON_GESHOTGUN + 1)
 #endif
 
 #ifndef PLATFORM_N64
@@ -5035,9 +5051,61 @@ enum weaponnum {
 	// only by the multiplayer and Combat Simulator paths - no stage's item
 	// table can name it, so no mission hands it out.
 	/*0x87*/ WEAPON_RAILLASER,
+	// This fork's second own gun (invitems.c): a crossbow in the hand that
+	// fires a bouncing plasma bolt instead of a sticking, collectible one.
+	// The Bowcaster hosts on the crossbow for everything the engine decides
+	// by number; the bolt fired has its own number so it neither embeds nor
+	// gets picked up as crossbow ammo. Appended, so no existing number moves.
+	/*0x88*/ WEAPON_BOWCASTER,
+	/*0x89*/ WEAPON_BOWCASTERBOLT,
+	// This fork's third own gun (invitems.c's invitem_shockrifle): a plasma
+	// rifle whose primary is an instant-hit beam and whose secondary lobs a
+	// large slow orb that bounces off walls. The two are a pair the way Unreal
+	// Tournament's Shock Rifle is: the beam detonates an orb already in the air.
+	// The primary borrows the Moonraker's model until it has one of its own, and
+	// the orb fired has its own number so it is neither a collectible nor a
+	// sticking bolt. Appended, so no existing number moves.
+	/*0x8A*/ WEAPON_SHOCKRIFLE,
+	/*0x8B*/ WEAPON_SHOCKORB,
+	// This fork's fourth own gun (invitems.c's invitem_geshotgun): the GE
+	// shotgun's mesh fitted to the stock PD Shotgun's space, fired as one gun
+	// with a two-round magazine. A primary single blast of six pellets and a
+	// secondary full double blast of twelve that spends both rounds, falling
+	// back to the single when only one round is left. It hosts itself and needs
+	// no GoldenEye release: its model is a port alias over FILE_GSHOTGUN, so the
+	// stock PD Shotgun keeps its own. Appended, so no existing number moves.
+	/*0x8C*/ WEAPON_GESHOTGUN,
 #endif
 	NUM_WEAPONS
 };
+
+/**
+ * How many rows a simulant's weapon-preference table has (botinv.c), which is
+ * also how many it may be asked for: the table is indexed by weapon number, by
+ * AIBOTPREF() in data.h and by the port's own importer (port/src/moddata.c).
+ *
+ * The length was a literal 128 for as long as nothing needed explaining above
+ * 127. GoldenEye's block escapes it because GoldenEye's rows have an array of
+ * their own and their own branch of AIBOTPREF(); this fork's own guns escape
+ * nothing, so asking what a simulant thinks of a Rail-Laser, a Bowcaster, a
+ * Bowcaster bolt, a Shock Rifle or a DB-Shotgun read past the end of a 128-row table - the
+ * thing its own source had already warned about ("@dangerous: Array overflow
+ * can occur if more weapons are added to the game without extending the
+ * preferences table", botinv.c). A simulant scores the guns on the floor to
+ * decide whether to walk over and pick one up, so a match reaches that read as
+ * soon as a player carrying one of these guns dies somewhere useful.
+ *
+ * Derived from the enum now, so the next gun appended cannot reopen it, and
+ * floored at the 128 it was: the ROM's importer clamps a mod's row count to
+ * this number, and the floor keeps a mod's rows at the numbers they were
+ * written for. Rows past the last real weapon are zero-filled, which is the
+ * right answer for a gun a simulant is not given anyway - no ammunition goals,
+ * no score - so the extra length costs a bot nothing it would have spent.
+ *
+ * Outside the PLATFORM_N64 guard with the enum it reads: data.h's declaration
+ * of the table is not inside it either.
+ */
+#define BOTINV_MAX_WEAPONPREFS (NUM_WEAPONS > 128 ? NUM_WEAPONS : 128)
 
 #ifndef PLATFORM_N64
 #define WEAPON_GE_FIRST WEAPON_GE_PP7
@@ -5435,6 +5503,13 @@ enum weaponnum {
 #define SPRINT_SPEED_MULT  1.5f
 #define SPRINT_RECOVERY60  TICKS(60)
 
+// Zombies: the infected's standing ground speed, sprint's own 1.5 as a
+// permanent base (the mode's threat is the chase, and the sprint's price is
+// a gun the infected do not carry). bondwalk.c stands the sprint multiplier
+// down for them so the two never stack into 2.25x, and bot.c gives the
+// infected simulants the same base through botCalculateMaxSpeed().
+#define ZOMBIE_SPEED_MULT  1.5f
+
 #define CROUCHMODE_HOLD 0   // hold the crouch buttons to keep crouching
 #define CROUCHMODE_ANALOG 1 // analog crouch like on n64
 #define CROUCHMODE_TOGGLE 2 // press the crouch buttons to toggle stance
@@ -5524,8 +5599,26 @@ enum weaponnum {
 // cannot hold it, the way a modded stage id cannot fit the 7-bit field either.
 #define MPSETUP_VERSION_SCENARIO16 7
 
+// File format version that stores the curated random weapon list with a bit
+// for the Bowcaster too (MPWEAPON_BOWCASTER). Like version 6's Rail-Laser bit,
+// the row appends one bit and moves every field after it, so an older file is
+// read at the width it was written at.
+#define MPSETUP_VERSION_BOWCASTER 8
+
+// File format version that stores the curated random weapon list with a bit
+// for the Shock Rifle too (MPWEAPON_SHOCKRIFLE). Like version 6's Rail-Laser
+// bit and version 8's Bowcaster bit, the row appends one bit and moves every
+// field after it, so an older file is read at the width it was written at.
+#define MPSETUP_VERSION_SHOCKRIFLE 9
+
+// File format version that stores a bit for the DB-Shotgun's row too
+// (MPWEAPON_GESHOTGUN). The fourth of this fork's appended rows, one more bit
+// and everything after it shifted; an older file is read at the width it was
+// written at and the row it cannot name reads back selected.
+#define MPSETUP_VERSION_GESHOTGUN 10
+
 // The newest format, which loses nothing of a live setup.
-#define MPSETUP_VERSION_LATEST MPSETUP_VERSION_SCENARIO16
+#define MPSETUP_VERSION_LATEST MPSETUP_VERSION_GESHOTGUN
 
 #endif
 

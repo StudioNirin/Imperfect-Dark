@@ -257,8 +257,20 @@ extern struct weapon g_GeWeaponDefs[NUM_GE_WEAPONS];
  */
 static inline s32 weaponHost(s32 weaponnum)
 {
-	return weaponnum >= WEAPON_GE_FIRST && weaponnum <= WEAPON_GE_TASER
-		? g_GeWeaponHosts[weaponnum - WEAPON_GE_FIRST] : weaponnum;
+	if (weaponnum >= WEAPON_GE_FIRST && weaponnum <= WEAPON_GE_TASER) {
+		return g_GeWeaponHosts[weaponnum - WEAPON_GE_FIRST];
+	}
+
+	// The Bowcaster is a crossbow that fires a plasma bolt. Hosting on the
+	// crossbow lets every number-keyed test inherit its behaviour (firing,
+	// AI, animations, inventory cycle); the bolt itself has its own number
+	// and hosts itself, so it does not stick to walls or get collected as
+	// crossbow ammo.
+	if (weaponnum == WEAPON_BOWCASTER) {
+		return WEAPON_CROSSBOW;
+	}
+
+	return weaponnum;
 }
 
 /**
@@ -291,10 +303,37 @@ static inline s32 weaponHost(s32 weaponnum)
  * is one past the last number that exists.
  */
 #define WEAPON_IS_FORK(weaponnum) ((weaponnum) >= WEAPON_GE_TASER + 1 && (weaponnum) < NUM_WEAPONS)
+
+/**
+ * Bit in g_PlayerConfigsArray[].gunfuncs[] holding a weapon's saved function
+ * choice: one bit per weapon number, so every weapon owns a distinct bit and a
+ * fork gun that hosts on another number (the Bowcaster on the crossbow) keeps a
+ * bit of its own instead of sharing its host's. The whole array is carried in
+ * netplay's RULES, so the choice travels there too. The array is sized from the
+ * weapon numbers it must cover (types.h's GUNFUNCS_BYTES). Returns -1 for a
+ * weapon with no function to choose (none, or past the roster).
+ */
+#define GUNFUNC_BIT_RAILLASER (WEAPON_RAILLASER)
+static inline s32 gunfuncBitIndex(s32 weaponnum)
+{
+	if (weaponnum >= WEAPON_UNARMED && weaponnum < NUM_WEAPONS) {
+		return weaponnum;
+	}
+
+	return -1;
+}
 #else
 #define weaponHost(weaponnum) (weaponnum)
 #define WEAPON_IS_GE(weaponnum) (false)
 #define WEAPON_IS_FORK(weaponnum) (false)
+static inline s32 gunfuncBitIndex(s32 weaponnum)
+{
+	if (weaponnum >= WEAPON_UNARMED && weaponnum < NUM_WEAPONS) {
+		return weaponnum;
+	}
+
+	return -1;
+}
 #endif
 extern u32 *g_TvCmdlists[TVCMDLIST_36 + 1];
 extern s16 g_AmmoTypeWeapons[AMMOTYPE_ECM_MINE + 1];
@@ -594,7 +633,9 @@ extern struct mppreset g_MpPresets[];
 extern u32 g_TeamColours[];
 extern u32 var80087ce4[];
 extern u8 g_BotCount;
-extern struct aibotweaponpreference g_AibotWeaponPreferences[128]; // BOTINV_MAX_WEAPONPREFS
+// One row per weapon number, including this fork's own guns: AIBOTPREF() below
+// indexes this by weapon number for anything that is not GoldenEye's
+extern struct aibotweaponpreference g_AibotWeaponPreferences[BOTINV_MAX_WEAPONPREFS];
 #ifndef PLATFORM_N64
 // A simulant's view of each of GoldenEye's guns, built from its host's row and
 // its own definition (geguns.c); AIBOTPREF() picks the row for a weapon number

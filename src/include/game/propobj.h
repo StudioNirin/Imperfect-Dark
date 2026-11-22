@@ -271,6 +271,7 @@ void weaponGetPickupText(char *buffer, s32 weaponnum, bool dual);
 void currentPlayerQueuePickupWeaponHudmsg(u32 weaponnum, bool dual);
 s32 propPickupByPlayer(struct prop *prop, bool showhudmsg);
 s32 objTestForPickup(struct prop *prop);
+void objTracePickupRefusal(struct prop *prop, const char *reason); // --pickup-trace
 bool func0f0899dc(struct prop *prop, struct coord *arg1, f32 *arg2, f32 *arg3);
 void modelFreeVertices(s32 vtxstoretype, struct model *model);
 struct prop *hatApplyToChr(struct hatobj *hat, struct chrdata *chr, struct modeldef *modeldef, struct prop *prop, struct model *model);

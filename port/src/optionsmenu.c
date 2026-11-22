@@ -3018,6 +3018,7 @@ struct modpreset {
 	s32 jumpheight;
 	s32 roll;
 	s32 melee;
+	s32 falconpunch;
 	s32 flinch;
 	s32 cameratilt;
 	s32 tiltforward;
@@ -3049,10 +3050,10 @@ struct modpreset {
 
 static const struct modpreset g_ModPresets[] = {
 	//  name              jump  roll              melee  flinch  tilt            fwd    sway  bodies  time  drawn  cod    shake  tranq  clean  smooth  enhance        vivid          black          ghost            splits  xblacut  glareclip  quickswap  nofog  glass  decal  sit    feed
-	{ "Custom",           0,    0,                0,     0,      0,              0,     0,    0,      0,    0,     0,     0,     0,     0,     0,      0,             0,             0,             0,               0,      0,       0,         0,         0,     0,     0,     0,     0              },
-	{ "Vanilla",          0,    MODROLL_OFF,      false, false,  MODTILT_OFF,    false, true, 0,      0,    64,    false, false, true,  false, false,  MODENHANCE_OFF, MODVIVID_OFF,  MODBLACK_OFF,  MODGHOST_OFF,    true,   true,    false,     false,     false, 0,     true,  false, KILLFEED_AUTO },
-	{ "Dab's Settings",   1,    MODROLL_EVERYONE, true,  true,   MODTILT_NORMAL, false, true, 128,    0,    64,    false, false, true,  true,  true,   MODENHANCE_2X, MODVIVID_LIGHT, MODBLACK_LIGHT, MODGHOST_OFF,    true,   true,    true,      true,      false, 50,    true,  true,  KILLFEED_ON   },
-	{ "Ghost Trials",     0,    MODROLL_OFF,      false, false,  MODTILT_OFF,    false, true, 0,      0,    64,    false, false, true,  false, false,  MODENHANCE_OFF, MODVIVID_OFF,  MODBLACK_OFF,  MODGHOST_RACE,   true,   true,    false,     false,     false, 0,     true,  false, KILLFEED_AUTO },
+	{ "Custom",           0,    0,                0,     0,      0,              0,     0,     0,    0,      0,    0,     0,     0,     0,     0,     0,      0,             0,             0,             0,               0,      0,       0,         0,         0,     0,     0,     0,     0              },
+	{ "Vanilla",          0,    MODROLL_OFF,      false, false,  false,        MODTILT_OFF,    false, true, 0,      0,    64,    false, false, true,  false, false,  MODENHANCE_OFF, MODVIVID_OFF,  MODBLACK_OFF,  MODGHOST_OFF,    true,   true,    false,     false,     false, 0,     true,  false, KILLFEED_AUTO },
+	{ "Dab's Settings",   1,    MODROLL_EVERYONE, true,  true,   true,          MODTILT_NORMAL, false, true, 128,    0,    64,    false, false, true,  true,  true,   MODENHANCE_2X, MODVIVID_LIGHT, MODBLACK_LIGHT, MODGHOST_OFF,    true,   true,    true,      true,      false, 50,    true,  true,  KILLFEED_ON   },
+	{ "Ghost Trials",     0,    MODROLL_OFF,      false, false,  false,        MODTILT_OFF,    false, true, 0,      0,    64,    false, false, true,  false, false,  MODENHANCE_OFF, MODVIVID_OFF,  MODBLACK_OFF,  MODGHOST_RACE,   true,   true,    false,     false,     false, 0,     true,  false, KILLFEED_AUTO },
 };
 
 static void menuhandlerModPresetApply(const struct modpreset *preset)
@@ -3063,6 +3064,7 @@ static void menuhandlerModPresetApply(const struct modpreset *preset)
 	g_ModOptions.jumpheight = preset->jumpheight;
 	g_ModOptions.roll = preset->roll;
 	g_ModOptions.melee = preset->melee;
+	g_ModOptions.falconpunch = preset->falconpunch;
 	g_ModOptions.flinch = preset->flinch;
 	g_ModOptions.cameratilt = preset->cameratilt;
 	g_ModOptions.tiltforward = preset->tiltforward;
@@ -3107,6 +3109,7 @@ static bool menuhandlerModPresetMatches(const struct modpreset *preset)
 	return g_ModOptions.jumpheight == preset->jumpheight
 		&& g_ModOptions.roll == preset->roll
 		&& g_ModOptions.melee == preset->melee
+		&& g_ModOptions.falconpunch == preset->falconpunch
 		&& g_ModOptions.flinch == preset->flinch
 		&& g_ModOptions.cameratilt == preset->cameratilt
 		&& g_ModOptions.tiltforward == preset->tiltforward
@@ -3208,6 +3211,7 @@ static void modEnhancementsCapture(struct modpreset *preset, s32 *extra)
 	preset->jumpheight = g_ModOptions.jumpheight;
 	preset->roll = g_ModOptions.roll;
 	preset->melee = g_ModOptions.melee;
+	preset->falconpunch = g_ModOptions.falconpunch;
 	preset->flinch = g_ModOptions.flinch;
 	preset->cameratilt = g_ModOptions.cameratilt;
 	preset->tiltforward = g_ModOptions.tiltforward;
@@ -4403,6 +4407,19 @@ static MenuItemHandlerResult menuhandlerModMelee(s32 operation, struct menuitem 
 		return g_ModOptions.melee;
 	case MENUOP_SET:
 		g_ModOptions.melee = data->checkbox.value;
+		break;
+	}
+
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerModFalconPunch(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GET:
+		return g_ModOptions.falconpunch;
+	case MENUOP_SET:
+		g_ModOptions.falconpunch = data->checkbox.value;
 		break;
 	}
 
@@ -5614,6 +5631,14 @@ struct menuitem g_ExtendedDabsModPlayerMenuItems[] = {
 		(uintptr_t)"Melee Combos",
 		0,
 		menuhandlerModMelee,
+	},
+	{
+		MENUITEMTYPE_CHECKBOX,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Falcon Punch",
+		0,
+		menuhandlerModFalconPunch,
 	},
 	{
 		MENUITEMTYPE_CHECKBOX,
@@ -8672,6 +8697,7 @@ static struct menuitem g_NetRoomRulesMenuItems[] = {
 	ROOMRULE(MENUITEMTYPE_DROPDOWN, "Jump For", menuhandlerModJumpFor),
 	ROOMRULE(MENUITEMTYPE_DROPDOWN, "Combat Roll", menuhandlerModRoll),
 	ROOMRULE(MENUITEMTYPE_CHECKBOX, "Melee Combos", menuhandlerModMelee),
+	ROOMRULE(MENUITEMTYPE_CHECKBOX, "Falcon Punch", menuhandlerModFalconPunch),
 	ROOMRULE(MENUITEMTYPE_CHECKBOX, "Flinch When Shot", menuhandlerModFlinch),
 	ROOMRULE(MENUITEMTYPE_CHECKBOX, "Skip Death Screen", menuhandlerModSkipDeathScreen),
 	ROOMRULE(MENUITEMTYPE_CHECKBOX, "Third Person", menuhandlerRoomThirdPerson),

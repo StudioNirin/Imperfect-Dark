@@ -63,10 +63,12 @@ _Static_assert(MODEL_GE_FIRST + NUM_GE_WEAPONS <= MODEL_REMAKE_FIRST,
 // range's end is what both of them depend on and the version moves the base.
 _Static_assert(MODEL_PD_RAILLASER < MODEL_REMAKE_FIRST,
 		"and this fork's own state, after GoldenEye's and before the remake's");
+_Static_assert(MODEL_PD_GESHOTGUN < MODEL_REMAKE_FIRST,
+		"and the DB-Shotgun's state, one past the Moonrailer's and still before the remake's");
 _Static_assert(MPWEAPON_GE_EXTRA1 - MPWEAPON_GE_FIRST == NUM_GE_GUNS
 		&& MPWEAPON_GE_SILVERPP7 - MPWEAPON_GE_EXTRA1 == NUM_GE_EXTRA
 		&& MPWEAPON_RAILLASER - MPWEAPON_GE_SILVERPP7 == NUM_GE_CHEATGUNS
-		&& NUM_MPWEAPONS - MPWEAPON_RAILLASER == 1 // this fork's Rail-Laser, appended past them
+		&& NUM_MPWEAPONS - MPWEAPON_RAILLASER == 4 // this fork's Rail-Laser, Bowcaster, Shock Rifle and DB-Shotgun, appended past them
 		&& WEAPON_GE_SILVERPP7 == WEAPON_GE_EXTRA4 + 1,
 		"a Combat Simulator row per GoldenEye gun, per hack's own pistol and per cheat gun, in weapon order, and the fork's own row past them");
 _Static_assert(NUM_WEAPONS <= WEAPON_MPLOCATION00, "a weapon number below the pads' (gunctrl's are s16)");
