@@ -109,7 +109,9 @@ struct menudialogdef g_PlasmaTagOptionsMenuDialog = {
 
 /**
  * Clear the weapon slots so no map pickup spawns - the Bowcaster is handed
- * out at spawn by playerSpawnWeapons(), like Instagib's Moonrailer.
+ * out at spawn by playerSpawnWeapons(), like Instagib's Moonrailer. Fast
+ * Movement comes on by default, as the mode's own page calls it a laser-tag
+ * speed (and the checkbox stays a checkbox: the owner can turn it off).
  */
 void plasmaTagInit(void)
 {
@@ -118,6 +120,8 @@ void plasmaTagInit(void)
 	for (i = 0; i < NUM_MPWEAPONSLOTS; i++) {
 		g_MpSetup.weapons[i] = MPWEAPON_NONE;
 	}
+
+	g_MpSetup.options |= MPOPTION_FASTMOVEMENT;
 }
 
 /**

@@ -13,6 +13,7 @@
 #include "game/playermgr.h"
 #include "game/bg.h"
 #include "game/mplayer/setup.h"
+#include "game/modrules.h"
 #include "game/mplayer/scenarios.h"
 #include "game/radar.h"
 #include "game/bot.h"
@@ -1567,6 +1568,12 @@ f32 botCalculateMaxSpeed(struct chrdata *chr)
 
 #ifndef PLATFORM_N64
 	speed *= botGetStatScale(chr, BOTSTAT_SPEED);
+
+	// Fast Movement: the same multiplier bondwalk.c gives the players, so a
+	// simulant runs at its players' pace in a match that has it on.
+	if (g_Vars.normmplayerisrunning && (g_MpSetup.options & MPOPTION_FASTMOVEMENT)) {
+		speed *= g_ModFastMoveScale;
+	}
 
 	// Zombies: the infected sims chase at the survivors' sprint speed as
 	// their base, the same half again bondwalk.c gives the infected players.
