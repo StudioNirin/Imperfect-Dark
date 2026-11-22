@@ -637,6 +637,8 @@ static s32 netEvWeaponBeam(s32 weaponnum)
 	case WEAPON_DMC:
 	case WEAPON_AR53:
 	case WEAPON_RCP45:
+	case WEAPON_RAILLASER:
+	case WEAPON_SHOCKRIFLE:
 		return 1;
 	}
 
