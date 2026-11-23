@@ -31,6 +31,9 @@
 #            land on the stock four-player tier, completions[3] not [5]; the
 #            human count travels in MATCH_END so a challenge's sims (players
 #            in PLAYERCOUNT) cannot inflate the client's tier
+#   joinopen a join-in-progress room reserves four seats for its two humans;
+#            the empty seats are out of play and must NOT tick the four-star
+#            record. The tier counts joined humans, not reserved seats.
 #   sims     a challenge with built-in simulants (entry 14, eight in its ROM
 #            config): the host turns on those the difficulty table enables
 #            for two humans, so the match plays with allies and enemies - the
@@ -46,13 +49,13 @@
 #   netchallengetest.sh [BIN]   BIN a file name in build/ (pd.x86_64) or a path
 #
 # Env: OUT (build/netchallenge-out), PORT (27700),
-#      CASES (won notwon cheated clamped plain)
+#      CASES (won notwon cheated clamped joinopen sims plus plain)
 # Exit status: 0 all good, 1 a check failed, 2 a run failed to start.
 set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 BUILD=${BUILD:-$ROOT/build}
 OUT=${OUT:-$BUILD/netchallenge-out}; PORT=${PORT:-27700}
-CASES=${CASES:-won notwon cheated clamped sims plus plain}
+CASES=${CASES:-won notwon cheated clamped joinopen sims plus plain}
 BIN=${1:-pd.x86_64}
 case $BIN in /*) ;; */*) BIN=$(realpath "$BIN") ;; *) BIN=$BUILD/$BIN ;; esac
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
@@ -158,6 +161,18 @@ clamped)
 	check "$H" "net: challenge 0 \(.*\): won at 4 players, completions\[3\] now 3$" "clamped: six humans took the four-player tier"
 	check "$C" "net: challenge 0: the host's verdict marked this machine's record at 4 players, completions\[3\] now 3$" "clamped: the client ticked the same human tier, not its sim-inflated player count"
 	;;
+joinopen)
+	# A join-in-progress room reserves every seat: two humans sit in a four
+	# seat room, the empty two go out of play. They are not players, so the
+	# record must tick the two-player tier, not the four-star one.
+	run_case joinopen --net-test-challenge 0 --net-test-join-in-progress
+	check "$H" "net: match humans 2 of 4 seats" \
+		"joinopen: the host counted two humans in four reserved seats"
+	check "$H" "net: challenge 0 \(.*\): won at 2 players, completions\[1\] now 3$" \
+		"joinopen: the host ticked the two-player tier, not the four-star one"
+	check "$C" "net: challenge 0: the host's verdict marked this machine's record at 2 players, completions\[1\] now 3$" \
+		"joinopen: the client ticked the same human tier"
+	;;
 sims)
 	# the challenge's sims play for real, so give the host a decisive score to
 	# make team 0 (which every player and sim shares) top the ranking - without
@@ -232,11 +247,23 @@ fi
 NS=$ROOT/port/src/net/netsession.c
 if grep -q 'tier = s_MatchHumans;' "$NS" \
 		&& ! grep -q 'tier = s_End.numplayers;' "$NS" \
-		&& grep -q 'challengeSetSimulantsForNumPlayers(numplayers);' "$NS" \
-		&& [ "$(grep -c 'challengeSetSimulantsForNumPlayers(numplayers);' "$NS")" = 1 ]; then
+		&& grep -q 'challengeSetSimulantsForNumPlayers(s_MatchHumans);' "$NS" \
+		&& [ "$(grep -c 'challengeSetSimulantsForNumPlayers(s_MatchHumans);' "$NS")" = 1 ]; then
 	pass "late join: the sims and tier come from the H1 human count, set once"
 else
 	fail "late join: the sims or tier are not pinned to the match's start count"
+fi
+
+# Open seats are not humans: a join-in-progress/lobby room reserves every seat
+# as a player pass, but the empty ones are out of play and must not widen the
+# record tier. The tier must be counted from the joined-humans mask, not the
+# seat-expanded one; otherwise a 2-human, 4-seat room ticks the 4-star record.
+if grep -q 'humanbits = bits;' "$NS" \
+		&& grep -q 'if (humanbits & (1 << i))' "$NS" \
+		&& grep -q 's_MatchHumans++;' "$NS"; then
+	pass "open seats: the record tier counts joined humans, not reserved seats"
+else
+	fail "open seats: the record tier may count out-of-play seats as humans"
 fi
 
 # The picker UI (no screenshot here): selecting a row sets the challenge and

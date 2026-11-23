@@ -4798,3 +4798,28 @@ the client's next puppet pass, so the body is one tick behind the host's.
 same reason: the first block arrives from a snapshot, not from the render
 clock, so the role byte is read before the puppet first registers. The
 seat-based fallback in `zombiesNotifyChrSpawn` covers it.
+
+## Challenge record tiers on open seats (2026-11-23, no wire change)
+
+The 4-star false award in a 2-human room is the same open-seat bug in the
+challenge path. `netHostMatchStarting()` starts with `netHostJoinedSlots()` -
+the humans actually joined - but for a Join-in-Progress or lobby room it then
+overwrites that with `(1 << netHostSeatCount()) - 1` so late joiners have a
+seat. Empty seats become `NETSEAT_OPEN` and go out of play, but the tier was
+counted from the widened bitmask: a 4-seat room with 2 humans counted 4, set
+`s_MatchHumans = 4`, sent `challengehumans = 4`, and both machines clamped to
+the four-player record. The protocol-38 `challengehumans` work guarded against
+*simulants* inflating `PLAYERCOUNT()`; it did not guard against open seats.
+
+`netHostMatchStarting()` now keeps the joined-humans mask (`humanbits`) apart
+from the seat-expanded one and counts `s_MatchHumans` from the former. The sim
+difficulty uses the same human count. The seat-expanded mask still sets up the
+seats and still drives `numplayers`' return value, so late-join reservation is
+untouched. A log line (`net: match humans N of M seats`) makes the split
+visible.
+
+`netchallengetest.sh`'s `joinopen` case runs a 2-human pair with
+`--net-test-join-in-progress` (4 seats) and asserts both machines tick tier 2,
+not tier 4. Earlier cases used a direct host pair where `s_JoinInProgress` and
+`s_LobbyRoomOn` are both 0, and the only high-count case forced `s_MatchHumans`
+directly - so none exercised the seat-count derivation.

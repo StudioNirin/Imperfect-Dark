@@ -148,6 +148,7 @@ struct netseat {
 static struct netseat s_Seats[MAX_PLAYERS];
 static u32 s_IdlePasses = 0;      // views of out-of-play seats not built (netHostRenderPass)
 static s32 s_JoinInProgress = 0; // Net.JoinInProgress: every match starts with all its seats
+static s32 s_TestJoinInProgress = 0; // --net-test-join-in-progress: force it for the challenge open-seat gate
 static s32 s_MaxPlayers = 4;     // Net.MaxPlayers: humans a direct host seats (2-12; lobby rooms seat their own size)
 static s32 s_ReconnectHold = 30; // Net.ReconnectHold: seconds a dropped player's seat is kept
 static s32 s_HostEnded = 0;      // the host's MATCH_END has gone
@@ -416,6 +417,10 @@ void netSessionArgs(void)
 		}
 	}
 	s_TestJoin = sysArgCheck("--net-test-join");
+	s_TestJoinInProgress = sysArgCheck("--net-test-join-in-progress");
+	if (s_TestJoinInProgress) {
+		s_JoinInProgress = 1;
+	}
 	s_Spectate = sysArgCheck("--net-spectate");
 	s_ProtocolSent = (u32)sysArgGetInt("--net-test-protocol", NET_PROTOCOL_VERSION);
 	netHudArgs();
@@ -1699,6 +1704,7 @@ s32 netHostMatchStarting(s32 stagenum, s32 numplayers)
 	char key[NET_MAXKEY + 1];
 	struct netbuf b;
 	s32 bits;
+	s32 humanbits;
 	s32 gestage = modloaderStageIsRemake(stagenum) ? 1 : 0;
 	s32 seedarg = sysArgGetInt("--rng-seed", -1);
 	s32 i;
@@ -1723,6 +1729,13 @@ s32 netHostMatchStarting(s32 stagenum, s32 numplayers)
 	netContentLookLatch();
 
 	bits = netHostJoinedSlots();
+
+	// Keep the joined humans apart from the seats below. A join-in-progress
+	// or lobby room reserves every seat as a player pass so a late joiner can
+	// take it, but the empty ones are out of play: they are not players, and
+	// must not count as humans for the challenge's record tier or its sim
+	// difficulty (the open seats are not players).
+	humanbits = bits;
 
 	// Net.JoinInProgress: every seat is in the match; the ones nobody has
 	// go out of play once it runs, and wait for a joiner
@@ -1822,7 +1835,25 @@ s32 netHostMatchStarting(s32 stagenum, s32 numplayers)
 		}
 	}
 
-	s_MatchHumans = numplayers;
+	// The record tier is the number of humans in play, not the number of
+	// seats. Open seats in a join-in-progress/lobby room widen `bits` above
+	// but nobody plays them, so counting `bits` here awarded the four-player
+	// star to a room of two. Count the joined humans kept in `humanbits`.
+	s_MatchHumans = 0;
+
+	for (i = 0; i < MAX_PLAYERS; i++) {
+		if (humanbits & (1 << i)) {
+			s_MatchHumans++;
+		}
+	}
+
+	if (s_MatchHumans < 1) {
+		s_MatchHumans = 1;
+	}
+
+	sysLogPrintf(LOG_NOTE, "net: match humans %d of %d seats (joined %#x, seats %#x)",
+			s_MatchHumans, numplayers, humanbits, bits);
+
 	s_ChallengePresent = 0;
 	s_ChallengeWon = 0;
 
@@ -1832,9 +1863,9 @@ s32 netHostMatchStarting(s32 stagenum, s32 numplayers)
 	// tick, so do it here with the match's human count, before RULES below carry
 	// the sims to the clients
 	if (g_NetChallengeSetup.on) {
-		challengeSetSimulantsForNumPlayers(numplayers);
+		challengeSetSimulantsForNumPlayers(s_MatchHumans);
 		sysLogPrintf(LOG_NOTE, "net: the room's challenge %d: %d sims on for %d human players",
-				g_NetChallengeSetup.index, mpGetNumSimSlotsOn(), numplayers);
+				g_NetChallengeSetup.index, mpGetNumSimSlotsOn(), s_MatchHumans);
 	}
 
 	netTestOwnOptions();
