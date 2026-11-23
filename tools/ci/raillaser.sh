@@ -273,6 +273,17 @@ grep -qF '180, // timer60: three seconds' "$ROOT/src/game/invitems.c" || fail "t
 grep -qF 'backwards for knockback and backshot detection' "$ROOT/src/game/propobj.c" || fail "the plasma bolt's knockback uses the hit normal instead of the travel direction"
 grep -qF 's32 boltweapon = hand->gset.weaponnum == WEAPON_BOWCASTER' "$ROOT/src/game/bondgun.c" || fail "the crossbow host branch does not pick the plasma bolt itself - branch order is load-bearing again"
 
+# The bolt is NOT sticky: it uses the prop-aware collision for chrs and surfaces,
+# but a surface bounces and only the chr hit spends it. The old objLand special
+# case (a WEAPON_BOWCASTERBOLT test in the flight loop) is the workaround this
+# replaces and must be gone.
+grep -qF '#define PROJECTILEFLAG_PROPHIT' "$ROOT/src/include/constants.h" || fail "there is no non-sticky prop-hit projectile flag"
+grep -qF 'obj->projectile->flags |= PROJECTILEFLAG_PROPHIT' "$ROOT/src/game/bondgun.c" || fail "the plasma bolt is still launched sticky"
+awk '/void bgun0f09ebcc/,/^}/' "$ROOT/src/game/bondgun.c" | grep -q 'projectileSetSticky' || fail "the shared launch no longer sticks the other projectiles"
+grep -cF 'projectile->flags & (PROJECTILEFLAG_STICKY | PROJECTILEFLAG_PROPHIT)' "$ROOT/src/game/propobj.c" | grep -qx 3 || fail "the prop-aware collision and damage block are not shared by sticky and prop-hit"
+grep -qF 'if ((projectile->flags & PROJECTILEFLAG_STICKY) || handled)' "$ROOT/src/game/propobj.c" || fail "a surface contact still lands the plasma bolt"
+grep -qF 'w->weaponnum != WEAPON_BOWCASTERBOLT' "$ROOT/src/game/propobj.c" && fail "the old objLand bolt special case is still in the flight loop"
+
 # Its ammunition has to be named in each of the pickup message's switches, and in
 # its own words: the crossbow's word is "bolt", and what the Bowcaster fires is a
 # plasma bolt (propobj.c's three switches, plus the PAL and JPN name table, which

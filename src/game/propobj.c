@@ -3793,7 +3793,7 @@ s32 func0f06cd00(struct defaultobj *obj, struct coord *pos, struct coord *arg2, 
 
 	if ((prop->pos.x != pos->x || prop->pos.y != pos->y || prop->pos.z != pos->z)
 			&& (obj->hidden & OBJHFLAG_PROJECTILE)
-			&& (obj->projectile->flags & PROJECTILEFLAG_STICKY)) {
+			&& (obj->projectile->flags & (PROJECTILEFLAG_STICKY | PROJECTILEFLAG_PROPHIT))) {
 		portal00018148(&prop->pos, &sp1c4, prop->rooms, spb8, spcc, 20);
 
 		ptr = spcc;
@@ -7946,7 +7946,7 @@ s32 projectileTick(struct defaultobj *obj, bool *embedded)
 					}
 #endif
 
-				if (projectile->flags & PROJECTILEFLAG_STICKY) {
+				if (projectile->flags & (PROJECTILEFLAG_STICKY | PROJECTILEFLAG_PROPHIT)) {
 					cdresult = func0f06cd00(obj, &sp5dc, &sp5e8, &sp5f4);
 				} else {
 					cdresult = func0f06d37c(obj, &sp5dc, &sp5e8, &sp5f4);
@@ -7966,7 +7966,7 @@ s32 projectileTick(struct defaultobj *obj, bool *embedded)
 
 				result = true;
 
-				if (projectile->flags & PROJECTILEFLAG_STICKY) {
+				if (projectile->flags & (PROJECTILEFLAG_STICKY | PROJECTILEFLAG_PROPHIT)) {
 					if (cdresult == CDRESULT_COLLISION) {
 						bool stick = false;
 						struct prop *hitprop = NULL;
@@ -8277,15 +8277,12 @@ s32 projectileTick(struct defaultobj *obj, bool *embedded)
 								}
 							}
 
-							{
-								struct weaponobj *w = (struct weaponobj *) obj;
-								// A plasma bolt is a bouncing projectile, not something that lands on
-								// the way: a surface it meets is one it ricochets off, not the end of its life.
-								// The chr hit already dealt its damage and landed it (handled); a surface
-								// contact keeps the bolt in the air, fizzling on its own timer.
-								if (w->weaponnum != WEAPON_BOWCASTERBOLT || handled) {
-									objLand(prop, &sp5e8, &sp5f4, embedded);
-								}
+							// Only a sticky projectile lands on contact. A plasma bolt
+							// passes through this block for the chr-aware collision and
+							// its damage, but a surface it meets is one it ricochets off;
+							// only the chr hit (handled) spends it.
+							if ((projectile->flags & PROJECTILEFLAG_STICKY) || handled) {
+								objLand(prop, &sp5e8, &sp5f4, embedded);
 							}
 						}
 					}

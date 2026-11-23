@@ -3963,6 +3963,9 @@ s32 langpackIsCjk(void);
 #define PROJECTILEFLAG_AIRBORNE    0x00000001
 #define PROJECTILEFLAG_00000002    0x00000002
 #define PROJECTILEFLAG_STICKY      0x00000004
+// A plasma bolt uses the prop-aware collision (chrs and surfaces) but does not
+// stick: surfaces are bounced off, and only the chr hit spends the bolt.
+#define PROJECTILEFLAG_PROPHIT     0x00000008
 #define PROJECTILEFLAG_POWERED     0x00000010 // No gravity
 #define PROJECTILEFLAG_00000020    0x00000020
 #define PROJECTILEFLAG_LAUNCHING   0x00000080

@@ -5837,7 +5837,14 @@ void bgun0f09ebcc(struct defaultobj *obj, struct coord *coord, RoomNum *rooms, M
 			obj->projectile->flags |= PROJECTILEFLAG_AIRBORNE;
 			obj->projectile->ownerprop = prop;
 
-			projectileSetSticky(objprop);
+			// A plasma bolt hits chrs and surfaces through the prop-aware
+			// collision, but it is not sticky: the bounce path handles surfaces
+			// and the chr hit alone spends it.
+			if (((struct weaponobj *) obj)->weaponnum == WEAPON_BOWCASTERBOLT) {
+				obj->projectile->flags |= PROJECTILEFLAG_PROPHIT;
+			} else {
+				projectileSetSticky(objprop);
+			}
 			mtx4Copy(matrix2, (Mtxf *)&obj->projectile->mtx);
 
 			obj->projectile->speed.x = velocity->x;
