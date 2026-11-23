@@ -157,7 +157,9 @@ done
 # and the hands use. The model pack's replacement reaches this through the
 # frompack GUNDL branch; without it the mesh sits still while the hands recoil
 # and the muzzle flash (which follows the animated muzzle node) comes adrift.
-grep -qF 'frombean || (frompack && node && (node->type & 0xff) == MODELNODETYPE_GUNDL)' "$ROOT/port/src/xblamesh.c" \
+grep -qF 'frompack && node && (node->type & 0xff) == MODELNODETYPE_GUNDL' "$ROOT/port/src/xblamesh.c" \
 	|| fail "the pack's first-person gun is not posed under the list-loaded gun matrix"
+grep -qF 'xblaMeshIsViewmodel(model)' "$ROOT/port/src/xblamesh.c" \
+	|| fail "the pack's gun list matrix is not limited to first-person hands - a world pickup draws as a grey box"
 
 echo "dbshotgun: $COUNT runtime checks, the shot's four call sites, both setup widths, the alias, the rows, the pack and the first-person pose as expected"

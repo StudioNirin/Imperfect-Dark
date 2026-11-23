@@ -11670,6 +11670,35 @@ static const f32 *xblaMeshRestShift(const struct xblameshbuilt *m, struct xblame
 // How much of a destroyed GoldenEye prop's colours is left (xblaMeshRenderNode())
 #define XBLAMESH_SCORCH 64
 
+/**
+ * Whether model is a current player's first-person gun or hand model.
+ *
+ * The pack's OBJ for a gun file is also used by that gun's world pickup and
+ * third-person hold, which share the file id. Those are drawn under the
+ * position node's matrix (where the object actually is); only the hand's own
+ * copy is posed by the GUNDL list matrix, so the list-matrix path must be
+ * limited to it or a pickup lands at the world origin as a grey box.
+ */
+static bool xblaMeshIsViewmodel(const struct model *model)
+{
+	for (s32 i = 0; i < MAX_PLAYERS; i++) {
+		struct player *player = g_Vars.players[i];
+
+		if (!player) {
+			continue;
+		}
+
+		for (s32 hand = 0; hand < 2; hand++) {
+			if (model == &player->hands[hand].gunmodel
+					|| model == &player->hands[hand].handmodel) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 s32 xblaMeshRenderNode(struct modelrenderdata *renderdata, struct model *model,
 		struct modelnode *node)
 {
@@ -12254,7 +12283,8 @@ s32 xblaMeshRenderNode(struct modelrenderdata *renderdata, struct model *model,
 	// and its GUNDL loads the same list matrix, so it must be posed under
 	// that matrix as well or it stands still while the hands recoil.
 	if (!root && m->local && model && model->matrices && model->definition
-			&& (frombean || (frompack && node && (node->type & 0xff) == MODELNODETYPE_GUNDL))) {
+			&& (frombean || (frompack && node && (node->type & 0xff) == MODELNODETYPE_GUNDL
+					&& xblaMeshIsViewmodel(model)))) {
 		const s32 index = gebeanListLoadedMatrix(node);
 
 		if (index >= 0 && index < model->definition->nummatrices) {
