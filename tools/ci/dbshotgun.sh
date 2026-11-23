@@ -152,4 +152,12 @@ for png in 00_0x098EA1A5 01_0x098E51A5 02_0x09BEA1A5 03_0x09BE51A5 04_0x0D0689B5
 	[ -f "$PACK/shotgun/$png.png" ] || fail "the pack is missing texture $png.png"
 done
 
-echo "dbshotgun: $COUNT runtime checks, the shot's four call sites, both setup widths, the alias, the rows and the pack as expected"
+# A first-person gun's mesh must be posed under the matrix its GUNDL list
+# loads (gebeanListLoadedMatrix(), matrix 33), the same one the stock gun body
+# and the hands use. The model pack's replacement reaches this through the
+# frompack GUNDL branch; without it the mesh sits still while the hands recoil
+# and the muzzle flash (which follows the animated muzzle node) comes adrift.
+grep -qF 'frombean || (frompack && node && (node->type & 0xff) == MODELNODETYPE_GUNDL)' "$ROOT/port/src/xblamesh.c" \
+	|| fail "the pack's first-person gun is not posed under the list-loaded gun matrix"
+
+echo "dbshotgun: $COUNT runtime checks, the shot's four call sites, both setup widths, the alias, the rows, the pack and the first-person pose as expected"
