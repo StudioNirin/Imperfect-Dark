@@ -733,6 +733,13 @@ state `MODEL_PD_GESHOTGUN = MODEL_PD_RAILLASER + 1` is filled by
 `dbShotgunModelsRefresh()` at startup and again after a mod swap empties every
 alias slot.
 
+The pack OBJ is fitted to the PD first-person shotgun by
+`models-custom/db-shotgun/fit-to-pd.py`: the raw XBLA dump is in the wrong
+units and node structure (node0 is the muzzle flash quad, and the long axis is
+Z where GshotgunZ's is Y). The fit drops the flash group, scales and centres
+the two body groups onto GshotgunZ's rest bbox, joins them into its node0
+group, and points the two remaining `bean_` materials at the local PNGs.
+
 The fitted mesh is **not enabled by default**. It ships as a model pack under
 the build directory, `build/model-packs/dbshotgun/n64/PpdDbShotgunZ.obj` plus
 `PpdDbShotgunZ.mtl` and the six PNGs in its `shotgun/` subdirectory (the MTL's
