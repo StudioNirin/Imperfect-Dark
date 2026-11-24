@@ -7,13 +7,11 @@ name: Imperfect Dark CI
 
 on:
   push:
-    # A branch push refreshes the rolling dev prerelease; a v* tag cuts a
-    # stable release that is never rewritten afterwards.
-    # imperfect-dark, renamed from dabs-mod on 2026-11-14. The old name is still
-    # a trigger so a push that lands before the branch itself is renamed is
-    # built rather than silently ignored; drop it once the rename is done and no
-    # clone is still pushing there.
-    branches: [ "imperfect-dark", "dabs-mod" ]
+    # A push to imperfect-dark refreshes the rolling dev prerelease; a v* tag
+    # cuts a stable release that is never rewritten afterwards. The old
+    # dabs-mod name (renamed 2026-11-14) is no longer a trigger: the rename is
+    # done and no clone should still be pushing there.
+    branches: [ "imperfect-dark" ]
     tags: [ "v*" ]
     # Two builds and a new executable offered to every dev-channel player is
     # too much to ask for a change to a file that is not in the download and
