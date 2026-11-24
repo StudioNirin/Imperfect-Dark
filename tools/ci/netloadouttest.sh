@@ -27,9 +27,10 @@ export SDL_VIDEODRIVER=${SDL_VIDEODRIVER:-offscreen} SDL_GAMECONTROLLER_IGNORE_D
 # Both machines use the same Loadout config. The host's SYNC keys carry the
 # chosen rows to the client, so even if the client's ini differed the match
 # should use the host's.
-# Rows 18 (Shotgun) and 1 (Falcon 2) in the stock table. Written in decimal
-# because the config parser reads plain integers.
-INI='[Mod]\nLoadModels=0\nXblaMeshes=0\nStartArmed=3\nLoadoutWeapon1=18\nLoadoutWeapon2=1\n'
+# Loadout guns come from the first two weapon slots (the "1:" and "2:"
+# dropdowns), which --mp-weapons sets on the host and RULES carries to the
+# client. Rows 7 (DY357 Magnum) and 4 (Magsec 4) are the chosen pair.
+INI='[Mod]\nLoadModels=0\nXblaMeshes=0\nStartArmed=3\n'
 
 game() {
 	local label=$1 t=$2; shift 2
@@ -53,7 +54,7 @@ H=$OUT/host.log; C=$OUT/client.log
 
 # A Combat match with one client and no sims, so the only spawn line on each
 # machine is its own player. Both players must get the two configured guns.
-game host 200 --host "$PORT" --net-test-host 1 --net-test-end-frame 720 --rng-seed 7 --mp-weapons 9,9,9,9,9,9 &
+game host 200 --host "$PORT" --net-test-host 1 --net-test-end-frame 720 --rng-seed 7 --mp-weapons 7,4,9,9,9,9 &
 host=$!
 waitfor "$H" "net: hosting on UDP port" 90 || { fail "host did not start"; kill -TERM "$host"; wait "$host" 2>/dev/null; exit 2; }
 game client 190 --connect "127.0.0.1:$PORT" --net-test-join &
@@ -83,11 +84,11 @@ clientline=$(grep 'net: loadout spawn seat' "$C" | head -1)
 [ -n "$clientline" ] || fail "client's player did not spawn with the Loadout pair"
 hpair=$(echo "$hostline" | sed -n 's/.* guns \([0-9]* [0-9]*\).*/\1/p')
 cpair=$(echo "$clientline" | sed -n 's/.* guns \([0-9]* [0-9]*\).*/\1/p')
-# The log prints weapon numbers, not rows: row 18 names WEAPON_SHOTGUN (19)
-# and row 1 names WEAPON_FALCON2 (2).
-[ "$hpair" = "19 2" ] || fail "host's pair is $hpair, want 19 2 (Shotgun, Falcon 2)"
-[ "$cpair" = "19 2" ] || fail "client's pair is $cpair, want 19 2 (Shotgun, Falcon 2)"
-pass 'both machines hand out the same two Loadout guns (Shotgun, Falcon 2)'
+# The log prints weapon numbers, not rows: row 7 names WEAPON_DY357MAGNUM (8)
+# and row 4 names WEAPON_MAGSEC4 (5).
+[ "$hpair" = "8 5" ] || fail "host's pair is $hpair, want 8 5 (Magnum, Magsec)"
+[ "$cpair" = "8 5" ] || fail "client's pair is $cpair, want 8 5 (Magnum, Magsec)"
+pass 'both machines hand out the same two Loadout guns (Magnum, Magsec)'
 
 # --- Zombies online: survivors get the configured pair, infected get fists ---
 # The role is rolled by the host; both machines must hand a survivor the same
@@ -110,8 +111,10 @@ wait "$zh" 2>/dev/null
 wait "$zc" 2>/dev/null
 
 # At least one survivor on each machine gets the configured pair.
-grep -q 'net: zombies survivor loadout seat .* guns 19 2' "$ZH" || fail "no zombies survivor on the host got the pair: $(grep -i 'survivor loadout' "$ZH" | head -2)"
-grep -q 'net: zombies survivor loadout seat .* guns 19 2' "$ZC" || fail "no zombies survivor on the client got the pair: $(grep -i 'survivor loadout' "$ZC" | head -2)"
+# Zombies clears the weapon slots (no pickups), so it uses the config-key
+# defaults: Falcon 2 (2) and Shotgun (19).
+grep -q 'net: zombies survivor loadout seat .* guns 2 19' "$ZH" || fail "no zombies survivor on the host got the default pair: $(grep -i 'survivor loadout' "$ZH" | head -2)"
+grep -q 'net: zombies survivor loadout seat .* guns 2 19' "$ZC" || fail "no zombies survivor on the client got the default pair: $(grep -i 'survivor loadout' "$ZC" | head -2)"
 pass 'zombies survivors get the configured pair on both machines'
 
 # The infected must not be handed a gun: player.c's infected branch returns

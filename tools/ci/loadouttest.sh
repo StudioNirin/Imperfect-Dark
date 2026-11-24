@@ -29,7 +29,7 @@ rc=$?
 grep -E "loadout test|startarmed test" "$OUT/log" | sed 's/^.*\(loadout test\|startarmed test\)/\1/'
 
 grep -q 'loadout test: FAIL' "$OUT/log" && fail 'a loadout self-test check failed'
-grep -q 'loadout test: 4 of 4 checks as expected' "$OUT/log" || fail 'the loadout self-test did not report'
+grep -q 'loadout test: 5 of 5 checks as expected' "$OUT/log" || fail 'the loadout self-test did not report'
 grep -q 'startarmed test: FAIL' "$OUT/log" && fail 'a startarmed check failed'
 grep -q 'startarmed test: all 6 checks as expected' "$OUT/log" || fail 'the startarmed self-test did not report'
 

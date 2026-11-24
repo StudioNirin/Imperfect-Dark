@@ -1273,12 +1273,17 @@ rows in its Options page; infected players and sims keep fists and cannot pick
 up guns (the existing role guards). In every other mode, Loadout is for all
 players and sims on every machine.
 
-The chosen rows live in Mod.LoadoutWeapon1/2, registered config ints and
-NETKEY_SYNC rules, so the host's pair reaches clients in RULES before stage
-load. Protocol bumped to 43: an older peer would clamp Start Armed=3 back to
-Fiesta and disagree about both kits and pickups. Rows are resolved against the
-live g_MpWeapons[] at startup (mpLoadoutResolve) so a mod renumbering its guns
-cannot leave a row naming nothing; the defaults are found by weapon number.
+The guns come from the Weapons page's first two slots ("1:" and "2:") in
+ordinary modes - that is where a player editing a Loadout expects to set them.
+Those slots are already carried to clients in RULES. The separate
+Mod.LoadoutWeapon1/2 config keys (NETKEY_SYNC) are the FALLBACK and the source
+Zombies uses: its no-pickup arenas clear all six slots, so it reads the keys
+instead (default Falcon 2 + Shotgun, settable in Zombies Options). A slot left
+unset (row 0) also falls back to the keys. Protocol bumped to 43: an older peer
+would clamp Start Armed=3 back to Fiesta and disagree about both kits and
+pickups. Rows are resolved against the live g_MpWeapons[] at startup
+(mpLoadoutResolve) so a mod renumbering its guns cannot leave a row naming
+nothing; the defaults are found by weapon number.
 
 mpGetMpWeaponByLocation() counts the nth enabled slot with wraparound - a
 location is not a slot index - so placement now asks for the chosen slot via

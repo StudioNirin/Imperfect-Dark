@@ -6929,10 +6929,21 @@ void mpLoadoutResolve(void)
 	}
 }
 
-/** The weapon number of the first/second configured loadout row. */
+/**
+ * The weapon number of the first/second loadout gun. The player's own choice
+ * is the weapon page's first two slots (the "1:" and "2:" dropdowns), which is
+ * where a Loadout player naturally sets them. The separate config keys are the
+ * fallback for a slot left unset - and the source Zombies uses when it clears
+ * the slots for its no-pickup arenas.
+ */
 s32 mpLoadoutWeaponNum(s32 index)
 {
-	s32 row = index == 0 ? g_ModOptions.loadoutweapon1 : g_ModOptions.loadoutweapon2;
+	s32 row = g_MpSetup.weapons[index];
+
+	if (row <= 0 || row >= (s32) ARRAYCOUNT(g_MpWeapons)
+			|| weaponHost(g_MpWeapons[row].weaponnum) == WEAPON_DISABLED) {
+		row = index == 0 ? g_ModOptions.loadoutweapon1 : g_ModOptions.loadoutweapon2;
+	}
 
 	if (row < 0 || row >= (s32) ARRAYCOUNT(g_MpWeapons)) {
 		return WEAPON_NONE;
@@ -6983,6 +6994,25 @@ void mpLoadoutSelfTest(void)
 	mpLoadoutResolve();
 	LOADOUT_CHECK(mpLoadoutWeaponNum(0) == WEAPON_SHOTGUN && mpLoadoutWeaponNum(1) == WEAPON_FALCON2,
 			"a chosen pair survives resolution");
+
+	// The weapon page's first two slots are the ordinary-mode source: what a
+	// player picks in the "1:" and "2:" dropdowns is what they spawn with,
+	// not the config keys (which are the Zombies/fallback source).
+	{
+		const s32 key1 = g_ModOptions.loadoutweapon1;
+		const s32 key2 = g_ModOptions.loadoutweapon2;
+		const u8 slot1 = g_MpSetup.weapons[0];
+		const u8 slot2 = g_MpSetup.weapons[1];
+
+		g_MpSetup.weapons[0] = (u8) mpLoadoutRowForWeapon(WEAPON_MAGSEC4, 0);
+		g_MpSetup.weapons[1] = (u8) mpLoadoutRowForWeapon(WEAPON_CMP150, 0);
+		LOADOUT_CHECK(mpLoadoutWeaponNum(0) == WEAPON_MAGSEC4 && mpLoadoutWeaponNum(1) == WEAPON_CMP150,
+				"the weapon page's first two slots are the Loadout guns");
+		g_MpSetup.weapons[0] = slot1;
+		g_MpSetup.weapons[1] = slot2;
+		g_ModOptions.loadoutweapon1 = key1;
+		g_ModOptions.loadoutweapon2 = key2;
+	}
 
 	// A row naming nothing with the mod mounted falls back to its default.
 	g_ModOptions.loadoutweapon1 = ARRAYCOUNT(g_MpWeapons) + 5;
