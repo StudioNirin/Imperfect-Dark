@@ -573,6 +573,27 @@ void botSpawn(struct chrdata *chr, u8 respawning)
 			botinvSwitchToWeapon(chr, weapon1, FUNC_PRIMARY);
 		}
 
+		// Instagib: every player spawns with the Moonrailer. The weapon slots
+		// are empty in this mode so mpGetSpawnWeapon() cannot name it; the
+		// player's own spawn (playerSpawnWeapons) has a scenario branch for
+		// it, and simulants need the same one here. Unlimited ammunition is
+		// ticked per player in bgunTick, so the sim gets it too.
+		if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_INSTAGIB) {
+			botinvGiveSingleWeapon(chr, WEAPON_RAILLASER);
+			botactGiveAmmoByType(aibot, AMMOTYPE_RAIL,
+					bgunGetAmmoCapacityForWeapon(WEAPON_RAILLASER, FUNC_PRIMARY));
+			botinvSwitchToWeapon(chr, WEAPON_RAILLASER, FUNC_PRIMARY);
+		}
+
+		// Plasma Tag: same story - the slots are empty and the player's spawn
+		// hands out the Bowcaster by scenario, so do the same for simulants.
+		if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_PLASMATEST) {
+			botinvGiveSingleWeapon(chr, WEAPON_BOWCASTER);
+			botactGiveAmmoByType(aibot, AMMOTYPE_BOWCASTER,
+					bgunGetAmmoCapacityForWeapon(WEAPON_BOWCASTER, FUNC_PRIMARY));
+			botinvSwitchToWeapon(chr, WEAPON_BOWCASTER, FUNC_PRIMARY);
+		}
+
 		const s32 spawnweapon = modCanChrSpawnArmed() ? mpGetSpawnWeapon() : -1;
 
 		if (spawnweapon >= 0) {

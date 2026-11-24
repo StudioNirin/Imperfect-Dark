@@ -232,6 +232,12 @@ grep -qE 'for \(i = 0; i != 19; i\+\+\)|for \(i = 0; i < 0x13; i\+\+\)|for \(i =
 grep -qF 'g_MpSetup.scenario == MPSCENARIO_INSTAGIB' "$ROOT/src/game/bondgun.c" || fail "Instagib stopped ticking its ammunition - the Moonrailer will fire itself empty"
 grep -qF 'hand->audiohandle = NULL;' "$ROOT/src/game/bondgun.c" || fail "the charge loop's stop no longer retires the handle - a fast trigger gets the sound once, then silence, because the restart gate finds the old stopped state in the way"
 grep -qF 'bgunSetAmmoQuantity(AMMOTYPE_RAIL, bgunGetAmmoCapacityForWeapon(WEAPON_RAILLASER, FUNC_PRIMARY));' "$ROOT/src/game/player.c" || fail "the Instagib spawn stopped filling the Moonrailer"
+# A simulant's spawn has no scenario branch of its own in mpGetSpawnWeapon:
+# the slots are empty, so without this it spawns empty-handed in Instagib
+# while the player holds a Moonrailer. Plasma Tag is the same shape.
+grep -qF 'g_MpSetup.scenario == MPSCENARIO_INSTAGIB' "$ROOT/src/game/bot.c" || fail 'Instagib simulants spawn without the Moonrailer'
+grep -qF 'botinvGiveSingleWeapon(chr, WEAPON_RAILLASER)' "$ROOT/src/game/bot.c" || fail 'Instagib simulants are not given the Moonrailer'
+grep -qF 'botinvGiveSingleWeapon(chr, WEAPON_BOWCASTER)' "$ROOT/src/game/bot.c" || fail 'Plasma Tag simulants are not given the Bowcaster'
 grep -qF 'cheatActivate(CHEAT_UNLIMITEDAMMO)' "$ROOT/src/game/mplayer/scenarios/instagib.inc" && fail "Instagib reached for the unlimited-ammo cheat again - it dies at cheatsReset() on level load"
 grep -qF 'g_ScenarioListOrder[]' "$ROOT/src/game/mplayer/scenarios.c" || fail "the scenario menu walks the id order again, and Instagib is under the wrong header"
 grep -qF 'ARRAYCOUNT(g_MpScenarioOverviews) == NUM_MPSCENARIOS' "$ROOT/src/game/mplayer/scenarios.c" || fail "nothing pins the scenario tables' widths to NUM_MPSCENARIOS"
