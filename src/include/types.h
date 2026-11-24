@@ -4719,7 +4719,10 @@ struct scenariodata_zombies {
 	u8 startedas[MAX_MPCHRS];
 	s16 score[MAX_MPCHRS];
 	s16 infections[MAX_MPCHRS];
-	bool bodystale[MAX_LOCAL_PLAYERS];
+	// One mark per possible player: a Zombies room seats up to MAX_PLAYERS,
+	// not the four local ones. A mark for a seat past four was previously
+	// impossible to set or read, so those humans never rebuilt at all.
+	bool bodystale[MAX_PLAYERS];
 	// The body a simulant came to the match in, remembered when the mode
 	// takes it into Skedar so the round turn can hand it back. -1 = none.
 	s32 homebody[MAX_MPCHRS];

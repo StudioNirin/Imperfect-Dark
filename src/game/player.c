@@ -6534,6 +6534,18 @@ void playerTick(bool arg0)
 		if ((modSpectateBodyIsStale()
 #ifndef PLATFORM_N64
 					|| (g_NetMode != NETMODE_NONE && netPlayerBodyStaleIs(g_Vars.currentplayernum))
+					// Zombies: a role flip changes the body a standing human
+					// wears (Skedar for the infected). The NETSCEN block sets
+					// the stale mark on a conversion, but an already-built body
+					// in first person is never rebuilt by the branches below,
+					// so without this the host's own and other humans' bodies
+					// stay human after they turn. Take happens in
+					// playerTickChrBody(); Is here only asks, so the mark
+					// survives until that rebuild starts.
+					// Leave the mark for the respawn instead of rebuilding a
+					// corpse that died as a survivor: zombiesHandleDeath sets
+					// it while the victim is still on the floor.
+					|| (zombiesBodyStaleIs(g_Vars.currentplayernum) && !g_Vars.currentplayer->isdead)
 #endif
 					) && g_Vars.currentplayer->haschrbody) {
 			playerTickChrBody();

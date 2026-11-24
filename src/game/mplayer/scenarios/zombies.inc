@@ -273,13 +273,16 @@ bool zombiesIsInfected(struct chrdata *chr)
 /**
  * Take the body-rebuild request for the current local player.
  */
-bool zombiesBodyStaleTake(void)
+/**
+ * Whether a seat's body needs rebuilding after a Zombies role change, without
+ * consuming the mark. The normal player tick has to ask this before deciding
+ * to rebuild a body that is already standing: a role flip does not by itself
+ * remove the old body, and the Take below is only reached once that rebuild
+ * starts. Indexed by player number so an already-built human can be converted
+ * on the host as well as on a client puppet.
+ */
+bool zombiesBodyStaleIs(s32 playernum)
 {
-	s32 playernum = g_Vars.currentplayernum;
-	bool stale;
-
-	// The flag belongs to this mode alone; outside it a stale mark left by a
-	// zombies match would make another mode rebuild a body for nothing.
 	if (!g_Vars.normmplayerisrunning || g_MpSetup.scenario != MPSCENARIO_ZOMBIES) {
 		return false;
 	}
@@ -288,10 +291,29 @@ bool zombiesBodyStaleTake(void)
 		return false;
 	}
 
-	stale = g_ScenarioData.zombies.bodystale[playernum];
-	g_ScenarioData.zombies.bodystale[playernum] = false;
+	return g_ScenarioData.zombies.bodystale[playernum];
+}
+
+/**
+ * Take a seat's stale mark, by an explicit player number. The client puppet
+ * tick passes the seat it is currently ticking, which need not be
+ * g_Vars.currentplayernum; using the global there desynchronises the consumer
+ * from the mark the NETSCEN block set.
+ */
+bool zombiesBodyStaleTakeForPlayer(s32 playernum)
+{
+	bool stale = zombiesBodyStaleIs(playernum);
+
+	if (stale) {
+		g_ScenarioData.zombies.bodystale[playernum] = false;
+	}
 
 	return stale;
+}
+
+bool zombiesBodyStaleTake(void)
+{
+	return zombiesBodyStaleTakeForPlayer(g_Vars.currentplayernum);
 }
 
 /**

@@ -1278,12 +1278,11 @@ static void netScenApply(const u8 *b, u32 tick, const char *tag)
 					g_ZombiesNetRole[i] = newrole;
 
 					if (i < PLAYERCOUNT() && i < ARRAYCOUNT(g_ScenarioData.zombies.bodystale)) {
-						// a player puppet wears the new body (its local body
-						// stale flag, taken by playerTickChrBody on its next pass)
+						// A player seat wears the new body. The normal player
+						// tick (or, on a client, the puppet tick) takes this
+						// mark and rebuilds a body that is already standing;
+						// the array is MAX_PLAYERS wide so every seat fits.
 						g_ScenarioData.zombies.bodystale[i] = true;
-					} else if (i < PLAYERCOUNT()) {
-						// beyond the bodystale array the seat's role reads back
-						// from the seat in playerTickChrBody (zombiesNotifyChrSpawn)
 					} else {
 						// a simulant wears the new body too: it is the client's own
 						// chr, so its rebuild is the same call the host makes at a

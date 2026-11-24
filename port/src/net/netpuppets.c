@@ -2877,9 +2877,17 @@ s32 netClientPuppetPlayerTick(s32 playernum)
 	// zombies: the host's published role byte turned this seat into Skedar
 	// (or back to a body) - the block's apply set the local body stale,
 	// and a body already built here needs the same removal the roster
-	// change gets. Consumed before the first-build branch below, which
-	// takes its own stale flag; here the seat is already wearing one.
-	if (player->haschrbody && player->prop->chr && zombiesBodyStaleTake()) {
+	// change gets. Take by the seat being ticked, not g_Vars.currentplayernum:
+	// the caller has installed that seat for this pass, but relying on the
+	// global here let the mark and its consumer drift apart on some paths.
+	//
+	// While the player is dead, the corpse on the floor must keep the body
+	// it died in. zombiesHandleDeath() marks the victim stale at the moment
+	// it converts them; rebuilding here would turn the corpse into Skedar
+	// for a frame. Leave the mark set: the respawn's next body build takes
+	// it and comes back in the right model.
+	if (player->haschrbody && player->prop->chr && !player->isdead
+			&& zombiesBodyStaleTakeForPlayer(playernum)) {
 		player->haschrbody = false;
 		player->model00d4 = NULL;
 		chrRemove(player->prop, false);

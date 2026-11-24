@@ -4861,3 +4861,39 @@ Weapons tab stays selectable. That mode is staged separately in
 --test-fixed-loadout drives the select helper directly (8 checks) and is part
 of tools/ci/raillaser.sh alongside source pins for the menu gate, the predicate,
 the restore, the relock and the pickup suppression.
+
+## Zombies: infected humans kept their human body online (2026-11-24)
+
+An infected simulant wore Skedar on every machine, but an infected human kept
+its human model in other players' views, and a killed survivor's corpse briefly
+turned Skedar before coming back as a human-model infected.
+
+The Skedar override was never the problem. A role flip only marks the seat's
+body stale (`g_ScenarioData.zombies.bodystale`); something has to act on that
+mark. Simulants rebuild directly in `zombiesPrepareBotSpawn()` (bot.c:471,
+netscen.c:1295), which is why they worked. Humans rebuild only through
+`playerTickChrBody()`, and the host's normal tick gate (player.c:6534) checked
+spectate and roster staleness but not Zombies staleness - an already-built body
+in first person was never rebuilt. The earlier 4cb939888 fix added a stale
+consumer to the client puppet path only, so remote humans on clients sometimes
+converted, but the host's view and the normal path did not.
+
+The corpse flicker was the same mark consumed at the wrong time:
+`zombiesHandleDeath()` sets infected and bodystale while the victim is still on
+the floor, and `netClientPuppetPlayerTick()` had no isdead guard, so it rebuilt
+the dying chr into Skedar mid-death.
+
+`zombiesBodyStaleIs(playernum)` now asks without consuming, and the normal tick
+gate uses it (guarded by !isdead) to rebuild a standing human body. The client
+puppet tick takes the mark by an explicit playernum and also waits until the
+player is alive. The mark is consumed inside playerTickChrBody(), so the mark
+survives a death and is picked up on respawn. bodystale grew from
+MAX_LOCAL_PLAYERS (4) to MAX_PLAYERS (12) - seats past four previously had no
+rebuild path and the NETSCEN else-if for them was a comment-only no-op.
+
+Coverage: host runs playerTick() for every seat (pdmain.c:812-820) so the gate
+fix covers the host's view of other humans and the client's local player;
+remote humans on a client use the puppet take; sims the direct rebuild.
+
+tools/ci/zombies.sh pins the tick gate, the isdead guard, the per-player take,
+the widened array and the header declaration.

@@ -49,6 +49,18 @@ pass 'rounds, roles and scoring'
 
 # --- bodies -----------------------------------------------------------------
 grep -q 'zombiesBodyStaleTake()' "$SRC/game/player.c" || fail 'body rebuild not requested'
+# A role flip must rebuild an already-standing human body, on the host as
+# well as on a client: sims rebuild directly, humans only through this gate.
+grep -q 'zombiesBodyStaleIs(g_Vars.currentplayernum)' "$SRC/game/player.c" \
+	|| fail 'an infected human keeps its old body - no stale check in the tick gate'
+grep -q 'zombiesBodyStaleIs(g_Vars.currentplayernum) && !g_Vars.currentplayer->isdead' "$SRC/game/player.c" \
+	|| fail 'a dead survivor corpse is rebuilt as Skedar mid-death'
+grep -q 'zombiesBodyStaleTakeForPlayer(playernum)' "$PORT/src/net/netpuppets.c" \
+	|| fail 'client puppets take the stale mark of another seat'
+grep -q 'bool bodystale\[MAX_PLAYERS\]' "$ROOT/src/include/types.h" \
+	|| fail 'bodystale only covers four seats, so humans past four never rebuild'
+grep -q 'zombiesBodyStaleTakeForPlayer' "$ROOT/src/include/game/mplayer/scenarios.h" \
+	|| fail 'the per-player stale take is not declared for the puppet tick'
 grep -q 'zombiesNotifyChrSpawn' "$SRC/game/player.c" || fail 'Skedar override not applied'
 grep -q 'bodyGetRace(bodynum)' "$INC" || fail 'sim body race not kept in sync'
 grep -q 'varyheight' "$SRC/game/player.c" || fail 'Skedar random scale not fixed'
