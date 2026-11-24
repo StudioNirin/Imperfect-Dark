@@ -112,7 +112,15 @@ grep -qF '#define NET_PROTOCOL_VERSION 43' "$ROOT/port/include/net/netproto.h" \
 grep -qF '"PpdDbShotgunZ"' "$ROOT/port/src/dbshotgun.c" \
 	|| fail "the DB-Shotgun's alias name is gone, so the pack's mesh resolves to no file"
 grep -qF 'romdataRegisterAliasFile(s_PdDbShotgunProp, FILE_GSHOTGUN)' "$ROOT/port/src/dbshotgun.c" \
-	|| fail "the alias is not over FILE_GSHOTGUN, so the stock Shotgun's file would move"
+	|| fail "the viewmodel alias is not over FILE_GSHOTGUN, so the stock Shotgun's file would move"
+grep -qF '"PpdDbShotgunChr"' "$ROOT/port/src/dbshotgun.c" \
+	|| fail "the held/floor alias name is gone, so a chr's gun has no fitted mesh"
+grep -qF 'romdataRegisterAliasFile(s_PdDbShotgunChrProp, FILE_PCHRSHOTGUN)' "$ROOT/port/src/dbshotgun.c" \
+	|| fail "the held alias is not over the chr Shotgun file - the hand's rest space would be lost"
+grep -qF -- 'state->fileid = (u16) chrfileid;' "$ROOT/port/src/dbshotgun.c" \
+	|| fail "the held model state still reads the first-person file - the gun will point up in a chr's hand"
+grep -qF -- '->hi_model = (u16) viewfileid;' "$ROOT/port/src/dbshotgun.c" \
+	|| fail "the first-person rows no longer use the viewmodel alias"
 grep -qF 'MODEL_PD_GESHOTGUN          (MODEL_PD_RAILLASER + 1)' "$ROOT/src/include/constants.h" \
 	|| fail "the model state is not the one after the Moonrailer's"
 grep -qF '_Static_assert(MODEL_PD_GESHOTGUN < MODEL_REMAKE_FIRST' "$ROOT/port/src/geguns.c" \
@@ -146,8 +154,10 @@ grep -qF '9, // clip size' "$ROOT/src/game/invitems.c" \
 # and Mod.ModelPack=dbshotgun (or the Options dropdown) turn it on.
 # ---------------------------------------------------------------------------
 PACK=$BUILD/model-packs/dbshotgun/n64
-[ -f "$PACK/PpdDbShotgunZ.obj" ] || fail "the fitted mesh is missing from $PACK"
-[ -f "$PACK/PpdDbShotgunZ.mtl" ] || fail "the fitted mesh's material file is missing"
+[ -f "$PACK/PpdDbShotgunZ.obj" ] || fail "the fitted viewmodel mesh is missing from $PACK"
+[ -f "$PACK/PpdDbShotgunZ.mtl" ] || fail "the fitted viewmodel's material file is missing"
+[ -f "$PACK/PpdDbShotgunChr.obj" ] || fail "the fitted held mesh is missing from $PACK - a chr's gun would use the view fit"
+[ -f "$PACK/PpdDbShotgunChr.mtl" ] || fail "the fitted held mesh's material file is missing"
 for png in 00_0x098EA1A5 01_0x098E51A5 02_0x09BEA1A5 03_0x09BE51A5 04_0x0D0689B5 05_0x051D5125; do
 	[ -f "$PACK/shotgun/$png.png" ] || fail "the pack is missing texture $png.png"
 done

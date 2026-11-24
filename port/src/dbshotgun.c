@@ -23,11 +23,13 @@
 /**
  * The DB-Shotgun (WEAPON_GESHOTGUN) is a fourth gun of this fork's own, but
  * unlike the Rail-Laser it needs no GoldenEye release. Its mesh is the GE
- * shotgun's fitted to the stock PD Shotgun's space, carried in a model pack
- * and reached through a port alias over FILE_GSHOTGUN (build/model-packs/
- * dbshotgun/n64/PpdDbShotgunZ.obj). The alias is a second file number for the
- * same stock file, so the stock PD Shotgun's own row keeps pointing at the
- * stock file and is unchanged.
+ * shotgun's fitted to the stock PD Shotgun's spaces, carried in a model pack.
+ * A gun has two of those spaces and they are not the same: the first-person
+ * GshotgunZ has its barrel along +Z, while the held/floor PchrshotgunZ has it
+ * along -X from the chr's hand. One mesh cannot be correct in both, so the
+ * pack carries two OBJs, each fitted by models-custom/db-shotgun/fit-to-pd.py,
+ * and two aliases name them. The aliases are extra file numbers over the
+ * stock files, so the stock PD Shotgun's own rows are unchanged.
  *
  * What belongs here rather than in a static initialiser is the one rule the
  * two engines have to share: when the secondary is a full double (twelve
@@ -39,7 +41,8 @@
  * costing less than a player's, and a bot's pellets from staying at six.
  */
 
-static const char s_PdDbShotgunProp[] = "PpdDbShotgunZ";
+static const char s_PdDbShotgunProp[] = "PpdDbShotgunZ";    // first person, over FILE_GSHOTGUN
+static const char s_PdDbShotgunChrProp[] = "PpdDbShotgunChr"; // held/floor, over FILE_PCHRSHOTGUN
 
 bool dbShotgunIsDouble(s32 weaponnum, s32 funcnum, s32 loadedammo)
 {
@@ -65,21 +68,27 @@ s32 dbShotgunAmmoCost(s32 weaponnum, s32 funcnum, s32 loadedammo)
 void dbShotgunModelsRefresh(void)
 {
 	struct modelstate *state = &g_ModelStates[MODEL_PD_GESHOTGUN];
-	const s32 alias = romdataRegisterAliasFile(s_PdDbShotgunProp, FILE_GSHOTGUN);
-	const s32 fileid = alias ? alias : FILE_GSHOTGUN;
+	// The viewmodel is drawn from the weapon's hi_model under the GUNDL list's
+	// own matrix. The copy in a chr's hand or on the floor is drawn from this
+	// model state (playermgrGetModelOfWeapon answers it) under the hand node's
+	// matrix, so it needs its own file in its own rest space.
+	const s32 viewalias = romdataRegisterAliasFile(s_PdDbShotgunProp, FILE_GSHOTGUN);
+	const s32 chralias = romdataRegisterAliasFile(s_PdDbShotgunChrProp, FILE_PCHRSHOTGUN);
+	const s32 viewfileid = viewalias ? viewalias : FILE_GSHOTGUN;
+	const s32 chrfileid = chralias ? chralias : FILE_PCHRSHOTGUN;
 
 	// A modeldef is cached against the file it was read from; a new alias slot
 	// after a mod swap needs the old one dropped, as gebean.c does for its guns.
-	if (state->fileid != fileid) {
+	if (state->fileid != chrfileid) {
 		state->modeldef = NULL;
 	}
 
-	state->fileid = (u16) fileid;
+	state->fileid = (u16) chrfileid;
 	state->scale = g_ModelStates[MODEL_CHRSHOTGUN].scale;
 
 	if (g_Weapons[WEAPON_GESHOTGUN] != NULL) {
-		g_Weapons[WEAPON_GESHOTGUN]->hi_model = (u16) fileid;
-		g_Weapons[WEAPON_GESHOTGUN]->lo_model = (u16) fileid;
+		g_Weapons[WEAPON_GESHOTGUN]->hi_model = (u16) viewfileid;
+		g_Weapons[WEAPON_GESHOTGUN]->lo_model = (u16) viewfileid;
 	}
 }
 
@@ -163,12 +172,18 @@ void dbShotgunSelfTest(void)
 			"and an unrelated gun's figures are untouched");
 
 	// The model: a dedicated state one past the Moonrailer's, inside the range
-	// GoldenEye walks but below the remake's models, with the alias over the
-	// stock PD Shotgun's file behind it.
-	alias = romdataFileGetNumForName("PpdDbShotgunZ");
-	DB_CHECK(alias > 0 && alias == g_ModelStates[MODEL_PD_GESHOTGUN].fileid
-			&& (s32) gun->hi_model == alias && (s32) gun->lo_model == alias,
-			"the alias file fills the model state and both first-person rows");
+	// GoldenEye walks but below the remake's models. First person reads a file
+	// over the stock viewmodel, the held/floor state a different file over the
+	// stock chr model - the two rest spaces are not interchangeable.
+	alias = romdataFileGetNumForName(s_PdDbShotgunChrProp);
+	DB_CHECK(alias > 0 && alias == g_ModelStates[MODEL_PD_GESHOTGUN].fileid,
+			"the chr alias fills the held/floor model state");
+	DB_CHECK(romdataFileGetNumForName(s_PdDbShotgunProp) > 0
+			&& (s32) gun->hi_model == romdataFileGetNumForName(s_PdDbShotgunProp)
+			&& (s32) gun->lo_model == gun->hi_model,
+			"the viewmodel alias fills both first-person rows");
+	DB_CHECK(g_ModelStates[MODEL_PD_GESHOTGUN].fileid != gun->hi_model,
+			"the held mesh is a different file from the viewmesh - one fit cannot serve both");
 	DB_CHECK(MODEL_PD_GESHOTGUN == MODEL_PD_RAILLASER + 1
 			&& MODEL_PD_GESHOTGUN < MODEL_REMAKE_FIRST,
 			"the model state is the next one after the Moonrailer's and below the remake's");

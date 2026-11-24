@@ -708,13 +708,13 @@ function's `ammoindex` - which the AR34 does and so does the Shock Rifle.
 
 `WEAPON_GESHOTGUN` (0x8c) is a fourth gun of this fork's own, appended after
 `WEAPON_SHOCKORB`. It is the GoldenEye shotgun's mesh fitted to the stock PD
-Shotgun's space (`models-custom/db-shotgun-game.obj`, 2398 vertices / 2728 faces,
-groups `node0`, `part1_if1`, `part2`, six `bean_N_0x...` materials), but it needs
-**no GoldenEye release**: the fit is baked in, the ammunition is the existing
-`AMMOTYPE_SHOTGUN`, and its model is a port alias `PpdDbShotgunZ` over
-`FILE_GSHOTGUN` rather than anything in the XBLA pack. The stock PD Shotgun and
-the GE shotgun (when that mod is installed) are unchanged, because the alias is
-a second file number and the stock row still names the stock file.
+Shotgun's spaces (`models-custom/db-shotgun/db-shotgun-game.obj`, 2398 vertices
+/ 2728 faces, groups `node0`, `part1_if1`, `part2`, six `bean_N_0x...`
+materials), but it needs **no GoldenEye release**: the fit is baked in, the
+ammunition is the existing `AMMOTYPE_SHOTGUN`, and its models are port aliases
+rather than anything in the XBLA pack. The stock PD Shotgun and the GE shotgun
+(when that mod is installed) are unchanged, because each alias is a second file
+number and the stock rows still name the stock files.
 
 It is the two-round shotgun. The primary is one six-pellet blast for one round;
 the secondary, **only while the two-round magazine is full**, is one shot of
@@ -733,17 +733,40 @@ state `MODEL_PD_GESHOTGUN = MODEL_PD_RAILLASER + 1` is filled by
 `dbShotgunModelsRefresh()` at startup and again after a mod swap empties every
 alias slot.
 
-The pack OBJ is fitted to the PD first-person shotgun by
-`models-custom/db-shotgun/fit-to-pd.py`: the raw XBLA dump is in the wrong
-units and node structure (node0 is the muzzle flash quad, and the long axis is
-Z where GshotgunZ's is Y). The fit drops the flash group, scales and centres
-the two body groups onto GshotgunZ's rest bbox, joins them into its node0
-group, and points the two remaining `bean_` materials at the local PNGs.
+A gun has **two rest spaces**, and they are not the same. `GshotgunZ` is the
+viewmodel: its barrel runs along +Z and `xblaMeshRenderNode()` poses it under
+the matrix its GUNDL list loads. `PchrshotgunZ` is the held/floor model: its
+barrel runs along -X from the chr's hand node, with +Z up
+(`chr0f022214()` installs that node's matrix as the weapon model's root). One
+mesh cannot be correct in both, which is why a third-person DB-Shotgun once
+pointed into the air while first person was fine. Following the Rail-Laser's
+two-alias pattern, `dbShotgunModelsRefresh()` registers `PpdDbShotgunZ` over
+`FILE_GSHOTGUN` for `hi_model`/`lo_model` and `PpdDbShotgunChr` over
+`FILE_PCHRSHOTGUN` for `g_ModelStates[MODEL_PD_GESHOTGUN]`.
 
-The fitted mesh is **not enabled by default**. It ships as a model pack under
-the build directory, `build/model-packs/dbshotgun/n64/PpdDbShotgunZ.obj` plus
-`PpdDbShotgunZ.mtl` and the six PNGs in its `shotgun/` subdirectory (the MTL's
-`map_Kd shotgun/<name>.png` paths resolve there). To use it, put
+Both OBJs come from the same Blender export through
+`models-custom/db-shotgun/fit-to-pd.py`. Run it once per target:
+
+```
+blender -b --python fit-to-pd.py -- db-shotgun-game.obj \
+    ../../build/model-dumps/pd-n64/GshotgunZ.obj PpdDbShotgunZ.obj
+blender -b --python fit-to-pd.py -- db-shotgun-game.obj \
+    ../../build/model-dumps/pd-n64/PchrshotgunZ.obj PpdDbShotgunChr.obj
+```
+
+The script drops the `node0` muzzle-flash group, takes its forward sign from
+that group, and aligns the mesh's forward and up to the target space's axes
+(view = +Z/+Y, held = -X/+Z) before a uniform scale and bbox-centre fit. No
+per-gun rotation is edited into the game. It joins everything into one
+`node0` group and points the two remaining `bean_` materials at the local PNGs.
+Shape-matching `GshotgunZ` to `PchrshotgunZ` over all 24 proper signed axis
+permutations picks the same `(x,y,z) -> (-z,-x,y)` rotation the held fit uses.
+
+The fitted meshes are **not enabled by default**. They ship as a model pack
+under the build directory, `build/model-packs/dbshotgun/n64/PpdDbShotgunZ.obj`
+and `PpdDbShotgunChr.obj` with their MTLs and the six PNGs in its `shotgun/`
+subdirectory (the MTLs' `map_Kd shotgun/<name>.png` paths resolve there). To
+use them, put
 
 ```
 Mod.LoadModels=1

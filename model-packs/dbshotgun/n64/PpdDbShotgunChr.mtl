@@ -1,0 +1,22 @@
+# Blender 5.3.0 MTL File: 'None'
+# www.blender.org
+
+newmtl bean_04_0x0D0689B5
+Ns 0.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+illum 1
+map_Kd shotgun/04_0x0D0689B5.png
+map_d shotgun/04_0x0D0689B5.png
+
+newmtl bean_05_0x051D5125
+Ns 0.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+illum 1
+map_Kd shotgun/05_0x051D5125.png
+map_d shotgun/05_0x051D5125.png

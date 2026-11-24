@@ -1,76 +1,195 @@
 #!/usr/bin/env python3
-"""Fit the XBLA shotgun mesh into the PD GshotgunZ model's rest space.
+"""Fit a Blender-exported gun mesh into a Perfect Dark model's rest space.
 
-The asset dump in shotgun.obj is the GoldenEye XBLA shotgun in *its own*
-units and node structure: its long axis is Z, its node0 group is the muzzle
-flash quad, and its groups do not match the Perfect Dark first-person shotgun
-(GshotgunZ) model the PpdDbShotgunZ alias replaces.  Loading that dump as a
-model pack therefore rendered a giant sidewards gun with the flash always on.
+The source is a mesh exported from Blender (the GE shotgun dump opened,
+edited and saved again). Its own units, origin and axes have nothing to do
+with the PD model it replaces: its long axis is +Z, its muzzle-flash quad is
+the ``node0`` group, and it is Y-up. The two PD shotgun models are in two
+different rest spaces:
 
-This script drops the flash group, scales and centres the gun body onto the
-PD model's rest bbox, joins what remains into its single node0 group, and
-writes an OBJ whose MTL paths point at the local PNGs (see fix-export.py for
-the material-name rules).  Run with Blender:
+  GshotgunZ    a viewmodel gun. Long axis +Z, up +Y (its GUNDL list loads the
+               matrix the first-person gun is drawn under).
+  PchrshotgunZ a held/floor gun. Long axis -X, up +Z, relative to the chr's
+               hand node (chr0f022214 installs that node's matrix as the
+               weapon model's root).
 
-  blender -b --python fit-to-pd.py -- PpdDbShotgunZ.obj \
-      ../../build/model-dumps/pd-n64/GshotgunZ.obj fitted.obj
+One OBJ cannot be correct in both spaces. This script takes the target PD
+model dump as its reference and rotates, scales and centres the Blender mesh
+into that model's rest space, so the same source edit can be fitted to either
+slot without touching game code. The rotation is derived from the mesh's own
+muzzle marker and the target space's forward/up convention, not hand-tuned
+per gun.
+
+Run with Blender, once per target model:
+
+  blender -b --python fit-to-pd.py -- db-shotgun-game.obj \
+      ../../build/model-dumps/pd-n64/GshotgunZ.obj PpdDbShotgunZ.obj
+  blender -b --python fit-to-pd.py -- db-shotgun-game.obj \
+      ../../build/model-dumps/pd-n64/PchrshotgunZ.obj PpdDbShotgunChr.obj
+
+The space is inferred from the reference name (G* = viewmodel, Pchr* = held)
+or can be given explicitly with ``--space view|held``. The output OBJ is
+collapsed into one ``node0`` group, which is what both of these PD models
+have. Its MTL keeps the bean_N material names and points the pictures at a
+local folder (``--textures``, default ``shotgun``).
 """
 
-import bpy, sys
-from mathutils import Vector
+import bpy
+import os
+import sys
+from mathutils import Vector, Matrix
 
-src = sys.argv[sys.argv.index('--')+1]
-ref = sys.argv[sys.argv.index('--')+2]
-out = sys.argv[sys.argv.index('--')+3]
 
-# --- reference: first-person PD shotgun model, imported (Blender Z-up)
-bpy.ops.object.select_all(action='SELECT'); bpy.ops.object.delete()
-bpy.ops.wm.obj_import(filepath=ref)
-refobjs=[o for o in bpy.context.scene.objects if o.type=='MESH']
-rp=[o.matrix_world @ v.co for o in refobjs for v in o.data.vertices]
-rlo=Vector([min(p[i] for p in rp) for i in range(3)])
-rhi=Vector([max(p[i] for p in rp) for i in range(3)])
-print("REF bbox", [round(x,2) for x in rlo], [round(x,2) for x in rhi])
+args = sys.argv[sys.argv.index('--') + 1:]
+src = args[0]
+ref = args[1]
+out = args[2]
+space = args[args.index('--space') + 1] if '--space' in args else None
+textures = args[args.index('--textures') + 1] if '--textures' in args else 'shotgun'
 
-# --- source: custom mesh, imported, with its muzzle-flash group removed
-bpy.ops.object.select_all(action='SELECT'); bpy.ops.object.delete()
-bpy.ops.wm.obj_import(filepath=src)
-objs=[o for o in bpy.context.scene.objects if o.type=='MESH']
-for o in objs:
-    print("SRC GROUP", o.name, len(o.data.vertices), "polys", len(o.data.polygons))
-    if o.name == 'node0':
-        bpy.data.objects.remove(o, do_unlink=True)
-objs=[o for o in bpy.context.scene.objects if o.type=='MESH']
-sp=[o.matrix_world @ v.co for o in objs for v in o.data.vertices]
-slo=Vector([min(p[i] for p in sp) for i in range(3)])
-shi=Vector([max(p[i] for p in sp) for i in range(3)])
-print("SRC body bbox", [round(x,2) for x in slo], [round(x,2) for x in shi])
 
-# --- similarity transform: uniform scale from the longest axis, then align centers
-ssize = shi - slo; rsize = rhi - rlo
+def bbox(objs):
+    pts = [o.matrix_world @ v.co for o in objs for v in o.data.vertices]
+    lo = Vector([min(p[i] for p in pts) for i in range(3)])
+    hi = Vector([max(p[i] for p in pts) for i in range(3)])
+    return lo, hi
+
+
+def principal_axis(lo, hi):
+    size = hi - lo
+    return max(range(3), key=lambda i: size[i]), size
+
+
+def orthogonal(up, forward):
+    """Up with the forward component removed, then normalised."""
+    return (up - forward * up.dot(forward)).normalized()
+
+
+def basis(forward, up):
+    """Matrix whose columns are right, up and forward (right = up x forward)."""
+    right = up.cross(forward).normalized()
+    return Matrix((right, up, forward)).transposed()
+
+
+def import_obj(path):
+    bpy.ops.object.select_all(action='SELECT')
+    bpy.ops.object.delete()
+    bpy.ops.wm.obj_import(filepath=path)
+    return [o for o in bpy.context.scene.objects if o.type == 'MESH']
+
+
+# --- reference: the PD model to fit into (imported into Blender Z-up) ---
+refobjs = import_obj(os.path.abspath(ref))
+rlo, rhi = bbox(refobjs)
+raxis, rsize = principal_axis(rlo, rhi)
+
+# The gun grows away from the model root (the hand or gun-list origin), so the
+# end of the long axis furthest from 0 is the muzzle. This answers forward for
+# both GshotgunZ (+Z) and PchrshotgunZ (-X) without naming either model.
+rforward = Vector((0, 0, 0))
+rforward[raxis] = 1 if abs(rhi[raxis]) > abs(rlo[raxis]) else -1
+
+# Up is a property of the rest space, not of this particular gun. Viewmodel
+# dumps are authored Y-up, held dumps Z-up. Blender's OBJ importer maps dump
+# +Y to world +Z and dump +Z to world -Y.
+if space is None:
+    space = 'view' if os.path.basename(ref).lower().startswith('g') else 'held'
+if space not in ('view', 'held'):
+    sys.exit('fit-to-pd: --space must be view or held')
+rup = Vector((0, 0, 1)) if space == 'view' else Vector((0, -1, 0))
+rup = orthogonal(rup, rforward)
+
+print('REF bbox', [round(x, 2) for x in rlo], [round(x, 2) for x in rhi])
+print('REF forward', tuple(rforward), 'up', tuple(rup), 'space', space)
+
+
+# --- source: Blender's export, with its muzzle-flash group removed ---
+objs = import_obj(os.path.abspath(src))
+flash = [o for o in objs if o.name == 'node0']
+if flash:
+    fpts = [o.matrix_world @ v.co for o in flash for v in o.data.vertices]
+    flashctr = sum(fpts, Vector()) / len(fpts)
+for o in flash:
+    bpy.data.objects.remove(o, do_unlink=True)
+objs = [o for o in bpy.context.scene.objects if o.type == 'MESH']
+
+slo, shi = bbox(objs)
+saxis, ssize = principal_axis(slo, shi)
+sctr = (slo + shi) / 2
+
+# The flash sits slightly off the barrel's centreline after a shape edit, so
+# use it only for the sign: the axis itself is the mesh's longest bbox axis.
+if flash:
+    direction = flashctr - sctr
+else:
+    direction = Vector((0, 0, 0))
+    direction[saxis] = 1
+sforward = Vector((0, 0, 0))
+sforward[saxis] = 1 if direction[saxis] >= 0 else -1
+# The GE dump is Y-up, which Blender's importer turns into world +Z.
+sup = orthogonal(Vector((0, 0, 1)), sforward)
+
+print('SRC body bbox', [round(x, 2) for x in slo], [round(x, 2) for x in shi])
+print('SRC forward', tuple(round(x, 3) for x in sforward),
+      'up', tuple(round(x, 3) for x in sup))
+
+# --- one similarity transform: rotate, uniform scale, align box centres ---
+rotation = basis(rforward, rup) @ basis(sforward, sup).transposed()
 scale = max(rsize) / max(ssize)
-sctr=(slo+shi)/2; rctr=(rlo+rhi)/2
-print("SCALE", round(scale,6))
+rctr = (rlo + rhi) / 2
+transform = (Matrix.Translation(rctr)
+             @ Matrix.Diagonal((scale, scale, scale, 1))
+             @ rotation.to_4x4()
+             @ Matrix.Translation(-sctr))
+print('SCALE', round(scale, 6))
+
 for o in objs:
     for v in o.data.vertices:
-        w = o.matrix_world @ v.co
-        v.co = (w - sctr) * scale + rctr
-    # the imported objects carry a Z-up conversion rotation; after baking the
-    # world-space result into the vertices, clear it so the exporter does not
-    # apply it a second time
+        v.co = transform @ (o.matrix_world @ v.co)
+    # Bake the world matrix into the vertices so the exporter does not apply
+    # the importer's axis conversion a second time.
     o.matrix_world.identity()
+    o.data.update()
 
-# collapse every surviving mesh into one object so the pack loader sees one group
+# Collapse every surviving mesh into the pack's single node0 group.
 bpy.ops.object.select_all(action='DESELECT')
-for o in objs: o.select_set(True)
-bpy.context.view_layer.objects.active=objs[0]
+for o in objs:
+    o.select_set(True)
+bpy.context.view_layer.objects.active = objs[0]
 bpy.ops.object.join()
-joined=bpy.context.view_layer.objects.active
-joined.name='node0'
-print("JOINED", len(joined.data.vertices), "polys", len(joined.data.polygons))
+joined = bpy.context.view_layer.objects.active
+joined.name = 'node0'
+print('JOINED', len(joined.data.vertices), 'polys', len(joined.data.polygons))
 
-bpy.ops.object.select_all(action='DESELECT'); joined.select_set(True)
-bpy.context.view_layer.objects.active=joined
+out = os.path.abspath(out)
+bpy.ops.object.select_all(action='DESELECT')
+joined.select_set(True)
+bpy.context.view_layer.objects.active = joined
 bpy.ops.wm.obj_export(filepath=out, export_selected_objects=True, export_materials=True,
-                     export_uv=True, export_normals=True, apply_modifiers=True)
-print("WROTE",out)
+                      export_uv=True, export_normals=True, apply_modifiers=True)
+print('WROTE', out)
+
+# Blender writes the object line but does not always write a group line for a
+# single joined object. objmesh.c numbers the pack's draw lists from g lines,
+# so put the node0 group back explicitly (the group is the one this PD model
+# has, and the joined object is its whole mesh).
+objlines = open(out, encoding='utf-8').read().splitlines()
+if not any(line.startswith('g ') for line in objlines):
+    at = next((i for i, line in enumerate(objlines) if line.startswith('o ')), -1)
+    objlines.insert(at + 1, 'g node0')
+    with open(out, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(objlines) + '\n')
+
+# Blender resolves the dump's relative picture paths against its own location
+# and writes those absolute paths into the new MTL. Point them back at the
+# pack's local texture folder; the material names are what bind in game.
+mtl = os.path.splitext(out)[0] + '.mtl'
+lines = open(mtl, encoding='utf-8').read().splitlines()
+with open(mtl, 'w', encoding='utf-8') as f:
+    for line in lines:
+        if line.startswith('map_Kd ') or line.startswith('map_d '):
+            key, _, value = line.partition(' ')
+            f.write(f'{key} {textures}/{os.path.basename(value.strip())}\n')
+        else:
+            f.write(line + '\n')
+print('WROTE', mtl)
