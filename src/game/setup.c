@@ -907,6 +907,16 @@ void setupPlaceWeapon(struct weaponobj *weapon, s32 cmdindex)
 				weapon->base.extrascale = mpweapon->extrascale;
 				createweapon = mpweapon->hasweapon;
 
+				// A fixed-loadout mode's guns are handed straight to the
+				// players. Their slots still name the guns (bot scoring and
+				// the menu read them), but no pickup may be placed on the
+				// floor - the scenario's own hand-out is the only source.
+				// This also covers a saved setup or room that still carries
+				// weapon slots while naming one of these modes.
+				if (mpScenarioHasFixedLoadout(g_MpSetup.scenario)) {
+					createweapon = false;
+				}
+
 				if (weaponHost(mpweapon->weaponnum) == WEAPON_MPSHIELD) {
 					struct shieldobj *shield = (struct shieldobj *)weapon;
 					shield->base.modelnum = MODEL_CHRSHIELD;

@@ -2998,6 +2998,16 @@ Gfx *menuitemSelectableRender(Gfx *gdl, struct menurendercontext *context)
 
 bool menuitemSelectableTick(struct menuitem *item, struct menuinputs *inputs, u32 tickflags)
 {
+	// MenuItemFlag_AlwaysDisabled greys a row and skips it for focus, but it
+	// has never stopped Select from opening the row's dialog: navigation
+	// leaves a disabled item in focus if it was focused when the flag went
+	// on, and a dialog can be pushed that way. A disabled row must not be
+	// activatable at all (the fixed-loadout modes rely on this to keep the
+	// Weapons page out of reach).
+	if (item->flags & MENUITEMFLAG_ALWAYSDISABLED) {
+		return false;
+	}
+
 	if ((tickflags & MENUTICKFLAG_ITEMISFOCUSED) && inputs->select) {
 		menuPlaySound(MENUSOUND_SELECT);
 

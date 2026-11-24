@@ -1,4 +1,5 @@
 #include <ultra64.h>
+#include <string.h>
 #include "constants.h"
 #include "game/modrules.h"
 #include "game/chraction.h"
@@ -40,6 +41,8 @@
 #include "data.h"
 #include "types.h"
 
+extern struct menuitem g_MpAdvancedSetupMenuItems[];
+
 /**
  * The Rail-Laser's charge time in 60ths of a second while the Instagib
  * scenario is active. Default is TICKS(90) (1.5s, the gun's normal charge);
@@ -55,6 +58,77 @@ s32 g_InstagibCharge60 = TICKS(90);
  * save word (setup files and net RULES) the way Instagib's charge does.
  */
 s32 g_LmsStartingLives = 3;
+
+/**
+ * A fixed-loadout scenario dictates the guns: it clears the weapon slots (and
+ * in Plasma Tag's case forces a movement option) when it is selected, and its
+ * Weapons tab is greyed out. A player's own choices are kept here so leaving
+ * the mode restores them instead of carrying its overrides into the next
+ * match. First-write-wins: moving between two fixed-loadout modes keeps the
+ * original choices, like the challenge room's snapshot in netlobby.c.
+ */
+static struct {
+	bool valid;
+	u8 weapons[NUM_MPWEAPONSLOTS];
+	u32 options;
+} s_FixedLoadoutSetup;
+
+/**
+ * Whether a scenario fixes the loadout rather than letting the player choose
+ * it. Our own two modes do; Zombies does not, because its two guns are
+ * host-customisable (a future Start Armed "Loadout" mode will own those).
+ */
+bool mpScenarioHasFixedLoadout(s32 scenario)
+{
+	return scenario == MPSCENARIO_INSTAGIB || scenario == MPSCENARIO_PLASMATEST;
+}
+
+/** Snapshot the player's choices before a fixed-loadout mode overrides them. */
+static void fixedLoadoutSnapshot(void)
+{
+	if (!s_FixedLoadoutSetup.valid) {
+		memcpy(s_FixedLoadoutSetup.weapons, g_MpSetup.weapons, sizeof(s_FixedLoadoutSetup.weapons));
+		s_FixedLoadoutSetup.options = g_MpSetup.options;
+		s_FixedLoadoutSetup.valid = true;
+	}
+}
+
+/** Put the player's own choices back after a fixed-loadout mode. */
+static void fixedLoadoutRestore(void)
+{
+	if (s_FixedLoadoutSetup.valid) {
+		memcpy(g_MpSetup.weapons, s_FixedLoadoutSetup.weapons, sizeof(g_MpSetup.weapons));
+		g_MpSetup.options = s_FixedLoadoutSetup.options;
+		s_FixedLoadoutSetup.valid = false;
+	}
+}
+
+/** A setup or room loaded whole replaces the choices a snapshot would hold. */
+void scenarioFixedLoadoutInvalidate(void)
+{
+	s_FixedLoadoutSetup.valid = false;
+}
+
+/**
+ * Drive the same enter/leave decisions the scenario menu makes, without a
+ * menu. Exposed so a --test-fixed-loadout run can prove a normal mode gets the
+ * player's own guns back after Instagib and Plasma Tag.
+ */
+void scenarioSelectForTest(s32 scenario)
+{
+	if (mpScenarioHasFixedLoadout(g_MpSetup.scenario)
+			&& !mpScenarioHasFixedLoadout(scenario)) {
+		fixedLoadoutRestore();
+	} else if (!mpScenarioHasFixedLoadout(g_MpSetup.scenario)
+			&& mpScenarioHasFixedLoadout(scenario)) {
+		fixedLoadoutSnapshot();
+	}
+
+	g_MpSetup.scenario = scenario;
+	scenarioInit();
+	mpUpdateSetupWeaponLocks();
+}
+
 #ifndef PLATFORM_N64
 #include "modloader.h"
 #include "gexplus.h"
@@ -589,15 +663,13 @@ MenuItemHandlerResult scenarioScenarioMenuHandler(s32 operation, struct menuitem
 			if (challengeIsFeatureUnlocked(g_MpScenarioOverviews[i].requirefeature)
 					&& (teamgame || g_MpScenarioOverviews[i].teamonly == false)) {
 				if (count == data->list.value) {
-					g_MpSetup.scenario = i;
+					scenarioSelectForTest(i);
 					break;
 				}
 
 				count++;
 			}
 		}
-
-		scenarioInit();
 		break;
 	case MENUOP_GETSELECTEDINDEX:
 		for (p = 0; p < ARRAYCOUNT(g_ScenarioListOrder); p++) {
@@ -1770,4 +1842,76 @@ void scenarioHandleActivatedProp(struct chrdata *chr, struct prop *prop)
 			}
 		}
 	}
+}
+
+/**
+ * --test-fixed-loadout: prove that a mode with a fixed loadout keeps the
+ * player's own weapons and options safe, and that both such modes grey the
+ * Weapons tab out. No menu, no match: the same select helper the menu uses is
+ * driven directly so the check is about the state machine, not the screen.
+ */
+void fixedLoadoutSelfTest(void)
+{
+	struct mpsetup saved = g_MpSetup;
+	u32 savedweaponflags = g_MpAdvancedSetupMenuItems[3].flags;
+	s32 failed = 0;
+	s32 checks = 0;
+	s32 i;
+
+#define FIXED_CHECK(cond, what) \
+	do { \
+		checks++; \
+		if (cond) { \
+			sysLogPrintf(LOG_NOTE, "fixed-loadout test: ok   %s", what); \
+		} else { \
+			sysLogPrintf(LOG_NOTE, "fixed-loadout test: FAIL %s", what); \
+			failed++; \
+		} \
+	} while (0)
+
+	scenarioFixedLoadoutInvalidate();
+	g_MpSetup.scenario = MPSCENARIO_COMBAT;
+	for (i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+		g_MpSetup.weapons[i] = (u8) (i + 1);
+	}
+	g_MpSetup.options = 0x1234;
+	g_MpAdvancedSetupMenuItems[3].flags &= ~MENUITEMFLAG_ALWAYSDISABLED;
+
+	scenarioSelectForTest(MPSCENARIO_INSTAGIB);
+	FIXED_CHECK(g_MpAdvancedSetupMenuItems[3].flags & MENUITEMFLAG_ALWAYSDISABLED,
+			"Instagib greys the Weapons tab");
+	FIXED_CHECK(g_MpSetup.weapons[0] == MPWEAPON_NONE,
+			"Instagib clears the weapon slots");
+
+	scenarioSelectForTest(MPSCENARIO_PLASMATEST);
+	FIXED_CHECK(g_MpAdvancedSetupMenuItems[3].flags & MENUITEMFLAG_ALWAYSDISABLED,
+			"Plasma Tag greys the Weapons tab");
+	FIXED_CHECK(g_MpSetup.weapons[0] == MPWEAPON_NONE,
+			"Plasma Tag clears the weapon slots");
+
+	scenarioSelectForTest(MPSCENARIO_COMBAT);
+	FIXED_CHECK(!(g_MpAdvancedSetupMenuItems[3].flags & MENUITEMFLAG_ALWAYSDISABLED),
+			"the Weapons tab is selectable again in Combat");
+	FIXED_CHECK(g_MpSetup.weapons[0] == 1 && g_MpSetup.weapons[5] == 6,
+			"the player's own weapon slots come back");
+	FIXED_CHECK(g_MpSetup.options == 0x1234,
+			"the player's own options come back");
+
+	// A loaded setup arrives whole while a fixed-loadout mode is selected.
+	// Leaving it must not restore guns from before that load.
+	scenarioSelectForTest(MPSCENARIO_INSTAGIB);
+	scenarioFixedLoadoutInvalidate();
+	for (i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+		g_MpSetup.weapons[i] = (u8) (i + 7);
+	}
+	scenarioSelectForTest(MPSCENARIO_COMBAT);
+	FIXED_CHECK(g_MpSetup.weapons[0] == 7,
+			"a setup loaded while in a fixed-loadout mode is kept");
+
+	g_MpSetup = saved;
+	g_MpAdvancedSetupMenuItems[3].flags = savedweaponflags;
+	s_FixedLoadoutSetup.valid = false;
+
+	sysLogPrintf(LOG_NOTE, "fixed-loadout test: %d of %d checks as expected", checks - failed, checks);
+#undef FIXED_CHECK
 }

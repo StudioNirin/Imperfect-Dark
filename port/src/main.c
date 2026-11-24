@@ -18,6 +18,7 @@
 #include "game/modspectate.h"
 #include "game/stagetable.h"
 #include "game/mplayer/mplayer.h"
+#include "game/mplayer/scenarios.h"
 #include "game/mplayer/setup.h"
 #include "mpweaponsets.h"
 #include "mpweaponfilters.h"
@@ -102,6 +103,7 @@ s32 g_TestDodge = false; // --test-dodge: the crouch double tap put through ever
 s32 g_TestMpWeaponSets = false; // --test-mpweaponsets: the saved weapon sets' store (mpWeaponSetsSelfTest)
 s32 g_TestRandomGroups = false; // --test-randomgroups: the random weapon groups' store and the roll they steer (mpweaponfilters.c, mplayer.c)
 s32 g_TestStartArmed = false; // --test-startarmed: what a Start Armed spawn is handed, and how many of it (mpStartArmedSelfTest)
+s32 g_TestFixedLoadout = false; // --test-fixed-loadout: fixed-loadout mode locks and restore (fixedLoadoutSelfTest)
 s32 g_TestRailLaser = false; // --test-raillaser: the Rail-Laser's row, number, charge and saved-setup width (raillaserSelfTest)
 s32 g_TestShock = false; // --test-shock: the Shock Rifle's two modes, orb row, saved-setup width (shockSelfTest)
 s32 g_TestForkBots = false; // --test-forkbots: what a simulant's preference table says of the fork's guns (forkbotSelfTest)
@@ -386,6 +388,11 @@ int main(int argc, const char **argv)
 
 	if (g_TestStartArmed) {
 		mpStartArmedSelfTest();
+	}
+
+	g_TestFixedLoadout = sysArgCheck("--test-fixed-loadout");
+	if (g_TestFixedLoadout) {
+		fixedLoadoutSelfTest();
 	}
 
 	// The Rail-Laser's own checks, read here for the same reason: it asks the

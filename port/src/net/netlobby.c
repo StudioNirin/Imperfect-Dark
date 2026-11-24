@@ -22,6 +22,7 @@
 #include "game/lv.h"
 #include "game/menu.h"
 #include "game/mplayer/mplayer.h"
+#include "game/mplayer/scenarios.h"
 #include "game/mplayer/setup.h"
 #include "lib/main.h"
 #include "net/net.h"
@@ -3148,6 +3149,7 @@ void netChallengeSetupRestore(void)
 	}
 
 	memcpy(&g_MpSetup, &s_ChallengeOwnSetup, sizeof(g_MpSetup));
+	scenarioFixedLoadoutInvalidate();
 	memcpy(g_BotConfigsArray, s_ChallengeOwnBots, sizeof(g_BotConfigsArray));
 	memcpy(g_MpSimSlots, s_ChallengeOwnSimSlots, sizeof(g_MpSimSlots));
 	g_BossFile.locktype = s_ChallengeOwnLock;

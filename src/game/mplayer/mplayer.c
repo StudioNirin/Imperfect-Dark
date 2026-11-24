@@ -6308,6 +6308,10 @@ void mpApplyConfig(struct mpconfigfull *config)
 
 	g_MpSetup = config->config.setup;
 
+	// A whole setup arrived: any fixed-loadout snapshot would hold the
+	// choices from before it, not the guns this setup just supplied.
+	scenarioFixedLoadoutInvalidate();
+
 #ifndef PLATFORM_N64
 	// A challenge record, a preset or a Load Settings hands over the six slots whole,
 	// and none of them has a notion of a slot being random. The markers are separate
@@ -6488,6 +6492,9 @@ void mpsetupfileLoadWad(struct savebuffer *buffer, u8 version)
 	if (version > 0) {
 		scenarioInit();
 	}
+
+	// The guns and options read below replace anything a snapshot held.
+	scenarioFixedLoadoutInvalidate();
 
 	scenarioReadSave(buffer, version);
 

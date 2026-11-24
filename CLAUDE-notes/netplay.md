@@ -4823,3 +4823,41 @@ visible.
 not tier 4. Earlier cases used a direct host pair where `s_JoinInProgress` and
 `s_LobbyRoomOn` are both 0, and the only high-count case forced `s_MatchHumans`
 directly - so none exercised the seat-count derivation.
+
+## Fixed-loadout modes: greyed Weapons tab and settings that do not carry over (2026-11-24)
+
+Instagib and Plasma Tag dictate the loadout, but the "grey out the Weapons tab"
+fix at setup.c only ran on MENUOP_OPEN - once, when Advanced Setup was first
+pushed. Picking the mode happens later in the Scenario child dialog, and closing
+a child restores the parent without re-firing OPEN, so the flag was never set
+for the mode actually chosen. On top of that, MENUITEMFLAG_ALWAYSDISABLED only
+greys a row and skips it for focus: menuitemSelectableTick() pushed the dialog
+regardless, so a focused disabled row still opened the page and let a player put
+guns back into the slots. The scenario's init had cleared those slots, but the
+weapon placement in setup.c still reads them, so pickups appeared on the map
+that the pickup guard then refused to let anyone take.
+
+The same init functions mutate g_MpSetup in place with no restore: switching
+from Instagib or Plasma Tag back to Combat (which has no init) left the slots
+empty and Plasma Tag's Fast Movement bit set. The protocol-38 challengehumans
+work stopped sims inflating PLAYERCOUNT(); it did not stop this.
+
+menuitemSelectableTick() now refuses to activate a MENUITEMFLAG_ALWAYSDISABLED
+row. mpScenarioHasFixedLoadout() names the two modes, and
+mpUpdateSetupWeaponLocks() applies the flag to the Weapons row in all three
+setup dialogs (Advanced, Quick Start, 4MB); the scenario selection helper calls
+it immediately after the mode changes, and dialog OPEN calls it too. That
+helper also snapshots the player's weapons and options on the way into a fixed
+mode and restores them on the way out (first-write-wins across Instagib ->
+Plasma Tag). Whole-setup loads and the challenge-room restore invalidate the
+snapshot. setup.c's weapon placement refuses to create any pickup while a
+fixed-loadout mode is active, whatever the slots say.
+
+Zombies is deliberately not a fixed-loadout mode here: its two guns are to be
+host-customisable through the planned Start Armed "Loadout" mode, so its
+Weapons tab stays selectable. That mode is staged separately in
+/home/nirin/.opencode/plan/loadout-start-armed-mode.md.
+
+--test-fixed-loadout drives the select helper directly (8 checks) and is part
+of tools/ci/raillaser.sh alongside source pins for the menu gate, the predicate,
+the restore, the relock and the pickup suppression.

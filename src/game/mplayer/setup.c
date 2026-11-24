@@ -57,6 +57,8 @@ extern struct menudialogdef g_ManageSettingsDialog;
 extern struct menudialogdef g_FilemgrFileSavedMenuDialog;
 extern struct menudialogdef g_FilemgrErrorMenuDialog;
 extern struct menuitem g_MpAdvancedSetupMenuItems[];
+extern struct menuitem g_MpQuickTeamGameSetupMenuItems[];
+extern struct menuitem g_AdvancedSetup4MbMenuItems[];
 
 #ifndef PLATFORM_N64
 extern s32 g_MpWeaponSetNum;
@@ -8070,18 +8072,36 @@ char *mpMenuTextWeaponSetName(struct menuitem *item)
 	return mpGetWeaponSetName(mpGetWeaponSet());
 }
 
+/**
+ * Grey out the Weapons tab in every setup dialog while a fixed-loadout mode
+ * owns the guns. Called both when a dialog opens and as soon as the scenario
+ * changes in its child dialog, so the flag is correct whichever way the player
+ * reaches the page. The Quick Start and 4MB dialogs have their own item arrays
+ * and used to stay enterable.
+ */
+void mpUpdateSetupWeaponLocks(void)
+{
+	bool locked = mpScenarioHasFixedLoadout(g_MpSetup.scenario);
+	u32 flag = MENUITEMFLAG_ALWAYSDISABLED;
+
+	if (locked) {
+		g_MpAdvancedSetupMenuItems[3].flags |= flag;
+		g_MpQuickTeamGameSetupMenuItems[3].flags |= flag;
+		g_AdvancedSetup4MbMenuItems[5].flags |= flag;
+	} else {
+		g_MpAdvancedSetupMenuItems[3].flags &= ~flag;
+		g_MpQuickTeamGameSetupMenuItems[3].flags &= ~flag;
+		g_AdvancedSetup4MbMenuItems[5].flags &= ~flag;
+	}
+}
+
 MenuDialogHandlerResult menudialogMpGameSetup(s32 operation, struct menudialogdef *dialogdef, union handlerdata *data)
 {
 	if (operation == MENUOP_OPEN) {
 		g_Vars.mpsetupmenu = MPSETUPMENU_ADVSETUP;
 		g_Vars.usingadvsetup = true;
 
-		// Instagib: disable the Weapons tab since the loadout is fixed.
-		if (g_MpSetup.scenario == MPSCENARIO_INSTAGIB) {
-			g_MpAdvancedSetupMenuItems[3].flags |= MENUITEMFLAG_ALWAYSDISABLED;
-		} else {
-			g_MpAdvancedSetupMenuItems[3].flags &= ~MENUITEMFLAG_ALWAYSDISABLED;
-		}
+		mpUpdateSetupWeaponLocks();
 
 		// Quick Start only holds a simulant *count*; the slots themselves are
 		// not created until mpStartMatch(). Advanced Setup lists slots, and

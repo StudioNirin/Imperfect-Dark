@@ -304,6 +304,19 @@ grep -qF 'g_MpSetup.scenario == MPSCENARIO_INSTAGIB ? g_InstagibCharge60 : TICKS
 grep -qF 'g_LmsNetBlockSeen' "$ROOT/port/src/net/netscen.c" || fail "the LMS net block's arrival is not marked - zero lives reads as no block"
 grep -qF 'g_LmsNetBlockSeen' "$ROOT/src/game/mplayer/scenarios/lastmanstanding.inc" || fail "the LMS lives display ignores the net block marker"
 
+# A fixed-loadout mode must keep its Weapons tab out of reach, and must not
+# leave its guns and options behind when the player picks a normal mode.
+grep -qF 'if (item->flags & MENUITEMFLAG_ALWAYSDISABLED) {' "$ROOT/src/game/menuitem.c" \
+	|| fail "disabled menu rows can still be selected - the Weapons tab opens in fixed-loadout modes"
+grep -qF 'return scenario == MPSCENARIO_INSTAGIB || scenario == MPSCENARIO_PLASMATEST;' "$ROOT/src/game/mplayer/scenarios.c" \
+	|| fail "the fixed-loadout predicate does not cover both modes"
+grep -qF 'fixedLoadoutRestore();' "$ROOT/src/game/mplayer/scenarios.c" \
+	|| fail "a normal mode does not get the player's own loadout back"
+grep -qF 'mpUpdateSetupWeaponLocks();' "$ROOT/src/game/mplayer/scenarios.c" \
+	|| fail "the Weapons tab is not relocked the moment the scenario changes"
+grep -qF 'mpScenarioHasFixedLoadout(g_MpSetup.scenario)' "$ROOT/src/game/setup.c" \
+	|| fail "a fixed-loadout mode can still place weapon pickups on the map"
+
 # The Moonrailer's scope is the AR34's pattern: a full firing-function clone on
 # FUNC_SECONDARY, with bondmove winding the view in when that function is active.
 # The aim input itself stays a plain aim (no MANUALZOOM), and both functions carry
@@ -324,4 +337,19 @@ grep -qF 'Use Scope' "$ROOT/port/src/raillaser.c" || fail "the Moonrailer's seco
 # so an invisible pickup has no other line to look for.
 #	  gebean: the Moonrailer's first person is GpdMoonrailerZ (file N)
 #	  gebean: the Moonrailer's pickup is PpdMoonrailerZ (file N)
+
+# The fixed-loadout modes' own state machine: their Weapons tab must be
+# unenterable, and leaving them must restore the player's guns and options.
+FIXLOG=$OUT/fixedloadout.log
+( cd "$BUILD" && SDL_VIDEODRIVER=${SDL_VIDEODRIVER:-offscreen} timeout -k 5 60 "$BIN" \
+	--savedir "$OUT/save" --skip-intro --no-sound --test-fixed-loadout --exit-frame 30 \
+	> "$FIXLOG" 2>&1 )
+[ $? -eq 0 ] || { echo "fixed-loadout run failed: see $FIXLOG"; tail -20 "$FIXLOG"; exit 2; }
+grep -E "fixed-loadout test" "$FIXLOG" | sed 's/^.*fixed-loadout test/fixed-loadout test/'
+grep -q "fixed-loadout test: FAIL" "$FIXLOG" && { echo "raillaser: a fixed-loadout check failed"; exit 1; }
+grep -q "fixed-loadout test: 8 of 8 checks as expected" "$FIXLOG" || {
+	echo "raillaser: the fixed-loadout test did not report all checks"
+	exit 1
+}
+
 echo "raillaser: as expected"
