@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 100 2026-11-24
+DB-Shotgun: the third-person gun is fitted to the hand's rest space, so it no longer points into the air.
+
 notes 99 2026-11-24
 New Start Armed option: Loadout, spawning everyone with the first two weapon slots and no pickups for those guns.
 Loadout guns come from the Weapons page's first two slots; your own loadout returns when you leave Zombies or a fixed-loadout mode.
