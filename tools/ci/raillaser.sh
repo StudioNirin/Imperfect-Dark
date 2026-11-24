@@ -347,7 +347,7 @@ FIXLOG=$OUT/fixedloadout.log
 [ $? -eq 0 ] || { echo "fixed-loadout run failed: see $FIXLOG"; tail -20 "$FIXLOG"; exit 2; }
 grep -E "fixed-loadout test" "$FIXLOG" | sed 's/^.*fixed-loadout test/fixed-loadout test/'
 grep -q "fixed-loadout test: FAIL" "$FIXLOG" && { echo "raillaser: a fixed-loadout check failed"; exit 1; }
-grep -q "fixed-loadout test: 8 of 8 checks as expected" "$FIXLOG" || {
+grep -q "fixed-loadout test: 12 of 12 checks as expected" "$FIXLOG" || {
 	echo "raillaser: the fixed-loadout test did not report all checks"
 	exit 1
 }

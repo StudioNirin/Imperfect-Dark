@@ -83,6 +83,19 @@ bool mpScenarioHasFixedLoadout(s32 scenario)
 	return scenario == MPSCENARIO_INSTAGIB || scenario == MPSCENARIO_PLASMATEST;
 }
 
+/**
+ * Whether a scenario dictates the loadout and must hand the player's own
+ * choices back on leaving. Zombies joins the two fixed-loadout modes here:
+ * it fills the first two weapon slots with its survivor guns and clears the
+ * rest, so without a restore a later Combat match would inherit them. It is
+ * not a fixed-loadout mode for the Weapons tab - those two slots stay
+ * editable - only for the snapshot/restore.
+ */
+static bool scenarioOwnsLoadout(s32 scenario)
+{
+	return mpScenarioHasFixedLoadout(scenario) || scenario == MPSCENARIO_ZOMBIES;
+}
+
 /** Snapshot the player's choices before a fixed-loadout mode overrides them. */
 static void fixedLoadoutSnapshot(void)
 {
@@ -116,11 +129,11 @@ void scenarioFixedLoadoutInvalidate(void)
  */
 void scenarioSelect(s32 scenario)
 {
-	if (mpScenarioHasFixedLoadout(g_MpSetup.scenario)
-			&& !mpScenarioHasFixedLoadout(scenario)) {
+	if (scenarioOwnsLoadout(g_MpSetup.scenario)
+			&& !scenarioOwnsLoadout(scenario)) {
 		fixedLoadoutRestore();
-	} else if (!mpScenarioHasFixedLoadout(g_MpSetup.scenario)
-			&& mpScenarioHasFixedLoadout(scenario)) {
+	} else if (!scenarioOwnsLoadout(g_MpSetup.scenario)
+			&& scenarioOwnsLoadout(scenario)) {
 		fixedLoadoutSnapshot();
 	}
 
@@ -1896,6 +1909,20 @@ void fixedLoadoutSelfTest(void)
 			"the player's own weapon slots come back");
 	FIXED_CHECK(g_MpSetup.options == 0x1234,
 			"the player's own options come back");
+
+	// Zombies owns the loadout too: it seeds the first two slots with the
+	// survivor pair, keeps the Weapons tab open, and hands the player's own
+	// slots back on leaving - the same revert as the two fixed modes.
+	scenarioSelect(MPSCENARIO_ZOMBIES);
+	FIXED_CHECK(mpLoadoutWeaponNum(0) == WEAPON_SHOTGUN && mpLoadoutWeaponNum(1) == WEAPON_FALCON2,
+			"Zombies seeds the survivor pair in slots 1 and 2");
+	FIXED_CHECK(!(g_MpAdvancedSetupMenuItems[3].flags & MENUITEMFLAG_ALWAYSDISABLED),
+			"Zombies keeps the Weapons tab open");
+	FIXED_CHECK(g_MpSetup.weapons[2] == MPWEAPON_NONE,
+			"Zombies clears the floor-pickup slots");
+	scenarioSelect(MPSCENARIO_COMBAT);
+	FIXED_CHECK(g_MpSetup.weapons[0] == 1 && g_MpSetup.weapons[5] == 6,
+			"leaving Zombies restores the player's own weapons");
 
 	// A loaded setup arrives whole while a fixed-loadout mode is selected.
 	// Leaving it must not restore guns from before that load.

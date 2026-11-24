@@ -67,7 +67,7 @@ bool mpWeaponSlotsAreLocked(void);
 s32 mpWeaponSetStockOfferedFirst(void);
 #ifndef PLATFORM_N64
 struct mpweapon *mpGetMpWeaponByLocationWithSlot(s32 locationindex, s32 *outslot);
-MenuItemHandlerResult menuhandlerMpLoadoutWeapon(s32 operation, struct menuitem *item, union handlerdata *data);
+s32 mpLoadoutRowForWeapon(s32 weaponnum, s32 fallbackrow);
 void mpLoadoutResolve(void);
 s32 mpLoadoutWeaponNum(s32 index);
 bool mpLoadoutIsValid(void);

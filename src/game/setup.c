@@ -914,7 +914,8 @@ void setupPlaceWeapon(struct weaponobj *weapon, s32 cmdindex)
 				// floor - the scenario's own hand-out is the only source.
 				// This also covers a saved setup or room that still carries
 				// weapon slots while naming one of these modes.
-				if (mpScenarioHasFixedLoadout(g_MpSetup.scenario)) {
+				if (mpScenarioHasFixedLoadout(g_MpSetup.scenario)
+						|| g_MpSetup.scenario == MPSCENARIO_ZOMBIES) {
 					createweapon = false;
 				}
 

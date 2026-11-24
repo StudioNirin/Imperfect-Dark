@@ -139,22 +139,6 @@ MenuItemHandlerResult menuhandlerMpZombiesRadar(s32 operation, struct menuitem *
 
 struct menuitem g_ZombiesOptionsMenuItems[] = {
 	{
-		MENUITEMTYPE_DROPDOWN,
-		0,
-		MENUITEMFLAG_LOCKABLEMINOR | MENUITEMFLAG_LITERAL_TEXT,
-		(uintptr_t) "Survivor Gun 1\n",
-		0,
-		menuhandlerMpLoadoutWeapon,
-	},
-	{
-		MENUITEMTYPE_DROPDOWN,
-		1,
-		MENUITEMFLAG_LOCKABLEMINOR | MENUITEMFLAG_LITERAL_TEXT,
-		(uintptr_t) "Survivor Gun 2\n",
-		1,
-		menuhandlerMpLoadoutWeapon,
-	},
-	{
 		MENUITEMTYPE_SLIDER,
 		0,
 		MENUITEMFLAG_LOCKABLEMINOR | MENUITEMFLAG_LITERAL_TEXT,
@@ -578,7 +562,14 @@ void zombiesInit(void)
 
 	g_MpSetup.options &= ~MPOPTION_TEAMSENABLED;
 
-	for (i = 0; i < NUM_MPWEAPONSLOTS; i++) {
+	// The first two slots are the survivors' two guns, shown in the Weapons
+	// page where the player sets them. Seed the stock pair whenever the mode
+	// is applied (menu, saved setup or the boot harness); a player can then
+	// change either slot for the match. Slots 3-6 are the floor pickups this
+	// mode never places, so leave them empty.
+	zombiesSeedLoadout();
+
+	for (i = 2; i < NUM_MPWEAPONSLOTS; i++) {
 		g_MpSetup.weapons[i] = MPWEAPON_NONE;
 	}
 
@@ -1106,4 +1097,16 @@ Gfx *zombiesRenderHud(Gfx *gdl)
 #endif
 
 	return gdl;
+}
+
+/**
+ * Put the stock survivor pair in the first two weapon slots when Zombies is
+ * selected. Called at the menu transition, after the player's own loadout has
+ * been snapshotted, so leaving the mode hands it back. The player can then
+ * change either slot in the Weapons page to suit the host's match.
+ */
+void zombiesSeedLoadout(void)
+{
+	g_MpSetup.weapons[0] = (u8) mpLoadoutRowForWeapon(WEAPON_SHOTGUN, 0);
+	g_MpSetup.weapons[1] = (u8) mpLoadoutRowForWeapon(WEAPON_FALCON2, 0);
 }

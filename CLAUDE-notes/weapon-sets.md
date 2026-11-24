@@ -1274,16 +1274,24 @@ up guns (the existing role guards). In every other mode, Loadout is for all
 players and sims on every machine.
 
 The guns come from the Weapons page's first two slots ("1:" and "2:") in
-ordinary modes - that is where a player editing a Loadout expects to set them.
-Those slots are already carried to clients in RULES. The separate
-Mod.LoadoutWeapon1/2 config keys (NETKEY_SYNC) are the FALLBACK and the source
-Zombies uses: its no-pickup arenas clear all six slots, so it reads the keys
-instead (default Falcon 2 + Shotgun, settable in Zombies Options). A slot left
-unset (row 0) also falls back to the keys. Protocol bumped to 43: an older peer
-would clamp Start Armed=3 back to Fiesta and disagree about both kits and
-pickups. Rows are resolved against the live g_MpWeapons[] at startup
+every mode - that is where a player editing a Loadout expects to set them.
+Those slots are already carried to clients in RULES. Zombies uses the same
+two slots, seeded with Shotgun + Falcon 2 when the mode is selected; slots
+3-6 are greyed out there (the floor pickups a Zombies arena never places).
+A host who wants different zombie guns changes slots 1-2 in the Weapons page
+rather than a second set of rows in Zombies Options - those duplicate rows
+were removed. The separate Mod.LoadoutWeapon1/2 config keys (NETKEY_SYNC)
+remain as a fallback for a slot left unset (row 0). Protocol bumped to 43: an
+older peer would clamp Start Armed=3 back to Fiesta and disagree about kits
+and pickups. Rows resolve against the live g_MpWeapons[] at startup
 (mpLoadoutResolve) so a mod renumbering its guns cannot leave a row naming
 nothing; the defaults are found by weapon number.
+
+Zombies joins the two fixed-loadout modes in the loadout snapshot/restore:
+selecting it saves the player's own six slots and leaving it hands them back,
+so a later Combat match does not inherit the zombie pair. The Weapons tab
+itself stays open in Zombies (slots 1-2 are editable) - only the whole-tab
+grey of Instagib and Plasma Tag is not applied.
 
 mpGetMpWeaponByLocation() counts the nth enabled slot with wraparound - a
 location is not a slot index - so placement now asks for the chosen slot via

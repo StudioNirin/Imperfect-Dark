@@ -60,6 +60,7 @@ extern s32 g_ZombiesRounds;
 extern bool g_ZombiesRadarZombies;
 s32 zombiesMatchOver(void);
 void zombiesHandleDeath(s32 attackerindex, s32 victimindex);
+void zombiesSeedLoadout(void);
 bool zombiesBodyStaleIs(s32 playernum);
 bool zombiesBodyStaleTakeForPlayer(s32 playernum);
 bool zombiesIsInfected(struct chrdata *chr);

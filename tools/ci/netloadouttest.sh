@@ -111,10 +111,10 @@ wait "$zh" 2>/dev/null
 wait "$zc" 2>/dev/null
 
 # At least one survivor on each machine gets the configured pair.
-# Zombies clears the weapon slots (no pickups), so it uses the config-key
-# defaults: Falcon 2 (2) and Shotgun (19).
-grep -q 'net: zombies survivor loadout seat .* guns 2 19' "$ZH" || fail "no zombies survivor on the host got the default pair: $(grep -i 'survivor loadout' "$ZH" | head -2)"
-grep -q 'net: zombies survivor loadout seat .* guns 2 19' "$ZC" || fail "no zombies survivor on the client got the default pair: $(grep -i 'survivor loadout' "$ZC" | head -2)"
+# Zombies seeds its first two weapon slots with the stock survivor pair:
+# Shotgun (19) and Falcon 2 (2), the order the Weapons page shows them.
+grep -q 'net: zombies survivor loadout seat .* guns 19 2' "$ZH" || fail "no zombies survivor on the host got the default pair: $(grep -i 'survivor loadout' "$ZH" | head -2)"
+grep -q 'net: zombies survivor loadout seat .* guns 19 2' "$ZC" || fail "no zombies survivor on the client got the default pair: $(grep -i 'survivor loadout' "$ZC" | head -2)"
 pass 'zombies survivors get the configured pair on both machines'
 
 # The infected must not be handed a gun: player.c's infected branch returns

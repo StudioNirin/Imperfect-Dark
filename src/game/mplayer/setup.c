@@ -662,6 +662,12 @@ MenuItemHandlerResult menuhandlerMpWeaponSlot(s32 operation, struct menuitem *it
 #endif
 
 	switch (operation) {
+	case MENUOP_CHECKDISABLED:
+		// Zombies uses only the first two slots (the survivors' guns); slots
+		// 3-6 are the floor pickups this mode never places, so grey them out
+		// rather than let a player set guns that do nothing.
+		return g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_ZOMBIES
+				&& item && item->param3 >= 2;
 	case MENUOP_GETOPTIONCOUNT:
 		data->dropdown.value = numoptions;
 		break;

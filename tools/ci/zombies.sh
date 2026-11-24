@@ -92,8 +92,13 @@ grep -q 'bgunGetAmmoCapacityForWeapon(weapon2, FUNC_PRIMARY) / 2' "$SRC/game/pla
 grep -q 'spawnweaponnums\[HAND_LEFT\] = WEAPON_NONE' "$SRC/game/player.c" || fail 'player left hand not empty (forced akimbo?)'
 grep -q 'botinvGiveSingleWeapon(chr, weapon1)' "$SRC/game/bot.c" || fail 'bot loadout gun one not spawned'
 grep -q 'botinvGiveSingleWeapon(chr, weapon2)' "$SRC/game/bot.c" || fail 'bot loadout gun two not spawned'
-grep -q 'MPWEAPON_FALCON2.*// loadoutweapon1' "$SRC/game/modoptions.c" || fail 'loadout gun one does not default to Falcon 2'
-grep -q 'MPWEAPON_SHOTGUN.*// loadoutweapon2' "$SRC/game/modoptions.c" || fail 'loadout gun two does not default to Shotgun'
+# The survivor pair is set in the first two weapon slots (the Weapons page),
+# seeded when Zombies is selected. There are no separate Options rows for it.
+grep -q 'zombiesSeedLoadout' "$INC" || fail 'Zombies does not seed the survivor pair'
+grep -qF 'mpLoadoutRowForWeapon(WEAPON_SHOTGUN, 0)' "$INC" || fail 'survivor gun one is not the Shotgun'
+grep -qF 'mpLoadoutRowForWeapon(WEAPON_FALCON2, 0)' "$INC" || fail 'survivor gun two is not the Falcon 2'
+! grep -q 'Survivor Gun' "$INC" || fail 'the duplicate Survivor Gun Options rows are still there'
+grep -qF 'item->param3 >= 2' "$SRC/game/mplayer/setup.c" || fail 'the floor-pickup weapon slots are not greyed out in Zombies'
 # Mid-round conversion must mark the victim's body stale so the respawn
 # rebuilds them as Skedar, not their old human body.
 grep -q 'data->bodystale\[victimindex\] = true' "$INC" || fail 'conversion does not rebuild victim body'

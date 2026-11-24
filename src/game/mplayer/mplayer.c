@@ -7027,34 +7027,3 @@ void mpLoadoutSelfTest(void)
 #undef LOADOUT_CHECK
 }
 #endif
-
-#ifndef PLATFORM_N64
-/**
- * A dropdown row naming one of the two Loadout guns. item->param3 is which
- * (0 or 1). The row list is the MP weapons page's own list; random-filter
- * placeholder rows are left out, since a loadout gun is a fixed choice rather
- * than a roll. Writes go straight into the config keys so they SYNC online.
- */
-MenuItemHandlerResult menuhandlerMpLoadoutWeapon(s32 operation, struct menuitem *item, union handlerdata *data)
-{
-	s32 *row = item && item->param3 == 1 ? &g_ModOptions.loadoutweapon2 : &g_ModOptions.loadoutweapon1;
-	s32 numguns = mpGetNumWeaponOptions();
-
-	switch (operation) {
-	case MENUOP_GETOPTIONCOUNT:
-		data->dropdown.value = numguns;
-		break;
-	case MENUOP_GETOPTIONTEXT:
-		return (uintptr_t) mpGetWeaponLabel(data->dropdown.value);
-	case MENUOP_SET:
-		*row = data->dropdown.value;
-		mpLoadoutResolve();
-		break;
-	case MENUOP_GETSELECTEDINDEX:
-		data->dropdown.value = *row;
-		break;
-	}
-
-	return 0;
-}
-#endif
