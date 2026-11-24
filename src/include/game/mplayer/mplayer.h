@@ -65,6 +65,14 @@ void func0f1895e8(void);
 s32 mpGetWeaponSet(void);
 bool mpWeaponSlotsAreLocked(void);
 s32 mpWeaponSetStockOfferedFirst(void);
+#ifndef PLATFORM_N64
+struct mpweapon *mpGetMpWeaponByLocationWithSlot(s32 locationindex, s32 *outslot);
+MenuItemHandlerResult menuhandlerMpLoadoutWeapon(s32 operation, struct menuitem *item, union handlerdata *data);
+void mpLoadoutResolve(void);
+s32 mpLoadoutWeaponNum(s32 index);
+bool mpLoadoutIsValid(void);
+void mpLoadoutSelfTest(void);
+#endif
 bool mpIsPaused(void);
 void mpSetPaused(u8 mode);
 Gfx *mpRenderModalText(Gfx *gdl);

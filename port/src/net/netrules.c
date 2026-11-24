@@ -77,6 +77,11 @@ static const struct {
 	{ "Mod.StartArmed",              NETKEY_SYNC },
 	{ "Mod.StartArmedAkimbo",        NETKEY_SYNC },
 	{ "Mod.StartArmedFor",           NETKEY_SYNC },
+	// Loadout mode's two start guns. SYNC so the host's pair reaches clients
+	// before stage load; spawning and placement on a client must use the same
+	// rows as the host or the two machines disagree about pickups and kits.
+	{ "Mod.LoadoutWeapon1",          NETKEY_SYNC },
+	{ "Mod.LoadoutWeapon2",          NETKEY_SYNC },
 	{ "Mod.Bodies",                  NETKEY_SYNC },
 	{ "Mod.BodyTime",                NETKEY_SYNC },
 	{ "Mod.BodiesDrawn",             NETKEY_SYNC },

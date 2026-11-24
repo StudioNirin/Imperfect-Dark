@@ -4348,7 +4348,7 @@ static MenuItemHandlerResult menuhandlerModSimBrain(s32 operation, struct menuit
 static MenuItemHandlerResult menuhandlerModStartArmed(s32 operation, struct menuitem *item, union handlerdata *data)
 {
 	// As the Weapons page's copy of this row: see menuhandlerMpStartArmed
-	static const char *opts[] = { "Off", "First", "Fiesta" };
+	static const char *opts[] = { "Off", "First", "Fiesta", "Loadout" };
 
 	switch (operation) {
 	case MENUOP_GETOPTIONCOUNT:

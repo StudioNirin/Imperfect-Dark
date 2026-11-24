@@ -2784,7 +2784,7 @@ s32 mpGetWeaponSlot(s32 slot)
 	return count;
 }
 
-struct mpweapon *mpGetMpWeaponByLocation(s32 locationindex)
+struct mpweapon *mpGetMpWeaponByLocationWithSlot(s32 locationindex, s32 *outslot)
 {
 	s32 v0 = locationindex + 1;
 	s32 slot = 0;
@@ -2827,7 +2827,16 @@ struct mpweapon *mpGetMpWeaponByLocation(s32 locationindex)
 		}
 	}
 
+	if (outslot) {
+		*outslot = slot;
+	}
+
 	return &g_MpWeapons[mpweaponnum];
+}
+
+struct mpweapon *mpGetMpWeaponByLocation(s32 locationindex)
+{
+	return mpGetMpWeaponByLocationWithSlot(locationindex, NULL);
 }
 
 #ifdef PLATFORM_N64
@@ -6873,3 +6882,149 @@ s32 mpWeaponSetStockOfferedFirst(void)
 
 	return 0;
 }
+
+#ifndef PLATFORM_N64
+/**
+ * Loadout mode: the two guns in the first two weapon slots are every
+ * player's kit each round. Config stores them as rows of the MP weapons page
+ * (a mod can renumber the weapon numbers those rows name), so a row has to be
+ * checked against the live table before it is handed out. A row that cannot
+ * name a gun falls back to the stock Falcon 2 / Shotgun rows, found by their
+ * weapon numbers - the same default Zombies uses.
+ */
+s32 mpLoadoutRowForWeapon(s32 weaponnum, s32 fallbackrow)
+{
+	s32 i;
+
+	for (i = 0; i < ARRAYCOUNT(g_MpWeapons); i++) {
+		if (g_MpWeapons[i].weaponnum == weaponnum
+				&& weaponHost(g_MpWeapons[i].weaponnum) != WEAPON_DISABLED) {
+			return i;
+		}
+	}
+
+	return fallbackrow < 0 || fallbackrow >= (s32) ARRAYCOUNT(g_MpWeapons) ? 0 : fallbackrow;
+}
+
+/**
+ * Resolve both configured rows against the live weapon table. Called after a
+ * mod renumbers its guns and at match start, so a row naming a weapon that is
+ * no longer there cannot hand out nothing. Only fixes rows that are out of
+ * range or name a disabled host - a deliberately chosen gun is left alone.
+ */
+void mpLoadoutResolve(void)
+{
+	s32 fallback1 = mpLoadoutRowForWeapon(WEAPON_FALCON2, -1);
+	s32 fallback2 = mpLoadoutRowForWeapon(WEAPON_SHOTGUN, -1);
+	s32 i;
+
+	for (i = 0; i < 2; i++) {
+		s32 *row = i == 0 ? &g_ModOptions.loadoutweapon1 : &g_ModOptions.loadoutweapon2;
+		s32 fallback = i == 0 ? fallback1 : fallback2;
+
+		if (*row < 0 || *row >= (s32) ARRAYCOUNT(g_MpWeapons)
+				|| weaponHost(g_MpWeapons[*row].weaponnum) == WEAPON_DISABLED) {
+			*row = fallback;
+		}
+	}
+}
+
+/** The weapon number of the first/second configured loadout row. */
+s32 mpLoadoutWeaponNum(s32 index)
+{
+	s32 row = index == 0 ? g_ModOptions.loadoutweapon1 : g_ModOptions.loadoutweapon2;
+
+	if (row < 0 || row >= (s32) ARRAYCOUNT(g_MpWeapons)) {
+		return WEAPON_NONE;
+	}
+
+	return g_MpWeapons[row].weaponnum;
+}
+
+/** Both loadout guns are valid and name real weapons. */
+bool mpLoadoutIsValid(void)
+{
+	return mpLoadoutWeaponNum(0) != WEAPON_NONE && mpLoadoutWeaponNum(1) != WEAPON_NONE;
+}
+
+/**
+ * --test-loadout: the two rows resolve to Falcon 2 and Shotgun by default,
+ * survive a mod renumber, and each hands out a real weapon.
+ */
+void mpLoadoutSelfTest(void)
+{
+	s32 keep1 = g_ModOptions.loadoutweapon1;
+	s32 keep2 = g_ModOptions.loadoutweapon2;
+	s32 i;
+	s32 checks = 0;
+	s32 failed = 0;
+
+#define LOADOUT_CHECK(cond, what) \
+	do { \
+		checks++; \
+		if (cond) { \
+			sysLogPrintf(LOG_NOTE, "loadout test: ok   %s", what); \
+		} else { \
+			sysLogPrintf(LOG_NOTE, "loadout test: FAIL %s", what); \
+			failed++; \
+		} \
+	} while (0)
+
+	// Force the default rows by clearing them and resolving.
+	g_ModOptions.loadoutweapon1 = -1;
+	g_ModOptions.loadoutweapon2 = -1;
+	mpLoadoutResolve();
+	LOADOUT_CHECK(mpLoadoutWeaponNum(0) == WEAPON_FALCON2, "the first default is the Falcon 2");
+	LOADOUT_CHECK(mpLoadoutWeaponNum(1) == WEAPON_SHOTGUN, "the second default is the Shotgun");
+
+	// A deliberately chosen row survives resolution.
+	g_ModOptions.loadoutweapon1 = mpLoadoutRowForWeapon(WEAPON_SHOTGUN, 0);
+	g_ModOptions.loadoutweapon2 = mpLoadoutRowForWeapon(WEAPON_FALCON2, 0);
+	mpLoadoutResolve();
+	LOADOUT_CHECK(mpLoadoutWeaponNum(0) == WEAPON_SHOTGUN && mpLoadoutWeaponNum(1) == WEAPON_FALCON2,
+			"a chosen pair survives resolution");
+
+	// A row naming nothing with the mod mounted falls back to its default.
+	g_ModOptions.loadoutweapon1 = ARRAYCOUNT(g_MpWeapons) + 5;
+	g_ModOptions.loadoutweapon2 = -2;
+	mpLoadoutResolve();
+	LOADOUT_CHECK(mpLoadoutIsValid(), "an invalid row falls back to a real weapon");
+
+	g_ModOptions.loadoutweapon1 = keep1;
+	g_ModOptions.loadoutweapon2 = keep2;
+
+	sysLogPrintf(LOG_NOTE, "loadout test: %d of %d checks as expected", checks - failed, checks);
+#undef LOADOUT_CHECK
+}
+#endif
+
+#ifndef PLATFORM_N64
+/**
+ * A dropdown row naming one of the two Loadout guns. item->param3 is which
+ * (0 or 1). The row list is the MP weapons page's own list; random-filter
+ * placeholder rows are left out, since a loadout gun is a fixed choice rather
+ * than a roll. Writes go straight into the config keys so they SYNC online.
+ */
+MenuItemHandlerResult menuhandlerMpLoadoutWeapon(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	s32 *row = item && item->param3 == 1 ? &g_ModOptions.loadoutweapon2 : &g_ModOptions.loadoutweapon1;
+	s32 numguns = mpGetNumWeaponOptions();
+
+	switch (operation) {
+	case MENUOP_GETOPTIONCOUNT:
+		data->dropdown.value = numguns;
+		break;
+	case MENUOP_GETOPTIONTEXT:
+		return (uintptr_t) mpGetWeaponLabel(data->dropdown.value);
+	case MENUOP_SET:
+		*row = data->dropdown.value;
+		mpLoadoutResolve();
+		break;
+	case MENUOP_GETSELECTEDINDEX:
+		data->dropdown.value = *row;
+		break;
+	}
+
+	return 0;
+}
+#endif

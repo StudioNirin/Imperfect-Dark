@@ -2168,10 +2168,14 @@ void propExecuteTickOperation(struct prop *prop, s32 op)
 	if (op == TICKOP_FREE) {
 		if ((prop->type == PROPTYPE_WEAPON || prop->type == PROPTYPE_OBJ)
 				&& prop->obj && (prop->obj->hidden2 & OBJH2FLAG_CANREGEN)) {
-			// Start the wait timer for regen
+			// Start the wait timer for regen. In Loadout mode the first two
+			// slots are the players' own kits and never spawn, so every map
+			// weapon pickup is one of the spare slots - give those a long
+			// wait, the point of the mode being that the carried guns are the
+			// fight and the floor guns are a rare change of pace.
 			struct defaultobj *obj = prop->obj;
 
-			prop->timetoregen = TICKS(1200);
+			prop->timetoregen = modGetSpawnWeapon() == SPAWNWEAPON_LOADOUT ? TICKS(4800) : TICKS(1200);
 
 			obj->damage = 0;
 			obj->hidden |= OBJHFLAG_GONE;

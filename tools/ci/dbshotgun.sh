@@ -103,8 +103,8 @@ grep -qF '#define MPSETUP_VERSION_LATEST MPSETUP_VERSION_GESHOTGUN' "$ROOT/src/i
 	|| fail "a saved setup is not written at the width that holds the DB-Shotgun's row"
 grep -qF '#define NUM_MPWEAPONS             (MPWEAPON_GESHOTGUN + 1)' "$ROOT/src/include/constants.h" \
 	|| fail "NUM_MPWEAPONS is not derived from the newest Combat Simulator row"
-grep -qF '#define NET_PROTOCOL_VERSION 42' "$ROOT/port/include/net/netproto.h" \
-	|| fail "the net protocol was not bumped for the extra randomfilters byte"
+grep -qF '#define NET_PROTOCOL_VERSION 43' "$ROOT/port/include/net/netproto.h" \
+	|| fail "the net protocol was not bumped for Loadout mode"
 
 # ---------------------------------------------------------------------------
 # The alias, the model state and the two rows that carry them.

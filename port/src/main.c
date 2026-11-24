@@ -104,6 +104,7 @@ s32 g_TestMpWeaponSets = false; // --test-mpweaponsets: the saved weapon sets' s
 s32 g_TestRandomGroups = false; // --test-randomgroups: the random weapon groups' store and the roll they steer (mpweaponfilters.c, mplayer.c)
 s32 g_TestStartArmed = false; // --test-startarmed: what a Start Armed spawn is handed, and how many of it (mpStartArmedSelfTest)
 s32 g_TestFixedLoadout = false; // --test-fixed-loadout: fixed-loadout mode locks and restore (fixedLoadoutSelfTest)
+s32 g_TestLoadout = false; // --test-loadout: Loadout mode's two rows and their defaults (mpLoadoutSelfTest)
 s32 g_TestRailLaser = false; // --test-raillaser: the Rail-Laser's row, number, charge and saved-setup width (raillaserSelfTest)
 s32 g_TestShock = false; // --test-shock: the Shock Rifle's two modes, orb row, saved-setup width (shockSelfTest)
 s32 g_TestForkBots = false; // --test-forkbots: what a simulant's preference table says of the fork's guns (forkbotSelfTest)
@@ -353,6 +354,9 @@ int main(int argc, const char **argv)
 
 	mpWeaponSetsInit();
 	mpWeaponFiltersInit();
+	// Now that a mod's weapon table is in, resolve the Loadout rows: a saved
+	// row that named a gun the mod renumbered has to fall back to a real one.
+	mpLoadoutResolve();
 	raillaserInit();
 
 	// The DB-Shotgun's alias over the stock PD Shotgun's file and its model
@@ -393,6 +397,11 @@ int main(int argc, const char **argv)
 	g_TestFixedLoadout = sysArgCheck("--test-fixed-loadout");
 	if (g_TestFixedLoadout) {
 		fixedLoadoutSelfTest();
+	}
+
+	g_TestLoadout = sysArgCheck("--test-loadout");
+	if (g_TestLoadout) {
+		mpLoadoutSelfTest();
 	}
 
 	// The Rail-Laser's own checks, read here for the same reason: it asks the
@@ -698,9 +707,14 @@ PD_CONSTRUCTOR static void gameConfigInit(void)
 	configRegisterInt("Mod.MeleeCombos", &g_ModOptions.melee, 0, 1);
 	configRegisterInt("Mod.FalconPunch", &g_ModOptions.falconpunch, 0, 1);
 	configRegisterInt("Mod.FlinchWhenShot", &g_ModOptions.flinch, 0, 1);
-	configRegisterInt("Mod.StartArmed", &g_ModOptions.spawnweapon, SPAWNWEAPON_OFF, SPAWNWEAPON_RANDOM);
+	configRegisterInt("Mod.StartArmed", &g_ModOptions.spawnweapon, SPAWNWEAPON_OFF, SPAWNWEAPON_LOADOUT);
 	configRegisterInt("Mod.StartArmedAkimbo", &g_ModOptions.spawnakimbo, 0, 1);
 	configRegisterInt("Mod.StartArmedFor", &g_ModOptions.spawnweaponwho, MODWHO_EVERYONE, MODWHO_PLAYERSONLY);
+	// Loadout mode's two guns, as rows of the MP weapons page. Defaults are
+	// the stock Falcon 2 and Shotgun rows, re-resolved against the live table
+	// after a mod renumbers it (mpLoadoutResolve).
+	configRegisterInt("Mod.LoadoutWeapon1", &g_ModOptions.loadoutweapon1, 0, NUM_MPWEAPONS - 1);
+	configRegisterInt("Mod.LoadoutWeapon2", &g_ModOptions.loadoutweapon2, 0, NUM_MPWEAPONS - 1);
 	configRegisterFloat("Mod.ThirdPersonDistance", &g_ModOptions.camdist, 60.f, 600.f);
 	configRegisterFloat("Mod.ThirdPersonClearance", &g_ModOptions.camclearance, 0.f, 120.f);
 	configRegisterFloat("Mod.ThirdPersonBodyFade", &g_ModOptions.camfade, 0.f, 150.f);

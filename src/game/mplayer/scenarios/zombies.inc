@@ -139,6 +139,22 @@ MenuItemHandlerResult menuhandlerMpZombiesRadar(s32 operation, struct menuitem *
 
 struct menuitem g_ZombiesOptionsMenuItems[] = {
 	{
+		MENUITEMTYPE_DROPDOWN,
+		0,
+		MENUITEMFLAG_LOCKABLEMINOR | MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t) "Survivor Gun 1\n",
+		0,
+		menuhandlerMpLoadoutWeapon,
+	},
+	{
+		MENUITEMTYPE_DROPDOWN,
+		1,
+		MENUITEMFLAG_LOCKABLEMINOR | MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t) "Survivor Gun 2\n",
+		1,
+		menuhandlerMpLoadoutWeapon,
+	},
+	{
 		MENUITEMTYPE_SLIDER,
 		0,
 		MENUITEMFLAG_LOCKABLEMINOR | MENUITEMFLAG_LITERAL_TEXT,

@@ -48,6 +48,8 @@ struct modoptions g_ModOptions = {
 	SPAWNWEAPON_OFF,          // spawnweapon
 	1,                        // spawnakimbo: a pair, so an Akimbo install spawns what it always did
 	MODWHO_EVERYONE,          // spawnweaponwho
+	MPWEAPON_FALCON2,         // loadoutweapon1: the default survivor pair, gun one
+	MPWEAPON_SHOTGUN,         // loadoutweapon2: gun two
 	THIRDPERSON_CAMDIST,      // camdist
 	THIRDPERSON_CAMCLEARANCE, // camclearance
 	THIRDPERSON_CAMFADE,      // camfade
@@ -277,7 +279,7 @@ bool modIsFlinchEnabled(void)
  */
 s32 modGetSpawnWeapon(void)
 {
-	if (g_ModOptions.spawnweapon < SPAWNWEAPON_OFF || g_ModOptions.spawnweapon > SPAWNWEAPON_RANDOM) {
+	if (g_ModOptions.spawnweapon < SPAWNWEAPON_OFF || g_ModOptions.spawnweapon > SPAWNWEAPON_LOADOUT) {
 		return SPAWNWEAPON_OFF;
 	}
 
@@ -316,7 +318,11 @@ bool modGetSpawnAkimbo(void)
  */
 bool modSpawnAkimboRowHidden(void)
 {
-	return modGetSpawnWeapon() == SPAWNWEAPON_OFF;
+	s32 spawnweapon = modGetSpawnWeapon();
+
+	// Off hands out nothing to pair, and Loadout names two distinct guns
+	// rather than one doubled - the Akimbo Start? row means nothing in both.
+	return spawnweapon == SPAWNWEAPON_OFF || spawnweapon == SPAWNWEAPON_LOADOUT;
 }
 
 /**
@@ -342,7 +348,9 @@ bool modSpawnIsAkimbo(s32 weaponnum)
  */
 bool modSpawnWantsMaxAmmo(void)
 {
-	return modGetSpawnWeapon() == SPAWNWEAPON_RANDOM;
+	s32 spawnweapon = modGetSpawnWeapon();
+
+	return spawnweapon == SPAWNWEAPON_RANDOM || spawnweapon == SPAWNWEAPON_LOADOUT;
 }
 
 /**

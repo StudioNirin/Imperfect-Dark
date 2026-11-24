@@ -266,7 +266,11 @@
 // 42 (the DB-Shotgun's row): RULES' u8 randomfilters[NUM_MPWEAPONS] grows by
 //    one more byte for MPWEAPON_GESHOTGUN. Appended like 36 and 41, so the rows
 //    below keep their numbers, but the blob's length is what a peer reads first.
-#define NET_PROTOCOL_VERSION 42
+// 43 (Loadout): Start Armed gains SPAWNWEAPON_LOADOUT (3), and the two
+// Mod.LoadoutWeapon keys are new SYNC rules. An older peer clamps the new
+// value back to Fiesta and has no slot for the pair, so it must be refused
+// rather than run a match where each machine hands out different guns.
+#define NET_PROTOCOL_VERSION 43
 
 #define NETMSG_CONNECT    1
 #define NETMSG_ACCEPT     2

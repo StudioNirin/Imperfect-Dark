@@ -23,7 +23,7 @@ void scenarioInit(void);
 bool mpScenarioHasFixedLoadout(s32 scenario);
 void scenarioFixedLoadoutInvalidate(void);
 void mpUpdateSetupWeaponLocks(void);
-void scenarioSelectForTest(s32 scenario);
+void scenarioSelect(s32 scenario);
 void fixedLoadoutSelfTest(void);
 s32 scenarioNumProps(void);
 void scenarioInitProps(void);

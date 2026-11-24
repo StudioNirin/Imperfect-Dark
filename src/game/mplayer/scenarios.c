@@ -114,7 +114,7 @@ void scenarioFixedLoadoutInvalidate(void)
  * menu. Exposed so a --test-fixed-loadout run can prove a normal mode gets the
  * player's own guns back after Instagib and Plasma Tag.
  */
-void scenarioSelectForTest(s32 scenario)
+void scenarioSelect(s32 scenario)
 {
 	if (mpScenarioHasFixedLoadout(g_MpSetup.scenario)
 			&& !mpScenarioHasFixedLoadout(scenario)) {
@@ -663,7 +663,7 @@ MenuItemHandlerResult scenarioScenarioMenuHandler(s32 operation, struct menuitem
 			if (challengeIsFeatureUnlocked(g_MpScenarioOverviews[i].requirefeature)
 					&& (teamgame || g_MpScenarioOverviews[i].teamonly == false)) {
 				if (count == data->list.value) {
-					scenarioSelectForTest(i);
+					scenarioSelect(i);
 					break;
 				}
 
@@ -1877,19 +1877,19 @@ void fixedLoadoutSelfTest(void)
 	g_MpSetup.options = 0x1234;
 	g_MpAdvancedSetupMenuItems[3].flags &= ~MENUITEMFLAG_ALWAYSDISABLED;
 
-	scenarioSelectForTest(MPSCENARIO_INSTAGIB);
+	scenarioSelect(MPSCENARIO_INSTAGIB);
 	FIXED_CHECK(g_MpAdvancedSetupMenuItems[3].flags & MENUITEMFLAG_ALWAYSDISABLED,
 			"Instagib greys the Weapons tab");
 	FIXED_CHECK(g_MpSetup.weapons[0] == MPWEAPON_NONE,
 			"Instagib clears the weapon slots");
 
-	scenarioSelectForTest(MPSCENARIO_PLASMATEST);
+	scenarioSelect(MPSCENARIO_PLASMATEST);
 	FIXED_CHECK(g_MpAdvancedSetupMenuItems[3].flags & MENUITEMFLAG_ALWAYSDISABLED,
 			"Plasma Tag greys the Weapons tab");
 	FIXED_CHECK(g_MpSetup.weapons[0] == MPWEAPON_NONE,
 			"Plasma Tag clears the weapon slots");
 
-	scenarioSelectForTest(MPSCENARIO_COMBAT);
+	scenarioSelect(MPSCENARIO_COMBAT);
 	FIXED_CHECK(!(g_MpAdvancedSetupMenuItems[3].flags & MENUITEMFLAG_ALWAYSDISABLED),
 			"the Weapons tab is selectable again in Combat");
 	FIXED_CHECK(g_MpSetup.weapons[0] == 1 && g_MpSetup.weapons[5] == 6,
@@ -1899,12 +1899,12 @@ void fixedLoadoutSelfTest(void)
 
 	// A loaded setup arrives whole while a fixed-loadout mode is selected.
 	// Leaving it must not restore guns from before that load.
-	scenarioSelectForTest(MPSCENARIO_INSTAGIB);
+	scenarioSelect(MPSCENARIO_INSTAGIB);
 	scenarioFixedLoadoutInvalidate();
 	for (i = 0; i < NUM_MPWEAPONSLOTS; i++) {
 		g_MpSetup.weapons[i] = (u8) (i + 7);
 	}
-	scenarioSelectForTest(MPSCENARIO_COMBAT);
+	scenarioSelect(MPSCENARIO_COMBAT);
 	FIXED_CHECK(g_MpSetup.weapons[0] == 7,
 			"a setup loaded while in a fixed-loadout mode is kept");
 

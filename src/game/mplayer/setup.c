@@ -2761,10 +2761,10 @@ void mpStartArmedSelfTest(void)
 	 * the key outlives the row.
 	 */
 	{
-		bool hidden[3];
+		bool hidden[4];
 		bool live;
 
-		for (i = SPAWNWEAPON_OFF; i <= SPAWNWEAPON_RANDOM; i++) {
+		for (i = SPAWNWEAPON_OFF; i <= SPAWNWEAPON_LOADOUT; i++) {
 			g_ModOptions.spawnweapon = i;
 			hidden[i] = menuhandlerMpAkimboStart(MENUOP_CHECKHIDDEN, &item, &d) != 0;
 		}
@@ -2774,11 +2774,13 @@ void mpStartArmedSelfTest(void)
 		live = menuhandlerMpAkimboStart(MENUOP_GET, &item, &d) != 0;
 
 		checks++;
-		if (hidden[SPAWNWEAPON_OFF] && !hidden[SPAWNWEAPON_FIRST] && !hidden[SPAWNWEAPON_RANDOM] && live) {
-			sysLogPrintf(LOG_NOTE, "startarmed test: ok   Akimbo Start? hides only with Start Armed on Off, and keeps its value while hidden");
+		if (hidden[SPAWNWEAPON_OFF] && !hidden[SPAWNWEAPON_FIRST] && !hidden[SPAWNWEAPON_RANDOM]
+				&& hidden[SPAWNWEAPON_LOADOUT] && live) {
+			sysLogPrintf(LOG_NOTE, "startarmed test: ok   Akimbo Start? hides on Off and Loadout, keeps its value while hidden");
 		} else {
-			sysLogPrintf(LOG_NOTE, "startarmed test: FAIL the row's visibility: off %d first %d fiesta %d, hidden row's value %d (want 1 0 0 and 1)",
-					hidden[SPAWNWEAPON_OFF], hidden[SPAWNWEAPON_FIRST], hidden[SPAWNWEAPON_RANDOM], live);
+			sysLogPrintf(LOG_NOTE, "startarmed test: FAIL the row's visibility: off %d first %d fiesta %d loadout %d, hidden row's value %d (want 1 0 0 1 and 1)",
+					hidden[SPAWNWEAPON_OFF], hidden[SPAWNWEAPON_FIRST], hidden[SPAWNWEAPON_RANDOM],
+					hidden[SPAWNWEAPON_LOADOUT], live);
 			failed++;
 		}
 	}
@@ -2828,13 +2830,14 @@ void mpStartArmedSelfTest(void)
 	 * sites call.
 	 */
 	{
-		static const s32 armeds[] = { SPAWNWEAPON_FIRST, SPAWNWEAPON_FIRST, SPAWNWEAPON_RANDOM, SPAWNWEAPON_RANDOM };
-		static const s32 ticks[] = { 0, 1, 0, 1 };
+		static const s32 armeds[] = { SPAWNWEAPON_FIRST, SPAWNWEAPON_FIRST, SPAWNWEAPON_RANDOM, SPAWNWEAPON_RANDOM,
+				SPAWNWEAPON_LOADOUT, SPAWNWEAPON_LOADOUT };
+		static const s32 ticks[] = { 0, 1, 0, 1, 0, 1 };
 		s32 wrong = 0;
 
 		g_ModOptions.akimbo = MODAKIMBO_EVERYONE;
 
-		for (i = 0; i < 4; i++) {
+		for (i = 0; i < (s32) ARRAYCOUNT(armeds); i++) {
 			bool pair;
 			bool maxed;
 
@@ -2844,7 +2847,7 @@ void mpStartArmedSelfTest(void)
 			pair = modSpawnIsAkimbo(g_MpWeapons[gunrow].weaponnum);
 			maxed = modSpawnWantsMaxAmmo();
 
-			if (pair != (ticks[i] != 0) || maxed != (armeds[i] == SPAWNWEAPON_RANDOM)) {
+			if (pair != (ticks[i] != 0) || maxed != (armeds[i] == SPAWNWEAPON_RANDOM || armeds[i] == SPAWNWEAPON_LOADOUT)) {
 				wrong |= (1 << i);
 			}
 		}
@@ -2946,7 +2949,7 @@ void mpStartArmedSelfTest(void)
 	 * change nobody notices until the page offers two things it does not do.
 	 */
 	{
-		const char *armed[3] = { "", "", "" };
+		const char *armed[4] = { "", "", "", "" };
 		s32 armedcount;
 		s32 akibocount;
 
@@ -2956,7 +2959,7 @@ void mpStartArmedSelfTest(void)
 		menuhandlerMpStartArmed(MENUOP_GETOPTIONCOUNT, NULL, &d);
 		armedcount = d.dropdown.value;
 
-		for (i = 0; i < 3 && i < armedcount; i++) {
+		for (i = 0; i < (s32) ARRAYCOUNT(armed) && i < armedcount; i++) {
 			memset(&d, 0, sizeof(d));
 			d.dropdown.value = i;
 			armed[i] = (const char *) (uintptr_t) menuhandlerMpStartArmed(MENUOP_GETOPTIONTEXT, NULL, &d);
@@ -2967,12 +2970,12 @@ void mpStartArmedSelfTest(void)
 		akibocount = d.dropdown.value;
 
 		checks++;
-		if (armedcount == 3 && strcmp(armed[0], "Off") == 0 && strcmp(armed[1], "First") == 0
-				&& strcmp(armed[2], "Fiesta") == 0 && akibocount == 4) {
-			sysLogPrintf(LOG_NOTE, "startarmed test: ok   Start Armed offers Off, First and Fiesta, and Akimbo its four");
+		if (armedcount == 4 && strcmp(armed[0], "Off") == 0 && strcmp(armed[1], "First") == 0
+				&& strcmp(armed[2], "Fiesta") == 0 && strcmp(armed[3], "Loadout") == 0 && akibocount == 4) {
+			sysLogPrintf(LOG_NOTE, "startarmed test: ok   Start Armed offers Off, First, Fiesta and Loadout, and Akimbo its four");
 		} else {
-			sysLogPrintf(LOG_NOTE, "startarmed test: FAIL Start Armed offers %d row(s): %s, %s, %s; Akimbo offers %d",
-					armedcount, armed[0], armed[1], armed[2], akibocount);
+			sysLogPrintf(LOG_NOTE, "startarmed test: FAIL Start Armed offers %d row(s): %s, %s, %s, %s; Akimbo offers %d",
+					armedcount, armed[0], armed[1], armed[2], armed[3], akibocount);
 			failed++;
 		}
 	}
@@ -3176,7 +3179,7 @@ MenuItemHandlerResult menuhandlerMpStartArmed(s32 operation, struct menuitem *it
 	// "Fiesta" rather than "Random": the page reads Random three ways already -
 	// the set, the RX Selection row under it, Auto Random - and this row is the
 	// one that hands out a gun rather than filling the six slots.
-	static const char *opts[] = { "Off", "First", "Fiesta" };
+	static const char *opts[] = { "Off", "First", "Fiesta", "Loadout" };
 
 	switch (operation) {
 	case MENUOP_GETOPTIONCOUNT:

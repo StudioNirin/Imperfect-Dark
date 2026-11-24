@@ -870,6 +870,7 @@ void setupPlaceWeapon(struct weaponobj *weapon, s32 cmdindex)
 		if (g_Vars.normmplayerisrunning || g_Vars.lvmpbotlevel) {
 			struct mpweapon *mpweapon;
 			s32 locationindex;
+			s32 weaponslot = -1;
 
 			g_SetupCurMpLocation = -1;
 
@@ -891,7 +892,7 @@ void setupPlaceWeapon(struct weaponobj *weapon, s32 cmdindex)
 			case WEAPON_MPLOCATION14:
 			case WEAPON_MPLOCATION15:
 				locationindex = weapon->weaponnum - WEAPON_MPLOCATION00;
-				mpweapon = mpGetMpWeaponByLocation(locationindex);
+				mpweapon = mpGetMpWeaponByLocationWithSlot(locationindex, &weaponslot);
 				g_SetupCurMpLocation = locationindex;
 				weapon->weaponnum = mpweapon->weaponnum;
 				weapon->base.modelnum = mpweapon->model;
@@ -914,6 +915,17 @@ void setupPlaceWeapon(struct weaponobj *weapon, s32 cmdindex)
 				// This also covers a saved setup or room that still carries
 				// weapon slots while naming one of these modes.
 				if (mpScenarioHasFixedLoadout(g_MpSetup.scenario)) {
+					createweapon = false;
+				}
+
+				// Loadout mode's first two slots are the guns everyone starts
+				// with. They still name real weapons (bot scoring reads them),
+				// but no pickup for either is placed on the map - the players
+				// already carry them. Locations map to enabled slots with
+				// wraparound, so the slot comes from the lookup, not
+				// locationindex.
+				if (modGetSpawnWeapon() == SPAWNWEAPON_LOADOUT
+						&& weaponslot >= 0 && weaponslot < 2) {
 					createweapon = false;
 				}
 

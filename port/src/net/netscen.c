@@ -1302,6 +1302,7 @@ static void netScenApply(const u8 *b, u32 tick, const char *tag)
 
 		{
 			const u8 oldround = g_ZombiesNetRound;
+			const bool firstblock = !g_ZombiesNetBlockSeen;
 
 			g_ZombiesNetRound = b[ZOM_ROUND];
 			g_ZombiesNetPhase = b[ZOM_PHASE];
@@ -1309,8 +1310,13 @@ static void netScenApply(const u8 *b, u32 tick, const char *tag)
 			g_ZombiesNetBlockSeen = true;
 
 			// A new round: the host has started new lives for its own seats;
-			// a client asks the engine for the same for its own.
-			if (g_ZombiesNetRound != oldround && oldround != 0) {
+			// a client asks the engine for the same for its own. The first
+			// block counts too: level ticks run during the join barrier,
+			// before NETSCEN is sent, so a client's first life can have been
+			// handed out with local zeroed roles - a seat the host will make
+			// infected got the survivor kit. Re-spawn under the now-known
+			// role. bodystale was set above for any role that changed.
+			if (g_ZombiesNetRound != oldround && (firstblock || oldround != 0)) {
 				s32 p;
 
 				for (p = 0; p < PLAYERCOUNT() && p < ARRAYCOUNT(g_Vars.players); p++) {

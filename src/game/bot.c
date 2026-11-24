@@ -507,21 +507,70 @@ void botSpawn(struct chrdata *chr, u8 respawning)
 
 #ifndef PLATFORM_N64
 		// Zombies: the survivors among the simulants get the same kit as the
-		// players - a PD Shotgun and a Falcon 2, each with half its spare
-		// ammo. The infected fight with their fists, and botSpawn()'s reset
-		// takes the kit off a sim the zombies caught at the round turn.
-		// mpGetSpawnWeapon() returns -1 here (the slots were cleared), so
-		// handle it like the player's scenario branch does.
+		// players - the two Loadout guns, defaulting to a PD Shotgun and a
+		// Falcon 2, each with half its spare ammo. The infected fight with
+		// their fists, and botSpawn()'s reset takes the kit off a sim the
+		// zombies caught at the round turn. mpGetSpawnWeapon() returns -1
+		// here (the slots were cleared), so handle it like the player's.
 		if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_ZOMBIES) {
 			if (!zombiesIsInfected(chr)) {
-				botinvGiveSingleWeapon(chr, WEAPON_SHOTGUN);
-				botinvGiveSingleWeapon(chr, WEAPON_FALCON2);
-				botactGiveAmmoByType(aibot, AMMOTYPE_SHOTGUN,
-						bgunGetAmmoCapacityForWeapon(WEAPON_SHOTGUN, FUNC_PRIMARY) / 2);
-				botactGiveAmmoByType(aibot, AMMOTYPE_PISTOL,
-						bgunGetAmmoCapacityForWeapon(WEAPON_FALCON2, FUNC_PRIMARY) / 2);
-				botinvSwitchToWeapon(chr, WEAPON_SHOTGUN, FUNC_PRIMARY);
+				const s32 weapon1 = mpLoadoutWeaponNum(0);
+				const s32 weapon2 = mpLoadoutWeaponNum(1);
+
+				if (weapon1 != WEAPON_NONE) {
+					botinvGiveSingleWeapon(chr, weapon1);
+				}
+				if (weapon2 != WEAPON_NONE) {
+					botinvGiveSingleWeapon(chr, weapon2);
+				}
+				{
+					const s32 ammotype1 = weaponFindById(weapon1) && weaponFindById(weapon1)->ammos[0]
+						? weaponFindById(weapon1)->ammos[0]->type : 0;
+					const s32 ammotype2 = weaponFindById(weapon2) && weaponFindById(weapon2)->ammos[0]
+						? weaponFindById(weapon2)->ammos[0]->type : 0;
+
+					if (ammotype1) {
+						botactGiveAmmoByType(aibot, ammotype1,
+								bgunGetAmmoCapacityForWeapon(weapon1, FUNC_PRIMARY) / 2);
+					}
+					if (ammotype2) {
+						botactGiveAmmoByType(aibot, ammotype2,
+								bgunGetAmmoCapacityForWeapon(weapon2, FUNC_PRIMARY) / 2);
+					}
+				}
+				botinvSwitchToWeapon(chr, weapon1, FUNC_PRIMARY);
 			}
+		}
+
+		// Loadout in any other mode: simulants get the same two guns as the
+		// players, with a full magazine, and normal pickups still apply.
+		if (g_Vars.normmplayerisrunning && modGetSpawnWeapon() == SPAWNWEAPON_LOADOUT
+				&& g_MpSetup.scenario != MPSCENARIO_ZOMBIES) {
+			const s32 weapon1 = mpLoadoutWeaponNum(0);
+			const s32 weapon2 = mpLoadoutWeaponNum(1);
+
+			if (weapon1 != WEAPON_NONE) {
+				botinvGiveSingleWeapon(chr, weapon1);
+			}
+			if (weapon2 != WEAPON_NONE) {
+				botinvGiveSingleWeapon(chr, weapon2);
+			}
+			{
+				const s32 ammotype1 = weaponFindById(weapon1) && weaponFindById(weapon1)->ammos[0]
+					? weaponFindById(weapon1)->ammos[0]->type : 0;
+				const s32 ammotype2 = weaponFindById(weapon2) && weaponFindById(weapon2)->ammos[0]
+					? weaponFindById(weapon2)->ammos[0]->type : 0;
+
+				if (ammotype1) {
+					botactGiveAmmoByType(aibot, ammotype1,
+							bgunGetAmmoCapacityForWeapon(weapon1, FUNC_PRIMARY));
+				}
+				if (ammotype2) {
+					botactGiveAmmoByType(aibot, ammotype2,
+							bgunGetAmmoCapacityForWeapon(weapon2, FUNC_PRIMARY));
+				}
+			}
+			botinvSwitchToWeapon(chr, weapon1, FUNC_PRIMARY);
 		}
 
 		const s32 spawnweapon = modCanChrSpawnArmed() ? mpGetSpawnWeapon() : -1;

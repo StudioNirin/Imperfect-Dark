@@ -4307,9 +4307,10 @@ s32 langpackIsCjk(void);
 #define AUTORANDOMWEAPON_START 1
 #define AUTORANDOMWEAPON_END   2
 
-#define SPAWNWEAPON_OFF    0
-#define SPAWNWEAPON_FIRST  1
-#define SPAWNWEAPON_RANDOM 2
+#define SPAWNWEAPON_OFF     0
+#define SPAWNWEAPON_FIRST   1
+#define SPAWNWEAPON_RANDOM  2
+#define SPAWNWEAPON_LOADOUT 3
 
 #define SMOKETYPE_NONE             0
 #define SMOKETYPE_ELECTRICAL       1 // Dr Caroll, mainframes in Infiltration bunker

@@ -1272,11 +1272,11 @@ static void playerSpawnWeapons(void)
 	}
 
 	// Zombies: the infected fight with their fists - a zombie with a shotgun
-	// stops being the threat of the mode. The survivors spawn with a PD
-	// Shotgun and a Falcon 2 in their inventory, both with half their spare
-	// ammo, single wield so the Falcon 2 is cycled to normally. No map
-	// pickups (zombiesInit() clears the slots and propPickupByPlayer()
-	// guards against leftovers), so this is the whole arsenal.
+	// stops being the threat of the mode. Survivors get the two Loadout guns,
+	// defaulting to a PD Shotgun and a Falcon 2, both with half their spare
+	// ammo, single wield so the second is cycled to normally. No map pickups
+	// for the infected (zombiesInit() clears the slots and propPickupByPlayer()
+	// guards against leftovers); survivors can take what is dropped.
 	if (g_Vars.normmplayerisrunning && g_MpSetup.scenario == MPSCENARIO_ZOMBIES) {
 		if (zombiesSeatIsInfected(g_Vars.currentplayernum)) {
 			invGiveSingleWeapon(WEAPON_UNARMED);
@@ -1287,15 +1287,81 @@ static void playerSpawnWeapons(void)
 			return;
 		}
 
-		invGiveSingleWeapon(WEAPON_SHOTGUN);
-		invGiveSingleWeapon(WEAPON_FALCON2);
-		bgunSetAmmoQuantity(AMMOTYPE_SHOTGUN, bgunGetAmmoCapacityForWeapon(WEAPON_SHOTGUN, FUNC_PRIMARY) / 2);
-		bgunSetAmmoQuantity(AMMOTYPE_PISTOL, bgunGetAmmoCapacityForWeapon(WEAPON_FALCON2, FUNC_PRIMARY) / 2);
+		{
+			const s32 weapon1 = mpLoadoutWeaponNum(0);
+			const s32 weapon2 = mpLoadoutWeaponNum(1);
+
+			if (weapon1 != WEAPON_NONE) {
+				invGiveSingleWeapon(weapon1);
+			}
+			if (weapon2 != WEAPON_NONE) {
+				invGiveSingleWeapon(weapon2);
+			}
+			{
+				const s32 ammotype1 = weaponFindById(weapon1) ? weaponFindById(weapon1)->ammos[0]->type : 0;
+				const s32 ammotype2 = weaponFindById(weapon2) ? weaponFindById(weapon2)->ammos[0]->type : 0;
+
+				if (ammotype1) {
+					bgunSetAmmoQuantity(ammotype1, bgunGetAmmoCapacityForWeapon(weapon1, FUNC_PRIMARY) / 2);
+				}
+				if (ammotype2) {
+					bgunSetAmmoQuantity(ammotype2, bgunGetAmmoCapacityForWeapon(weapon2, FUNC_PRIMARY) / 2);
+				}
+			}
+
+			g_Vars.currentplayer->spawnweaponnums[HAND_LEFT] = WEAPON_NONE;
+			g_Vars.currentplayer->spawnweaponnums[HAND_RIGHT] = weapon1;
+			bgunEquipWeapon2(HAND_LEFT, WEAPON_NONE);
+			bgunEquipWeapon2(HAND_RIGHT, weapon1);
+			if (g_NetMode != NETMODE_NONE) {
+				sysLogPrintf(LOG_NOTE, "net: zombies survivor loadout seat %d guns %d %d",
+						g_Vars.currentplayernum, weapon1, weapon2);
+			}
+			return;
+		}
+	}
+
+	// Loadout: the two configured guns go to everyone in the match - human
+	// seats on every machine and sims - as a mode default, like Fiesta. They
+	// are in the inventory together, first equipped, with a full magazine;
+	// normal pickups apply. This is outside the scenarios above so Combat and
+	// the other ordinary modes can use it too.
+	if (g_Vars.normmplayerisrunning && modGetSpawnWeapon() == SPAWNWEAPON_LOADOUT
+			&& g_MpSetup.scenario != MPSCENARIO_ZOMBIES) {
+		const s32 weapon1 = mpLoadoutWeaponNum(0);
+		const s32 weapon2 = mpLoadoutWeaponNum(1);
+
+		if (weapon1 != WEAPON_NONE) {
+			invGiveSingleWeapon(weapon1);
+			{
+				struct weapon *weapondef = weaponFindById(weapon1);
+
+				if (weapondef && weapondef->ammos[0]) {
+					bgunSetAmmoQuantity(weapondef->ammos[0]->type,
+							bgunGetAmmoCapacityForWeapon(weapon1, FUNC_PRIMARY));
+				}
+			}
+		}
+		if (weapon2 != WEAPON_NONE) {
+			invGiveSingleWeapon(weapon2);
+			{
+				struct weapon *weapondef = weaponFindById(weapon2);
+
+				if (weapondef && weapondef->ammos[0]) {
+					bgunSetAmmoQuantity(weapondef->ammos[0]->type,
+							bgunGetAmmoCapacityForWeapon(weapon2, FUNC_PRIMARY));
+				}
+			}
+		}
 
 		g_Vars.currentplayer->spawnweaponnums[HAND_LEFT] = WEAPON_NONE;
-		g_Vars.currentplayer->spawnweaponnums[HAND_RIGHT] = WEAPON_SHOTGUN;
+		g_Vars.currentplayer->spawnweaponnums[HAND_RIGHT] = weapon1;
 		bgunEquipWeapon2(HAND_LEFT, WEAPON_NONE);
-		bgunEquipWeapon2(HAND_RIGHT, WEAPON_SHOTGUN);
+		bgunEquipWeapon2(HAND_RIGHT, weapon1);
+		if (g_NetMode != NETMODE_NONE) {
+			sysLogPrintf(LOG_NOTE, "net: loadout spawn seat %d guns %d %d scenario %d",
+					g_Vars.currentplayernum, weapon1, weapon2, g_MpSetup.scenario);
+		}
 		return;
 	}
 

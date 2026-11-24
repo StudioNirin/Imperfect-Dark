@@ -1260,3 +1260,33 @@ The accessors that ask for a muzzle offset, a watch face or a card are
 `GE_GUN_INDEX`-guarded and read `g_GeWeaponDefs[]`, so all of them answer "nothing"
 for the Moonrailer: those are the slice that maps a weapon number to the row, and
 without them the gun draws and simply has no muzzle flash origin.
+
+## Start Armed: Loadout mode (2026-11-24)
+
+A fourth Start Armed option, Loadout, makes the first two weapon-select slots
+the two guns every player starts with each round (single wield, first equipped,
+full magazine). Those two slots place no map pickup - the players already have
+them - while the spare slots do spawn and take TICKS(4800) to come back instead
+of the usual 1200. Zombies uses the same mechanism: its survivors get the two
+guns (default Falcon 2 + PD Shotgun, half ammo), host-customisable from two new
+rows in its Options page; infected players and sims keep fists and cannot pick
+up guns (the existing role guards). In every other mode, Loadout is for all
+players and sims on every machine.
+
+The chosen rows live in Mod.LoadoutWeapon1/2, registered config ints and
+NETKEY_SYNC rules, so the host's pair reaches clients in RULES before stage
+load. Protocol bumped to 43: an older peer would clamp Start Armed=3 back to
+Fiesta and disagree about both kits and pickups. Rows are resolved against the
+live g_MpWeapons[] at startup (mpLoadoutResolve) so a mod renumbering its guns
+cannot leave a row naming nothing; the defaults are found by weapon number.
+
+mpGetMpWeaponByLocation() counts the nth enabled slot with wraparound - a
+location is not a slot index - so placement now asks for the chosen slot via
+an out-param and suppresses pickups for slots 0-1. Clients have no regen timer
+(objTick defers to netPuppetObjTick); a taken pickup is published as NETOBJ_GONE
+and the host owns the countdown, so the long respawn needed no wire change.
+
+tools/ci/loadouttest.sh pins the self-tests and the spawn/suppression wiring;
+tools/ci/netloadouttest.sh runs a loopback pair and checks both machines hand
+out the same pair in Combat and that Zombies survivors get it while the
+infected get fists.

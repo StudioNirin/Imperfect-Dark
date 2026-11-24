@@ -368,6 +368,8 @@ struct modoptions {
 	s32 spawnweapon; // SPAWNWEAPON_*: what everyone spawns holding in an arena
 	s32 spawnakimbo; // 0/1: whether that gun comes as a pair - Akimbo Start?
 	s32 spawnweaponwho; // MODWHO_*: whether simulants spawn armed too
+	s32 loadoutweapon1; // Loadout mode: row in g_MpWeapons[] of the first start gun
+	s32 loadoutweapon2; // Loadout mode: row of the second start gun
 	f32 camdist;     // third person camera, units behind the eye
 	f32 camclearance;// how far short of a wall it stops
 	f32 camfade;     // Camera Body Fade: the player's own body is gone with the camera this close to it (playerGetOwnBodyAlphaFrac())

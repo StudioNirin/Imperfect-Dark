@@ -82,15 +82,18 @@ grep -q 'MPSCENARIO_ZOMBIES' "$SRC/game/player.c" || fail 'fists-only spawn not 
 grep -q 'MPSCENARIO_ZOMBIES' "$SRC/game/mplayer/mplayer.c" || fail 'spawn weapon not suppressed'
 grep -q 'attackerinfected && victiminfected' "$SRC/game/chraction.c" || fail 'zombie-on-zombie damage not skipped'
 grep -q 'damage = 1000.0f' "$SRC/game/chraction.c" || fail 'zombie punch not lethal'
-# Starting kit: a PD Shotgun and a Falcon 2 in inventory, single wield (no
-# forced akimbo), both with half their spare ammo, for players and sims.
-grep -q 'invGiveSingleWeapon(WEAPON_SHOTGUN)' "$SRC/game/player.c" || fail 'player shotgun spawn missing'
-grep -q 'invGiveSingleWeapon(WEAPON_FALCON2)' "$SRC/game/player.c" || fail 'player falcon spawn missing'
-grep -q 'AMMOTYPE_SHOTGUN, bgunGetAmmoCapacityForWeapon(WEAPON_SHOTGUN, FUNC_PRIMARY) / 2' "$SRC/game/player.c" || fail 'player shotgun ammo not half'
-grep -q 'AMMOTYPE_PISTOL, bgunGetAmmoCapacityForWeapon(WEAPON_FALCON2, FUNC_PRIMARY) / 2' "$SRC/game/player.c" || fail 'player falcon ammo not half'
+# Starting kit: the two Loadout guns (default PD Shotgun + Falcon 2) in
+# inventory, single wield (no forced akimbo), both with half their spare ammo,
+# for survivors, players and sims alike. The infected get fists (below).
+grep -q 'invGiveSingleWeapon(weapon1)' "$SRC/game/player.c" || fail 'player loadout gun one not spawned'
+grep -q 'invGiveSingleWeapon(weapon2)' "$SRC/game/player.c" || fail 'player loadout gun two not spawned'
+grep -q 'bgunGetAmmoCapacityForWeapon(weapon1, FUNC_PRIMARY) / 2' "$SRC/game/player.c" || fail 'player gun one ammo not half'
+grep -q 'bgunGetAmmoCapacityForWeapon(weapon2, FUNC_PRIMARY) / 2' "$SRC/game/player.c" || fail 'player gun two ammo not half'
 grep -q 'spawnweaponnums\[HAND_LEFT\] = WEAPON_NONE' "$SRC/game/player.c" || fail 'player left hand not empty (forced akimbo?)'
-grep -q 'botinvGiveSingleWeapon(chr, WEAPON_SHOTGUN)' "$SRC/game/bot.c" || fail 'bot shotgun spawn missing'
-grep -q 'botinvGiveSingleWeapon(chr, WEAPON_FALCON2)' "$SRC/game/bot.c" || fail 'bot falcon spawn missing'
+grep -q 'botinvGiveSingleWeapon(chr, weapon1)' "$SRC/game/bot.c" || fail 'bot loadout gun one not spawned'
+grep -q 'botinvGiveSingleWeapon(chr, weapon2)' "$SRC/game/bot.c" || fail 'bot loadout gun two not spawned'
+grep -q 'MPWEAPON_FALCON2.*// loadoutweapon1' "$SRC/game/modoptions.c" || fail 'loadout gun one does not default to Falcon 2'
+grep -q 'MPWEAPON_SHOTGUN.*// loadoutweapon2' "$SRC/game/modoptions.c" || fail 'loadout gun two does not default to Shotgun'
 # Mid-round conversion must mark the victim's body stale so the respawn
 # rebuilds them as Skedar, not their old human body.
 grep -q 'data->bodystale\[victimindex\] = true' "$INC" || fail 'conversion does not rebuild victim body'
