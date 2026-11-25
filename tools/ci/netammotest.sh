@@ -49,13 +49,14 @@ waitfor() {
 
 H=$OUT/host.log; C=$OUT/client.log
 
-game host 220 --host "$PORT" --net-test-host 1 --net-test-end-frame 1200 --rng-seed 7 --net-test-give 300,0x87 &
+game host 220 --host "$PORT" --net-test-host 1 --net-test-end-frame 1200 --rng-seed 7 --net-test-give 300,0x87/600,0x8c &
 host=$!
 waitfor "$H" "net: hosting on UDP port" 90 || { fail "host did not start"; kill -TERM "$host"; wait "$host" 2>/dev/null; exit 2; }
 game client 210 --connect "127.0.0.1:$PORT" --net-test-join &
 client=$!
 waitfor "$C" "net: match 1: GO" 150 || fail "client never got GO"
 waitfor "$C" "ammo type 0x21" 90 || fail "client never reconciled its Rail reserve"
+waitfor "$C" "got a bbox from its OBJ" 90 || fail "the DB-Shotgun's OBJ never supplied a bbox"
 waitfor "$H" "net: match 1 ended; scores and awards sent" 120 || fail "host never ended the match"
 sleep 2
 
@@ -89,5 +90,15 @@ grep -qE '^#define NETLP_NUMAMMO +36' "$ROOT/port/include/net/netsnap.h" \
 	|| fail 'the local-player block is back to the ROM ammo count'
 grep -qF 'bool ammotypesheld[NUM_AMMOTYPES]' "$ROOT/src/game/player.c" \
 	|| fail 'a respawn still wipes the fork reserves'
+
+# The pack pipeline now supplies a real bbox from the OBJ, so the hit and
+# falling paths never see the NULL that used to fault at bbox->xmax.
+grep -qF 'xblaMeshBboxAdd(modeldef);' "$ROOT/port/src/xblamesh.c" \
+	|| fail 'the pack loader no longer gives a model a bbox'
+grep -qF 'b->rodata->bbox.xmin = lo[0];' "$ROOT/port/src/xblamesh.c" \
+	|| fail 'the bbox is not measured from the OBJ vertices'
+bboxline=$(grep 'got a bbox from its OBJ' "$C" | head -1)
+[ -n "$bboxline" ] && pass "the OBJ supplied a bbox: $bboxline" \
+	|| fail "the client never logged a bbox from the OBJ"
 
 exit $status

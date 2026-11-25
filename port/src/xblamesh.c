@@ -60,6 +60,7 @@
 #include "game/dlights.h"
 #include "game/game_0b0fd0.h"
 #include "game/playermgr.h"
+#include "game/propobj.h"
 #include "game/file.h"
 #include "bss.h"
 #include "game/modeldef.h"
@@ -229,6 +230,22 @@ struct xblameshentry {
  * needs - palette entry i is posed by whatever the game has done to the node
  * that carries part i.
  */
+/**
+ * A bounding box made from a model pack's OBJ. The ROM model may have no BBOX
+ * node of its own - a gun rebuilt from an OBJ certainly can - and several game
+ * paths read one unconditionally (falling, hit tests, door clearance). The
+ * node and its rodata are owned here, outside the model's file buffer, which
+ * is tightly sized and reused by the next model loaded into that space.
+ */
+struct xblameshbbox {
+	const struct modeldef *modeldef;
+	struct modelnode *node;
+	union modelrodata *rodata;
+};
+
+static struct xblameshbbox *s_Bboxes;
+static s32 s_NumBboxes;
+
 struct xblameshuse {
 	const struct modeldef *modeldef;
 	u16 slot;      // a mesh slot, or a file id when pack is set
@@ -1194,8 +1211,99 @@ static s32 xblaMeshUseFor(const struct modeldef *modeldef, s32 slot, s32 pack)
  * on a machine that has no package at all, so the table walk is skipped when
  * there is nothing in the table to walk over.
  */
+static struct xblameshbbox *xblaMeshBboxFor(const struct modeldef *modeldef)
+{
+	for (s32 i = 0; i < s_NumBboxes; i++) {
+		if (s_Bboxes[i].modeldef == modeldef) {
+			return &s_Bboxes[i];
+		}
+	}
+
+	return NULL;
+}
+
+static void xblaMeshBboxFree(const struct modeldef *modeldef)
+{
+	struct xblameshbbox *b = xblaMeshBboxFor(modeldef);
+
+	if (!b) {
+		return;
+	}
+
+	free(b->node);
+	free(b->rodata);
+	b->modeldef = NULL;
+	b->node = NULL;
+	b->rodata = NULL;
+}
+
+/**
+ * Give a model whose file had no bbox a whole-model box at the root's matrix.
+ * Inserting it as the last child keeps any per-part boxes ahead of it in the
+ * game's depth-first search, so hit ownership of parts is unchanged.
+ */
+static void xblaMeshBboxAdd(const struct modeldef *modeldef)
+{
+	if (!modeldef || !modeldef->rootnode || xblaMeshBboxFor(modeldef)
+			|| modeldefFindBboxNode((struct modeldef *) modeldef)) {
+		return;
+	}
+
+	// A BBOX carries no matrix of its own: it is read in the frame of the
+	// first matrix-bearing node found by walking up from it.
+	const s32 mtx = modelFindNodeMtxIndex(modeldef->rootnode, 0);
+
+	if (mtx < 0 || mtx >= modeldef->nummatrices) {
+		return;
+	}
+
+	struct xblameshbbox *grown = realloc(s_Bboxes, (s_NumBboxes + 1) * sizeof(*grown));
+
+	if (!grown) {
+		return;
+	}
+
+	struct modelnode *node = calloc(1, sizeof(*node));
+	union modelrodata *rodata = calloc(1, sizeof(*rodata));
+
+	if (!node || !rodata) {
+		free(node);
+		free(rodata);
+		return;
+	}
+
+	s_Bboxes = grown;
+	s_Bboxes[s_NumBboxes].modeldef = modeldef;
+	s_Bboxes[s_NumBboxes].node = node;
+	s_Bboxes[s_NumBboxes].rodata = rodata;
+	s_NumBboxes++;
+
+	node->type = MODELNODETYPE_BBOX;
+	node->rodata = rodata;
+	rodata->bbox.hitpart = HITPART_GENERAL;
+
+	struct modelnode *last = modeldef->rootnode->child;
+
+	while (last && last->next) {
+		last = last->next;
+	}
+
+	node->parent = modeldef->rootnode;
+	node->prev = last;
+
+	if (last) {
+		last->next = node;
+	} else {
+		modeldef->rootnode->child = node;
+	}
+}
+
 static void xblaMeshForgetModel(const struct modeldef *modeldef)
 {
+	// The new file has already been loaded over this address, so do not
+	// unlink the node: just release what this file owned.
+	xblaMeshBboxFree(modeldef);
+
 	for (s32 i = 0; i < numUses; i++) {
 		if (uses[i].modeldef == modeldef) {
 			uses[i].modeldef = NULL;
@@ -2364,6 +2472,17 @@ void xblaMeshResetModels(void)
 	for (s32 i = 0; i < numUses; i++) {
 		xblaMeshBruiseFree(&uses[i]);
 	}
+
+	// The stage's model buffers are handed back with it; so are boxes made
+	// from pack meshes, which live here rather than inside those buffers.
+	for (s32 i = 0; i < s_NumBboxes; i++) {
+		free(s_Bboxes[i].node);
+		free(s_Bboxes[i].rodata);
+	}
+
+	free(s_Bboxes);
+	s_Bboxes = NULL;
+	s_NumBboxes = 0;
 
 	numUses = 0;
 	openedLate = 0;
@@ -6657,9 +6776,16 @@ static void xblaMeshRegisterPackModel(struct modeldef *modeldef, u16 fileid)
 	// switching it on is then live. A name compare for every other model.
 	beanrow = gebeanFindRow(fileid, modeldef);
 
-	if (!modelpackHavePacks() && beanrow < 0) {
+	// A mesh compiled into the executable is as much a pack file as one in a
+	// folder: modelpackFindN64() answers it even when the game has no packs
+	// directory at all.
+	if (!modelpackHavePacks() && !modelpackFindN64(fileid) && beanrow < 0) {
 		return;
 	}
+
+	// The same OBJ that supplies the mesh supplies the box. Added before the
+	// list nodes are enumerated, which ignore BBOX nodes anyway.
+	xblaMeshBboxAdd(modeldef);
 
 	n = xblaMeshEnumListNodes(modeldef, nodes, XBLAMESH_MAXPARTS);
 
@@ -6923,6 +7049,42 @@ static struct xblameshbuilt *xblaMeshBuildPack(const struct xblameshentry *e)
 					}
 				}
 			}
+		}
+	}
+
+	// The box is the OBJ's own extent in the model's rest space, taken before
+	// each group's offset is removed below. It is the one the pack supplies,
+	// so a new or re-fitted OBJ reshapes it without any game-side edit.
+	{
+		f32 lo[3] = { 3.4e38f, 3.4e38f, 3.4e38f };
+		f32 hi[3] = { -3.4e38f, -3.4e38f, -3.4e38f };
+		struct xblameshbbox *b = xblaMeshBboxFor(use->modeldef);
+
+		for (u32 i = 0; i < obj->numvertices; i++) {
+			const s32 k = owner[i];
+
+			if (k < 0 || k >= use->numparts || !use->parts[k]) {
+				continue;
+			}
+
+			for (s32 j = 0; j < 3; j++) {
+				const f32 p = obj->vertices[i].pos[j];
+
+				if (p < lo[j]) lo[j] = p;
+				if (p > hi[j]) hi[j] = p;
+			}
+		}
+
+		if (b && lo[0] <= hi[0]) {
+			b->rodata->bbox.xmin = lo[0];
+			b->rodata->bbox.xmax = hi[0];
+			b->rodata->bbox.ymin = lo[1];
+			b->rodata->bbox.ymax = hi[1];
+			b->rodata->bbox.zmin = lo[2];
+			b->rodata->bbox.zmax = hi[2];
+			sysLogPrintf(LOG_NOTE, "xblamesh: pack mesh for model file %d got a bbox "
+					"from its OBJ (%.1f..%.1f, %.1f..%.1f, %.1f..%.1f)",
+					fileid, lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]);
 		}
 	}
 

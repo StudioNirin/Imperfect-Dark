@@ -774,13 +774,18 @@ one is installed. No config key, folder beside the game or updater asset is
 needed to see the fitted gun. Because of that the release no longer builds a
 separate `pd-assets-*.zip`; the docs go inside each platform's package.
 
-The embedded mesh has no bounding-box node of its own, which a dropped gun's
-falling tick does not know: `projectileFall()` read `bbox->xmax` off a NULL
-`objFindBboxRodata()` when a player killed by the shotgun dropped it (fault
-address 0x8, the offset of `xmax`, on both host and client online). It now
-treats a missing box as no measurements and takes the function's default
-tumble axes. That is a general guard for any replaced mesh, not a per-gun
-correction.
+A model rebuilt from an OBJ has no BBOX node of its own, and a dropped gun's
+falling tick reads one unconditionally: `projectileFall()` faulted at
+`bbox->xmax` (fault address 0x8) when a player killed by the shotgun dropped
+it, on host and client alike. There are now two layers. The pack pipeline in
+`xblaMeshBuildPack()` measures the OBJ's vertices before the group rest
+offsets are removed and gives the model a whole-model BBOX node at the root's
+matrix, owned in `xblamesh.c` outside the model's file buffer and freed at
+model forget and stage reset. This applies to every pack-replaced model, not
+just this gun, so a re-fitted OBJ reshapes its own box. `projectileFall()`
+also keeps a guard for a box that is still missing, taking its default tumble
+axes rather than faulting. `netammotest.sh` asserts a bbox is logged from the
+OBJ when the DB-Shotgun is given to a client.
 
 `--test-dbshotgun` (`tools/ci/dbshotgun.sh`) checks the alias and state, the
 two-round row, all three firing states, the untouched stock Shotgun and the MP
