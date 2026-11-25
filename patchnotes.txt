@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 101 2026-11-25
+Online: the Moonrailer, Bowcaster and Shock Rifle reserves now display correctly for clients.
+
 notes 100 2026-11-24
 DB-Shotgun: the third-person gun is fitted to the hand's rest space, so it no longer points into the air.
 
