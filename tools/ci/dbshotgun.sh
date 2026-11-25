@@ -171,6 +171,12 @@ grep -q 'both fitted meshes are built in and resolve without a model pack' "$ROO
 grep -qF 'dbshotgun test: ok   both fitted meshes are built in and resolve without a model pack' "$LOG" \
 	|| fail "the built-in meshes did not resolve with model packs off"
 
+# A player killed by the shotgun drops it, and the falling-weapon tick asks
+# the model for a bbox. The embedded mesh has no bbox node, so that lookup is
+# NULL: reading bbox->xmax faulted at 0x8 on both host and client.
+grep -qF 'bbox->xmax when a downed player' "$ROOT/src/game/propobj.c" \
+	|| fail "a dropped DB-Shotgun can fault on a missing model bbox again"
+
 for png in 00_0x098EA1A5 01_0x098E51A5 02_0x09BEA1A5 03_0x09BE51A5 04_0x0D0689B5 05_0x051D5125; do
 	[ -f "$PACK/shotgun/$png.png" ] || fail "the pack is missing texture $png.png"
 done

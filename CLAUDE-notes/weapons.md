@@ -774,6 +774,14 @@ one is installed. No config key, folder beside the game or updater asset is
 needed to see the fitted gun. Because of that the release no longer builds a
 separate `pd-assets-*.zip`; the docs go inside each platform's package.
 
+The embedded mesh has no bounding-box node of its own, which a dropped gun's
+falling tick does not know: `projectileFall()` read `bbox->xmax` off a NULL
+`objFindBboxRodata()` when a player killed by the shotgun dropped it (fault
+address 0x8, the offset of `xmax`, on both host and client online). It now
+treats a missing box as no measurements and takes the function's default
+tumble axes. That is a general guard for any replaced mesh, not a per-gun
+correction.
+
 `--test-dbshotgun` (`tools/ci/dbshotgun.sh`) checks the alias and state, the
 two-round row, all three firing states, the untouched stock Shotgun and the MP
 row at both setup widths.

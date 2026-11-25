@@ -4345,9 +4345,22 @@ void projectileFall(struct defaultobj *obj, f32 arg1[3][3])
 
 		bbox = objFindBboxRodata(obj);
 
-		sp4c[0] = bbox->xmax - bbox->xmin;
-		sp4c[1] = bbox->ymax - bbox->ymin;
-		sp4c[2] = bbox->zmax - bbox->zmin;
+		// A gun whose mesh was replaced (the DB-Shotgun's fit ships inside
+		// the executable, not in the ROM's model file) has no bbox node to
+		// find. The box is only used below to choose which local axes the
+		// falling object tumbles on; with no measurements every choice fails
+		// and the default axes at the end of the function are used. Reading
+		// it unguarded faulted at bbox->xmax when a downed player's shotgun
+		// came to rest (fault address 0x8, the offset of xmax).
+		if (bbox) {
+			sp4c[0] = bbox->xmax - bbox->xmin;
+			sp4c[1] = bbox->ymax - bbox->ymin;
+			sp4c[2] = bbox->zmax - bbox->zmin;
+		} else {
+			sp4c[0] = 0.0f;
+			sp4c[1] = 0.0f;
+			sp4c[2] = 0.0f;
+		}
 
 		for (i = 0; i < 3; i++) {
 			sp58[i] = sp4c[i] * projectile->unk0b8[i];
