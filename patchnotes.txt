@@ -40,6 +40,10 @@
 #
 # mod-base 69
 
+notes 106 2026-11-25
+Shock Rifle: the orb has its own ammo pool, so the gun is one weapon with two firing modes.
+Shock Rifle: no second weapon-wheel entry or Orb-only version after picking one up.
+
 notes 105 2026-11-25
 Bowcaster: bolts no longer turn up or down when fired over a chasm.
 
