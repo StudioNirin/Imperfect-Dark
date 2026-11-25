@@ -303,7 +303,9 @@ grep -qF 's32 boltweapon = hand->gset.weaponnum == WEAPON_BOWCASTER' "$ROOT/src/
 grep -qF '#define PROJECTILEFLAG_PROPHIT' "$ROOT/src/include/constants.h" || fail "there is no non-sticky prop-hit projectile flag"
 grep -qF 'obj->projectile->flags |= PROJECTILEFLAG_PROPHIT' "$ROOT/src/game/bondgun.c" || fail "the plasma bolt is still launched sticky"
 awk '/void bgun0f09ebcc/,/^}/' "$ROOT/src/game/bondgun.c" | grep -q 'projectileSetSticky' || fail "the shared launch no longer sticks the other projectiles"
-grep -cF 'projectile->flags & (PROJECTILEFLAG_STICKY | PROJECTILEFLAG_PROPHIT)' "$ROOT/src/game/propobj.c" | grep -qx 3 || fail "the prop-aware collision and damage block are not shared by sticky and prop-hit"
+# Four uses now: the two collision selections, the damage block, and the
+# no-floor snap-back that excludes both kinds of shot.
+grep -cF 'projectile->flags & (PROJECTILEFLAG_STICKY | PROJECTILEFLAG_PROPHIT)' "$ROOT/src/game/propobj.c" | grep -qx 4 || fail "the prop-aware collision and damage block are not shared by sticky and prop-hit"
 grep -qF 'if ((projectile->flags & PROJECTILEFLAG_STICKY) || handled)' "$ROOT/src/game/propobj.c" || fail "a surface contact still lands the plasma bolt"
 grep -qF 'w->weaponnum != WEAPON_BOWCASTERBOLT' "$ROOT/src/game/propobj.c" && fail "the old objLand bolt special case is still in the flight loop"
 

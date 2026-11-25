@@ -110,6 +110,7 @@ s32 g_TestRailLaser = false; // --test-raillaser: the Rail-Laser's row, number, 
 s32 g_TestShock = false; // --test-shock: the Shock Rifle's two modes, orb row, saved-setup width (shockSelfTest)
 s32 g_TestForkBots = false; // --test-forkbots: what a simulant's preference table says of the fork's guns (forkbotSelfTest)
 s32 g_TestDbShotgun = false; // --test-dbshotgun: the alias, the two-round double, the untouched stock Shotgun and saved-setup width (dbShotgunSelfTest)
+s32 g_TestBoltVoid = false; // --test-boltvoid: no-floor bridge crossing log (boltvoid.sh)
 s32 g_TestSprint = false; // --test-sprint: a sprint, a trigger inside it, and a switch (lvTestSprintTick)
 s32 g_TestBindFamilies = false; // --test-bindfamilies: which of a command's four bindings is whose (inputBindsSelfTest)
 s32 g_NumPoseAnims = 0;
@@ -441,6 +442,7 @@ int main(int argc, const char **argv)
 	// reason: they ask the weapon table, the alias, the simulant's row and the
 	// saved-setup codec, all live by now (port/src/dbshotgun.c).
 	g_TestDbShotgun = sysArgCheck("--test-dbshotgun");
+	g_TestBoltVoid = sysArgCheck("--test-boltvoid");
 
 	if (g_TestDbShotgun) {
 		dbShotgunSelfTest();

@@ -3826,6 +3826,7 @@ s32 func0f06cd00(struct defaultobj *obj, struct coord *pos, struct coord *arg2, 
 	RoomNum spb8[8];
 	s32 i;
 	f32 scale = 1.0f;
+	bool normalvalid = false;
 
 	cdresult = CDRESULT_NOCOLLISION;
 
@@ -3921,6 +3922,7 @@ s32 func0f06cd00(struct defaultobj *obj, struct coord *pos, struct coord *arg2, 
 				arg3->x = hitthing.unk0c.x;
 				arg3->y = hitthing.unk0c.y;
 				arg3->z = hitthing.unk0c.z;
+				normalvalid = (arg3->x != 0.0f || arg3->y != 0.0f || arg3->z != 0.0f);
 			}
 		}
 
@@ -3932,6 +3934,10 @@ s32 func0f06cd00(struct defaultobj *obj, struct coord *pos, struct coord *arg2, 
 			}
 		} else {
 			cdresult = CDRESULT_COLLISION;
+
+			if (arg3->x != 0.0f || arg3->y != 0.0f || arg3->z != 0.0f) {
+				normalvalid = true;
+			}
 		}
 
 		if (cdresult != CDRESULT_NOCOLLISION) {
@@ -3954,6 +3960,22 @@ s32 func0f06cd00(struct defaultobj *obj, struct coord *pos, struct coord *arg2, 
 			arg2->x -= mult * dist.x;
 			arg2->y -= mult * dist.y;
 			arg2->z -= mult * dist.z;
+
+			{
+				// A collision without a surface normal is not a surface: an
+				// unloaded room, a degenerate triangle or stale collision
+				// state can report a hit with no normal to bounce off. Nor is
+				// a back face the bolt is already travelling away from. Both
+				// would hand the reflection a bogus pitch.
+				const f32 vx = sp1c4.x - prop->pos.x;
+				const f32 vy = sp1c4.y - prop->pos.y;
+				const f32 vz = sp1c4.z - prop->pos.z;
+				const f32 approach = arg3->x * vx + arg3->y * vy + arg3->z * vz;
+
+				if (!normalvalid || approach >= 0.0f) {
+					cdresult = CDRESULT_NOCOLLISION;
+				}
+			}
 
 			if (arg3->x != 0.0f || arg3->y != 0.0f || arg3->z != 0.0f) {
 				guNormalize(&arg3->x, &arg3->y, &arg3->z);
@@ -7357,7 +7379,7 @@ s32 projectileTick(struct defaultobj *obj, bool *embedded)
 #endif
 	struct projectile *projectile = obj->projectile;
 	s32 cdresult;
-	struct coord sp5f4;
+	struct coord sp5f4 = { 0.0f, 0.0f, 0.0f };
 	struct coord sp5e8;
 	struct coord sp5dc;
 	bool result = false;
@@ -8405,6 +8427,17 @@ s32 projectileTick(struct defaultobj *obj, bool *embedded)
 				if (!handled) {
 					u16 geoflags;
 
+					{
+						extern s32 g_TestBoltVoid;
+						if (g_TestBoltVoid && roomnum <= 0 && obj->type == OBJTYPE_WEAPON
+								&& ((struct weaponobj *) obj)->weaponnum == WEAPON_BOWCASTERBOLT) {
+							sysLogPrintf(LOG_NOTE, "BOLTVOID tick %d room %d flags %x speed %.1f %.1f %.1f pos %.1f %.1f %.1f",
+									g_Vars.lvframenum, roomnum, projectile->flags,
+									projectile->speed.x, projectile->speed.y, projectile->speed.z,
+									prop->pos.x, prop->pos.y, prop->pos.z);
+						}
+					}
+
 					sp37c = objGetRotatedLocalYMinByMtx3(objFindBboxRodata(obj), obj->realrot);
 
 					sp5ac.x = prop->pos.x;
@@ -8443,7 +8476,12 @@ s32 projectileTick(struct defaultobj *obj, bool *embedded)
 						roomnum = cdFindFloorRoomYColourNormalPropAtPos(&prop->pos, prop->rooms, &sp390, &obj->floorcol, &sp380, NULL);
 
 #if VERSION >= VERSION_NTSC_1_0
-						if (roomnum <= 0 && (projectile->flags & PROJECTILEFLAG_STICKY) == 0) {
+						// A plasma bolt flies under its own power and is not
+						// sticky. Zeroing its horizontal speed over a void left
+						// only the old vertical component, so a bolt crossing
+						// the edge of a bridge over a chasm turned straight up
+						// or down. Thrown objects still get the snap-back.
+						if (roomnum <= 0 && (projectile->flags & (PROJECTILEFLAG_STICKY | PROJECTILEFLAG_PROPHIT)) == 0) {
 							if ((projectile->flags & PROJECTILEFLAG_00010000) == 0) {
 								projectile->flags |= PROJECTILEFLAG_00010000;
 

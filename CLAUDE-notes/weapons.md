@@ -815,3 +815,18 @@ Two separate causes, both visible on an online host in a room passage:
 `tools/ci/boltnettest.sh` gives both seats a Bowcaster on a loopback host,
 fires from the client, and asserts the puppet log's `bolt beams` count climbs
 alongside source pins for the camera threading and launch grace.
+
+A third symptom showed up on G5: over a bridge whose room has no floor, the
+bolt turned up or down at the edge. It is not the camera fix and not a portal
+collision. The no-floor branch in `projectileTick()` (`propobj.c:8446`) moves
+a projectile back to the start of its tick and zeroes X/Z speed to stop thrown
+objects flying over voids; it excluded only `STICKY`, so a `PROPHIT` bolt was
+caught by it, and being `POWERED` it had no accelerator to rebuild horizontal
+speed, leaving only a drifting Y. Both kinds of shot are now excluded. The
+same block now rejects a reported collision that has no real surface normal
+(or where the bolt is already moving away from the surface), `sp5f4` is reset
+each tick, and `cdClearResults()` clears obstacle geometry and position so a
+stale normal cannot be reused. Bounces off real walls, floors and bridge
+decks still use their own normals. `tools/ci/boltvoid.sh` fires over G5's
+chasm and asserts the bolt keeps its horizontal speed, with source pins for
+all three changes.

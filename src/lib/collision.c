@@ -130,6 +130,12 @@ void cdClearResults(void)
 	g_CdHasSavedPos = false;
 	g_CdHasSavedBlock = false;
 	var8005f038 = 0;
+
+	// The obstacle geometry and position are not reset by a query that finds
+	// nothing, so a later normal read can describe a surface from an earlier
+	// test. Clearing them here keeps cdGetObstacleNormal() honest.
+	g_CdObstacleGeo = NULL;
+	g_CdObstaclePos.x = g_CdObstaclePos.y = g_CdObstaclePos.z = 0.0f;
 }
 
 void cdSetObstacleVtxProp(struct coord *vtx1, struct coord *vtx2, struct prop *prop)
