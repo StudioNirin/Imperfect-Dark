@@ -3110,7 +3110,30 @@ static bool doorIsGeWholeModel(struct defaultobj *obj, bool thrown)
 }
 #endif
 
-bool func0f06b610(struct defaultobj *obj, struct coord *arg1, struct coord *arg2, struct coord *arg3, f32 arg4, struct coord *arg5, struct coord *arg6, struct coord *arg7, struct coord *arg8, f32 *arg9)
+/**
+ * Model matrices are posed in view space by the camera that last rendered
+ * them. On a host with several seats that need not be the camera of the
+ * player whose projectile is being tested: the line would be transformed by
+ * one camera and intersected with another, and the normal returned would have
+ * a bogus pitch. Recover the pair that posed this model instead. The helpers
+ * identify the camera from where the matrix sits in the gfx buffer; when that
+ * fails, the current camera is the best answer available.
+ */
+static void projectileHitCamera(struct model *model, Mtxf **outw2s, Mtxf **outc2w)
+{
+	Mtxf *w2s = model ? cam0f0b5050((u8 *) model->matrices) : NULL;
+	Mtxf *c2w = model ? cam0f0b53a4((u8 *) model->matrices) : NULL;
+
+	if (!w2s || !c2w) {
+		w2s = camGetWorldToScreenMtxf();
+		c2w = camGetProjectionMtxF();
+	}
+
+	*outw2s = w2s;
+	*outc2w = c2w;
+}
+
+bool func0f06b610(struct defaultobj *obj, struct coord *arg1, struct coord *arg2, struct coord *arg3, f32 arg4, struct coord *arg5, struct coord *arg6, struct coord *arg7, struct coord *arg8, f32 *arg9, Mtxf *c2w, Mtxf *w2s)
 {
 	struct model *model = obj->model;
 	f32 f0 = modelGetEffectiveScale(model);
@@ -3161,8 +3184,8 @@ bool func0f06b610(struct defaultobj *obj, struct coord *arg1, struct coord *arg2
 
 							*arg9 = sum2;
 
-							mtx4TransformVec(camGetProjectionMtxF(), &spfc, arg7);
-							mtx4RotateVec(camGetProjectionMtxF(), &spf0, arg8);
+							mtx4TransformVec(c2w, &spfc, arg7);
+							mtx4RotateVec(c2w, &spf0, arg8);
 
 							if (arg8->x != 0.0f || arg8->y != 0.0f || arg8->z != 0.0f) {
 								guNormalize(&arg8->x, &arg8->y, &arg8->z);
@@ -3237,7 +3260,7 @@ bool func0f06b610(struct defaultobj *obj, struct coord *arg1, struct coord *arg2
 
 						*arg9 = sum1;
 
-						mtx4TransformVec(camGetProjectionMtxF(), &spfc, arg7);
+						mtx4TransformVec(c2w, &spfc, arg7);
 
 						if (spf0.f[0] * arg6->f[0] + spf0.f[1] * arg6->f[1] + spf0.f[2] * arg6->f[2] > 0.0f) {
 							spf0.f[0] = -spf0.f[0];
@@ -3245,7 +3268,7 @@ bool func0f06b610(struct defaultobj *obj, struct coord *arg1, struct coord *arg2
 							spf0.f[2] = -spf0.f[2];
 						}
 
-						mtx4RotateVec(camGetProjectionMtxF(), &spf0, arg8);
+						mtx4RotateVec(c2w, &spf0, arg8);
 
 						if (arg8->f[0] != 0.0f || arg8->f[1] != 0.0f || arg8->f[2] != 0.0f) {
 							guNormalize(&arg8->x, &arg8->y, &arg8->z);
@@ -3286,7 +3309,7 @@ bool func0f06b610(struct defaultobj *obj, struct coord *arg1, struct coord *arg2
 
 		while (child) {
 			if (child->flags & PROPFLAG_ONTHISSCREENTHISTICK) {
-				if (func0f06b610(child->obj, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)) {
+				if (func0f06b610(child->obj, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, c2w, w2s)) {
 					result = true;
 				}
 			}
@@ -3522,7 +3545,7 @@ bool func0f06bea0(struct model *model, struct modelnode *endnode, struct modelno
 	return ok;
 }
 
-bool func0f06c28c(struct chrdata *chr, struct coord *arg1, struct coord *arg2, struct coord *arg3, f32 arg4, struct coord *arg5, struct coord *arg6, struct coord *arg7, struct coord *arg8, f32 *arg9)
+bool func0f06c28c(struct chrdata *chr, struct coord *arg1, struct coord *arg2, struct coord *arg3, f32 arg4, struct coord *arg5, struct coord *arg6, struct coord *arg7, struct coord *arg8, f32 *arg9, Mtxf *c2w, Mtxf *w2s)
 {
 	f32 spec;
 	struct prop *prop = chr->prop;
@@ -3564,8 +3587,8 @@ bool func0f06c28c(struct chrdata *chr, struct coord *arg1, struct coord *arg2, s
 
 							*arg9 = spec;
 
-							mtx4TransformVec(camGetProjectionMtxF(), &spb8, arg7);
-							mtx4RotateVec(camGetProjectionMtxF(), &spac, arg8);
+							mtx4TransformVec(c2w, &spb8, arg7);
+							mtx4RotateVec(c2w, &spac, arg8);
 
 							if (arg8->x != 0.0f || arg8->y != 0.0f || arg8->z != 0.0f) {
 								guNormalize(&arg8->x, &arg8->y, &arg8->z);
@@ -3604,8 +3627,8 @@ bool func0f06c28c(struct chrdata *chr, struct coord *arg1, struct coord *arg2, s
 						&& func0f06bea0(model, model->definition->rootnode, model->definition->rootnode, arg5, arg6, &sp7c.pos, &spec, &spcc, &hitpart, &sp78, &sp74)
 						&& spec < *arg9) {
 					*arg9 = spec;
-					mtx4TransformVec(camGetProjectionMtxF(), &sp7c.pos, arg7);
-					mtx4RotateVec(camGetProjectionMtxF(), &sp7c.unk0c, arg8);
+					mtx4TransformVec(c2w, &sp7c.pos, arg7);
+					mtx4RotateVec(c2w, &sp7c.unk0c, arg8);
 
 					if (arg8->x != 0.0f || arg8->y != 0.0f || arg8->z != 0.0f) {
 						guNormalize(&arg8->x, &arg8->y, &arg8->z);
@@ -3632,7 +3655,7 @@ bool func0f06c28c(struct chrdata *chr, struct coord *arg1, struct coord *arg2, s
 
 		while (child) {
 			if (child->flags & PROPFLAG_ONTHISSCREENTHISTICK) {
-				if (func0f06b610(child->obj, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)) {
+				if (func0f06b610(child->obj, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, c2w, w2s)) {
 					result = true;
 				}
 			}
@@ -3716,8 +3739,21 @@ bool projectileFindCollidingProp(struct prop *prop, struct coord *pos1, struct c
 							}
 						}
 
-						if (func0f06b610(obj, pos1, pos2, &sp98, dist, &sp88, &sp7c, arg4, arg5, &spa8)) {
-							spa4 = true;
+						{
+							Mtxf *w2s;
+							Mtxf *c2w;
+							struct coord p1v;
+							struct coord dirv;
+
+							projectileHitCamera(obj->model, &w2s, &c2w);
+							p1v = *pos1;
+							dirv = sp98;
+							mtx4TransformVecInPlace(w2s, &p1v);
+							mtx4RotateVecInPlace(w2s, &dirv);
+
+							if (func0f06b610(obj, pos1, pos2, &sp98, dist, &p1v, &dirv, arg4, arg5, &spa8, c2w, w2s)) {
+								spa4 = true;
+							}
 						}
 					}
 				} else if (iterprop->type == PROPTYPE_CHR
@@ -3736,8 +3772,21 @@ bool projectileFindCollidingProp(struct prop *prop, struct coord *pos1, struct c
 						}
 					}
 
-					if (func0f06c28c(chr, pos1, pos2, &sp98, dist, &sp88, &sp7c, arg4, arg5, &spa8)) {
-						spa4 = true;
+					{
+						Mtxf *w2s;
+						Mtxf *c2w;
+						struct coord p1v;
+						struct coord dirv;
+
+						projectileHitCamera(chr->model, &w2s, &c2w);
+						p1v = *pos1;
+						dirv = sp98;
+						mtx4TransformVecInPlace(w2s, &p1v);
+						mtx4RotateVecInPlace(w2s, &dirv);
+
+						if (func0f06c28c(chr, pos1, pos2, &sp98, dist, &p1v, &dirv, arg4, arg5, &spa8, c2w, w2s)) {
+							spa4 = true;
+						}
 					}
 				} else if (iterprop->type == PROPTYPE_PLAYER
 						&& g_Vars.players[playermgrGetPlayerNumByProp(iterprop)]->bondperimenabled) {
@@ -3854,6 +3903,11 @@ s32 func0f06cd00(struct defaultobj *obj, struct coord *pos, struct coord *arg2, 
 			}
 
 			if (s0
+					// A bolt born inside a passage must not bounce off the
+					// frame on its very first step: it has not travelled far
+					// enough for that to be a real surface it met.
+					&& (!(obj->hidden & OBJHFLAG_PROJECTILE)
+							|| (g_Vars.lvframenum - obj->projectile->unk0d8) > 0)
 					&& ((prop->pos.x <= sp1c4.x && hitthing.pos.x <= sp1c4.x && prop->pos.x <= hitthing.pos.x) || (sp1c4.x <= prop->pos.x && sp1c4.x <= hitthing.pos.x && hitthing.pos.x <= prop->pos.x))
 					&& ((prop->pos.y <= sp1c4.y && hitthing.pos.y <= sp1c4.y && prop->pos.y <= hitthing.pos.y) || (sp1c4.y <= prop->pos.y && sp1c4.y <= hitthing.pos.y && hitthing.pos.y <= prop->pos.y))
 					&& ((prop->pos.z <= sp1c4.z && hitthing.pos.z <= sp1c4.z && prop->pos.z <= hitthing.pos.z) || (sp1c4.z <= prop->pos.z && sp1c4.z <= hitthing.pos.z && hitthing.pos.z <= prop->pos.z))

@@ -96,6 +96,8 @@ struct netpup {
 	u16 lastsrcgen;      // ... and its generation
 	u8 havesrc;
 	s32 smoketimer240;   // a projectile's trail, at projectileTick's interval
+	f32 beampose[3];     // last drawn pose of a Bowcaster bolt's glow beam
+	u8 beamposevalid;    // and whether it is a pose at all yet
 	u32 listtick;        // (protocol 24) the host tick of the record that last decided in or out of the world
 	u16 listgen;         // ... its generation
 	u8 listout;          // ... and what it said
@@ -143,6 +145,7 @@ static u32 s_LetGo = 0;      // objects this machine held as a child that the ho
 static u32 s_TakenOut = 0;   // (protocol 24) setup objects taken out of the world as the host's were
 static u32 s_PutBack = 0;    // ... and put back as the host's were
 static u32 s_Trails = 0;
+static u32 s_BoltBeams = 0;
 static u32 s_LiftMoves = 0;  // lift records that moved a lift
 static u32 s_HatsWorn = 0;   // hats put on a chr from its record
 static u32 s_GeGunsHeld = 0; // GoldenEye guns put in a chr's hand from its record
@@ -288,7 +291,7 @@ void netPuppetsStageStart(void)
 	s_Serial = 0;
 	s_Poses = s_Interp = s_Extrap = s_Held = s_Behind = 0;
 	s_CreateFail = s_Freed = s_Stolen = s_NoDesc = s_HeldSwaps = s_HeldDrops = s_Snaps = 0;
-	s_DoorMoves = s_DoorSounds = s_DoorFalls = s_Regens = s_Unpaused = s_LetGo = s_TakenOut = s_PutBack = s_Trails = s_Deaths = s_FirstRecords = s_BadAnims = s_Resyncs = 0;
+	s_DoorMoves = s_DoorSounds = s_DoorFalls = s_Regens = s_Unpaused = s_LetGo = s_TakenOut = s_PutBack = s_Trails = s_BoltBeams = s_Deaths = s_FirstRecords = s_BadAnims = s_Resyncs = 0;
 	s_DrivenTankProp = NULL;
 	s_RidersMapped = 0;
 	s_PlayerDeaths = 0;
@@ -1401,25 +1404,50 @@ static void netPupObj(struct netpup *u, struct prop *prop, const struct netentst
 				} else if (host == WEAPON_GRENADEROUND) {
 					smokeCreateSimple(&prop->pos, prop->rooms, SMOKETYPE_GRENADETAIL);
 					s_Trails++;
-				} else if (prop->weapon->weaponnum == WEAPON_BOWCASTERBOLT) {
-					// The bolt's trail is the glow beam it is; the head rides
-					// behind the bolt along its velocity, the way the host's tick
-					// sets it, so the puppet does the same from its own movement
-					s32 beamnum = boltbeamFindByProp(prop);
-
-					if (beamnum >= 0) {
-						struct coord head;
-
-						// the head rides a fixed trail behind the bolt, along
-						// the way it came this tick
-						head.x = prop->pos.x - dx * 6.0f;
-						head.y = prop->pos.y - dy * 6.0f;
-						head.z = prop->pos.z - dz * 6.0f;
-						boltbeamSetHeadPos(beamnum, &head);
-
-						boltbeamSetTailPos(beamnum, &prop->pos);
-					}
 				}
+			}
+		}
+
+		// The bolt's trail is the glow beam itself, and it is the whole shot.
+		// Drive it from the blended pose on every frame rather than from the
+		// snapshot delta on every sixth: the host lays a 180-unit trail behind
+		// the bolt each tick, so the puppet lays the same trail along the way
+		// it has just moved. Keeping the last drawn pose means a bounce simply
+		// turns the beam on the next frame instead of leaving a long extrapolation.
+		if (u->havestate && obj->type == OBJTYPE_WEAPON && prop->weapon
+				&& prop->weapon->weaponnum == WEAPON_BOWCASTERBOLT
+				&& ((s->flags & NETOBJ_PROJECTILE) || isdyn)) {
+			if (!u->beamposevalid) {
+				u->beampose[0] = s->pos[0];
+				u->beampose[1] = s->pos[1];
+				u->beampose[2] = s->pos[2];
+				u->beamposevalid = 1;
+			}
+
+			const f32 bx = s->pos[0] - u->beampose[0];
+			const f32 by = s->pos[1] - u->beampose[1];
+			const f32 bz = s->pos[2] - u->beampose[2];
+			const f32 blen2 = bx * bx + by * by + bz * bz;
+
+			if (blen2 > 0.01f) {
+				const s32 beamnum = boltbeamFindByProp(prop);
+
+				if (beamnum >= 0) {
+					s_BoltBeams++;
+
+					const f32 scale = 180.0f / sqrtf(blen2);
+					struct coord head;
+
+					head.x = prop->pos.x - bx * scale;
+					head.y = prop->pos.y - by * scale;
+					head.z = prop->pos.z - bz * scale;
+					boltbeamSetHeadPos(beamnum, &head);
+					boltbeamSetTailPos(beamnum, &prop->pos);
+				}
+
+				u->beampose[0] = s->pos[0];
+				u->beampose[1] = s->pos[1];
+				u->beampose[2] = s->pos[2];
 			}
 		}
 	}
@@ -2995,9 +3023,9 @@ s32 netClientInMatch(void)
 
 void netPuppetsLog(const char *why)
 {
-	sysLogPrintf(LOG_NOTE, "net: puppets %s (tick %u): poses %u (interpolated %u, extrapolated %u, held past 100 ms %u, before every snapshot %u), render delay %.1f ticks (jitter %.2f, clock resyncs %u); first records %u, teleport snaps %u, sim deaths %u; made: weapons %u, hats %u, crates %u, scenario props %u; make failed %u, no descriptor %u, freed %u, taken back by this machine %u; held-item swaps %u (setup objects dropped before their record %u), bad anims %u; doors moved %u, door sounds %u, fall-away doors placed %u, regens %u, unpaused %u, let go %u, taken out %u, put back %u, trails %u, player puppet deaths %u; content: bodies made %u (no wearer %u, built from the tables %u, Guards Alerted! guards %u), hats worn %u, GE guns held %u, GE guns made %u (Golden Gun %u, in a puppet's hand %u, holders in turn %u), held guns not made %u, lift moves %u; chr records older than the last posed %u, blended towards an older one %u, posed from other snapshots %u; tank riders put on this machine's tank %u; thrown laptops made %u, autogun shots drawn %u",
+	sysLogPrintf(LOG_NOTE, "net: puppets %s (tick %u): poses %u (interpolated %u, extrapolated %u, held past 100 ms %u, before every snapshot %u), render delay %.1f ticks (jitter %.2f, clock resyncs %u); first records %u, teleport snaps %u, sim deaths %u; made: weapons %u, hats %u, crates %u, scenario props %u; make failed %u, no descriptor %u, freed %u, taken back by this machine %u; held-item swaps %u (setup objects dropped before their record %u), bad anims %u; doors moved %u, door sounds %u, fall-away doors placed %u, regens %u, unpaused %u, let go %u, taken out %u, put back %u, trails %u, bolt beams %u, player puppet deaths %u; content: bodies made %u (no wearer %u, built from the tables %u, Guards Alerted! guards %u), hats worn %u, GE guns held %u, GE guns made %u (Golden Gun %u, in a puppet's hand %u, holders in turn %u), held guns not made %u, lift moves %u; chr records older than the last posed %u, blended towards an older one %u, posed from other snapshots %u; tank riders put on this machine's tank %u; thrown laptops made %u, autogun shots drawn %u",
 			why, g_NetTick, s_Poses, s_Interp, s_Extrap, s_Held, s_Behind, s_DelayLast, s_Jit, s_Resyncs,
 			s_FirstRecords, s_Snaps, s_Deaths, s_Created[NETDESC_DYNWEAPON], s_Created[NETDESC_HAT], s_Created[NETDESC_AMMOCRATE], s_Created[NETDESC_SCENOBJ],
-			s_CreateFail, s_NoDesc, s_Freed, s_Stolen, s_HeldSwaps, s_HeldDrops, s_BadAnims, s_DoorMoves, s_DoorSounds, s_DoorFalls, s_Regens, s_Unpaused, s_LetGo, s_TakenOut, s_PutBack, s_Trails, s_PlayerDeaths,
+			s_CreateFail, s_NoDesc, s_Freed, s_Stolen, s_HeldSwaps, s_HeldDrops, s_BadAnims, s_DoorMoves, s_DoorSounds, s_DoorFalls, s_Regens, s_Unpaused, s_LetGo, s_TakenOut, s_PutBack, s_Trails, s_BoltBeams, s_PlayerDeaths,
 			s_Created[NETDESC_BODY], s_BodyLoads, s_BodyBuilt, s_AlarmBuilt, s_HatsWorn, s_GeGunsHeld, s_GeGunsMade, s_GoldenGuns, s_GoldenHands, s_GoldenHolders, s_HeldFails, s_LiftMoves, s_Backsteps, s_StaleAfter, s_Restitched, s_RidersMapped, s_Laptops, s_AutogunShots);
 }

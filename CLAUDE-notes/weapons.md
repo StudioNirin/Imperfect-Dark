@@ -790,3 +790,28 @@ OBJ when the DB-Shotgun is given to a client.
 `--test-dbshotgun` (`tools/ci/dbshotgun.sh`) checks the alias and state, the
 two-round row, all three firing states, the untouched stock Shotgun and the MP
 row at both setup widths.
+
+## Bowcaster bolts online (2026-11-25)
+
+Two separate causes, both visible on an online host in a room passage:
+
+- The bolt's `PROJECTILEFLAG_PROPHIT` collision (`func0f06cd00`) tests a line
+  against model matrices posed in **view space** by whichever camera last
+  rendered the model, but converted the line and the returned normal with
+  `g_Vars.currentplayer`'s camera. On a host rendering several seats those are
+  different cameras, so a horizontal surface normal acquired a bogus pitch and
+  the bounce at `propobj.c:8435` kicked the bolt vertically on its first tick.
+  `projectileHitCamera()` now recovers the camera pair that posed each model
+  (`cam0f0b5050`/`cam0f0b53a4`) and threads it through `func0f06b610()` and
+  `func0f06c28c()`; a one-tick grace keyed on `projectile->unk0d8` stops a bolt
+  born in a frame from reflecting on its first step. Rooms and portals have no
+  collision surface of their own, so passages only made the mismatch likely.
+- The client had no bolt simulation: it interpolated snapshot poses and drew
+  the glow beam from a snapshot delta once every six frames, with a trail about
+  a fifth of the host's. `netPupObj()` now drives the beam from the blended
+  pose every frame, laying the host's 180-unit trail along the movement since
+  the last drawn pose. No wire or protocol change.
+
+`tools/ci/boltnettest.sh` gives both seats a Bowcaster on a loopback host,
+fires from the client, and asserts the puppet log's `bolt beams` count climbs
+alongside source pins for the camera threading and launch grace.
