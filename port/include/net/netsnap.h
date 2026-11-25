@@ -191,11 +191,27 @@ f32 netPosWire(f32 v);      // a place's coordinate as it comes off the wire (ei
  * precision (f32 bits as they are), delta'd against the block in the
  * baseline snapshot. Layout in netproto.h.
  */
-#define NETLP_SIZE     (208 + NETMOVE_SIZE + NETLPTANK_SIZE)
-#define NETLPTANK_SIZE 48 // (protocol 23) the GoldenEye tank the player drives, at bytes 688..735 ((protocol 31) and the one it rides on)
-#define NETLP_NUMAMMO  33
 #define NETMOVE_SIZE   480
+#define NETLPTANK_SIZE 48 // (protocol 23) the GoldenEye tank the player drives, after the movement state ((protocol 31) and the one it rides on)
 #define NETMOVE_HEADWORDS 30 // struct player bondheadsave: the head model's rwdata
+
+// (protocol 44) The reserve array is the game's whole ammo table now, not the
+// ROM's 33: AMMOTYPE_RAIL, BOWCASTER and SHOCK are appended past 0x20 and a
+// 33-wide wire field left a client's HUD reading zero for all three. The game
+// half of the port asserts NETLP_NUMAMMO == NUM_AMMOTYPES.
+#define NETLP_NUMAMMO      36
+#define NETLP_AMMO_OFF     68
+// The spare u16 that followed the old 66-byte array is kept, so the fields
+// after it stay on the alignment they had before the array grew.
+#define NETLP_INV_OFF      (NETLP_AMMO_OFF + NETLP_NUMAMMO * 2 + 2)
+#define NETLP_INVDUAL_OFF  (NETLP_INV_OFF + 32)
+#define NETLP_BLUR_OFF     (NETLP_INVDUAL_OFF + 32)
+#define NETLP_DEV_OFF      (NETLP_BLUR_OFF + 2)
+#define NETLP_ROCKET_OFF   (NETLP_DEV_OFF + 1)
+#define NETLP_ROCKID_OFF   (NETLP_ROCKET_OFF + 1)
+#define NETLP_ROCKGEN_OFF  (NETLP_ROCKID_OFF + 2)
+#define NETLP_MOVE_OFF     (NETLP_ROCKGEN_OFF + 2)
+#define NETLP_SIZE         (NETLP_MOVE_OFF + NETMOVE_SIZE + NETLPTANK_SIZE)
 
 /**
  * The movement state in the local-player block (bytes 208..687): what the

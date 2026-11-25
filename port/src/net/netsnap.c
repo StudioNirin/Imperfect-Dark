@@ -755,32 +755,32 @@ void netLpPack(const struct netlpstate *s, u8 *out)
 	}
 
 	for (i = 0; i < NETLP_NUMAMMO; i++) {
-		put16(out + 68 + i * 2, s->ammo[i]);
+		put16(out + NETLP_AMMO_OFF + i * 2, s->ammo[i]);
 	}
 
-	memcpy(out + 136, s->inv, 32);
-	memcpy(out + 168, s->invdual, 32);
-	put16(out + 200, s->blurdrug);
-	out[202] = s->devices; // (protocol 31)
-	out[203] = s->rocket; // (protocol 33)
-	put16(out + 204, s->rocketid);
-	put16(out + 206, s->rocketgen);
-	netMovePack(&s->mv, out + 208);
+	memcpy(out + NETLP_INV_OFF, s->inv, 32);
+	memcpy(out + NETLP_INVDUAL_OFF, s->invdual, 32);
+	put16(out + NETLP_BLUR_OFF, s->blurdrug);
+	out[NETLP_DEV_OFF] = s->devices; // (protocol 31)
+	out[NETLP_ROCKET_OFF] = s->rocket; // (protocol 33)
+	put16(out + NETLP_ROCKID_OFF, s->rocketid);
+	put16(out + NETLP_ROCKGEN_OFF, s->rocketgen);
+	netMovePack(&s->mv, out + NETLP_MOVE_OFF);
 
 	// (protocol 23) the tank
-	out[208 + NETMOVE_SIZE] = s->tank.state;
-	out[208 + NETMOVE_SIZE + 1] = s->tank.penalty;
-	putF(out + 208 + NETMOVE_SIZE + 4, s->tank.entert);
-	putF(out + 208 + NETMOVE_SIZE + 8, s->tank.hullyaw);
-	putF(out + 208 + NETMOVE_SIZE + 12, s->tank.speed);
-	putF(out + 208 + NETMOVE_SIZE + 16, s->tank.turnsum);
-	putF(out + 208 + NETMOVE_SIZE + 20, s->tank.turretyaw);
+	out[NETLP_MOVE_OFF + NETMOVE_SIZE] = s->tank.state;
+	out[NETLP_MOVE_OFF + NETMOVE_SIZE + 1] = s->tank.penalty;
+	putF(out + NETLP_MOVE_OFF + NETMOVE_SIZE + 4, s->tank.entert);
+	putF(out + NETLP_MOVE_OFF + NETMOVE_SIZE + 8, s->tank.hullyaw);
+	putF(out + NETLP_MOVE_OFF + NETMOVE_SIZE + 12, s->tank.speed);
+	putF(out + NETLP_MOVE_OFF + NETMOVE_SIZE + 16, s->tank.turnsum);
+	putF(out + NETLP_MOVE_OFF + NETMOVE_SIZE + 20, s->tank.turretyaw);
 
 	// (protocol 31) the tank it rides on
-	out[208 + NETMOVE_SIZE + 24] = s->tank.ride;
-	putF(out + 208 + NETMOVE_SIZE + 28, s->tank.rel[0]);
-	putF(out + 208 + NETMOVE_SIZE + 32, s->tank.rel[1]);
-	putF(out + 208 + NETMOVE_SIZE + 36, s->tank.rel[2]);
+	out[NETLP_MOVE_OFF + NETMOVE_SIZE + 24] = s->tank.ride;
+	putF(out + NETLP_MOVE_OFF + NETMOVE_SIZE + 28, s->tank.rel[0]);
+	putF(out + NETLP_MOVE_OFF + NETMOVE_SIZE + 32, s->tank.rel[1]);
+	putF(out + NETLP_MOVE_OFF + NETMOVE_SIZE + 36, s->tank.rel[2]);
 }
 
 void netLpUnpack(const u8 *in, struct netlpstate *s)
@@ -813,29 +813,29 @@ void netLpUnpack(const u8 *in, struct netlpstate *s)
 	}
 
 	for (i = 0; i < NETLP_NUMAMMO; i++) {
-		s->ammo[i] = get16(in + 68 + i * 2);
+		s->ammo[i] = get16(in + NETLP_AMMO_OFF + i * 2);
 	}
 
-	memcpy(s->inv, in + 136, 32);
-	memcpy(s->invdual, in + 168, 32);
-	s->blurdrug = get16(in + 200);
-	s->devices = in[202];
-	s->rocket = in[203];
-	s->rocketid = get16(in + 204);
-	s->rocketgen = get16(in + 206);
-	netMoveUnpack(in + 208, &s->mv);
+	memcpy(s->inv, in + NETLP_INV_OFF, 32);
+	memcpy(s->invdual, in + NETLP_INVDUAL_OFF, 32);
+	s->blurdrug = get16(in + NETLP_BLUR_OFF);
+	s->devices = in[NETLP_DEV_OFF];
+	s->rocket = in[NETLP_ROCKET_OFF];
+	s->rocketid = get16(in + NETLP_ROCKID_OFF);
+	s->rocketgen = get16(in + NETLP_ROCKGEN_OFF);
+	netMoveUnpack(in + NETLP_MOVE_OFF, &s->mv);
 
-	s->tank.state = in[208 + NETMOVE_SIZE];
-	s->tank.penalty = in[208 + NETMOVE_SIZE + 1];
-	s->tank.entert = getF(in + 208 + NETMOVE_SIZE + 4);
-	s->tank.hullyaw = getF(in + 208 + NETMOVE_SIZE + 8);
-	s->tank.speed = getF(in + 208 + NETMOVE_SIZE + 12);
-	s->tank.turnsum = getF(in + 208 + NETMOVE_SIZE + 16);
-	s->tank.turretyaw = getF(in + 208 + NETMOVE_SIZE + 20);
-	s->tank.ride = in[208 + NETMOVE_SIZE + 24] ? 1 : 0;
-	s->tank.rel[0] = getF(in + 208 + NETMOVE_SIZE + 28);
-	s->tank.rel[1] = getF(in + 208 + NETMOVE_SIZE + 32);
-	s->tank.rel[2] = getF(in + 208 + NETMOVE_SIZE + 36);
+	s->tank.state = in[NETLP_MOVE_OFF + NETMOVE_SIZE];
+	s->tank.penalty = in[NETLP_MOVE_OFF + NETMOVE_SIZE + 1];
+	s->tank.entert = getF(in + NETLP_MOVE_OFF + NETMOVE_SIZE + 4);
+	s->tank.hullyaw = getF(in + NETLP_MOVE_OFF + NETMOVE_SIZE + 8);
+	s->tank.speed = getF(in + NETLP_MOVE_OFF + NETMOVE_SIZE + 12);
+	s->tank.turnsum = getF(in + NETLP_MOVE_OFF + NETMOVE_SIZE + 16);
+	s->tank.turretyaw = getF(in + NETLP_MOVE_OFF + NETMOVE_SIZE + 20);
+	s->tank.ride = in[NETLP_MOVE_OFF + NETMOVE_SIZE + 24] ? 1 : 0;
+	s->tank.rel[0] = getF(in + NETLP_MOVE_OFF + NETMOVE_SIZE + 28);
+	s->tank.rel[1] = getF(in + NETLP_MOVE_OFF + NETMOVE_SIZE + 32);
+	s->tank.rel[2] = getF(in + NETLP_MOVE_OFF + NETMOVE_SIZE + 36);
 }
 
 /*

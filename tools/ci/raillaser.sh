@@ -181,6 +181,23 @@ grep -qF 'ammoproplist[33]' "$ROOT/src/game/bot.c" && fail "a bot's ammo-type ar
 grep -qF 'ammotype < ARRAYCOUNT(ammoproplist)' "$ROOT/src/game/bot.c" || fail "a bot's ammo type indexes those arrays unbounded"
 grep -qF 'ammoheldarr[NUM_AMMOTYPES]' "$ROOT/src/include/types.h" || fail "a player's held-ammo array is not NUM_AMMOTYPES wide"
 
+# The same count on the wire. The local-player block carried only the ROM's 33
+# ammo types, so a client's ammoheldarr[AMMOTYPE_RAIL] was never compared with
+# the host's on the stable-stretch path (netents.c), nor carried on migration
+# (netmigrate.c): the pickup counted behind the scenes and the HUD read zero.
+# The block's fields after byte 68 all move when this grows, so their offsets
+# are named rather than written twice by hand.
+grep -qE '^#define NETLP_NUMAMMO +36' "$ROOT/port/include/net/netsnap.h" \
+	|| fail "the local-player block still carries only the ROM's 33 ammo types"
+grep -qF '_Static_assert(NETLP_NUMAMMO == NUM_AMMOTYPES' "$ROOT/port/src/net/netents.c" \
+	|| fail "nothing keeps the wire's ammo width equal to the game's"
+grep -qF '#define NETLP_INV_OFF      (NETLP_AMMO_OFF + NETLP_NUMAMMO * 2 + 2)' "$ROOT/port/include/net/netsnap.h" \
+	|| fail "the fields after the ammo array do not follow its width"
+grep -qF '#define NETLP_SIZE         (NETLP_MOVE_OFF + NETMOVE_SIZE + NETLPTANK_SIZE)' "$ROOT/port/include/net/netsnap.h" \
+	|| fail "the local-player block's length does not follow its new layout"
+grep -qF 'bool ammotypesheld[NUM_AMMOTYPES]' "$ROOT/src/game/player.c" \
+	|| fail "a respawn still zeroes the fork's reserves as types nobody holds"
+
 # The pickup message. A type with no case in ammotypeGetPickupName() and
 # ammotypeGetDeterminer() appends nothing, so the message for a Rail ammo pickup
 # read "Picked up ." - no name, no determiner, and no plural - and its pickup was

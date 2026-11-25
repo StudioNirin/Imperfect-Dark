@@ -2948,20 +2948,21 @@ in their own sections' notes.
   LEFT given, not held; `--net-test-give-host` the host's own player too,
   and every 300 ticks "slot N at tick T holds R/L"), `--net-test-cheats
   HEX` (this machine's own bank 0). netpredicttest `hands` and `cheats`.
-- **The local block's `ammoheld[]` is still the ROM's 33 (2026-11-15).**
-  `NETLP_NUMAMMO` (`netsnap.h:196`) sizes the wire array, and
-  `AMMOTYPE_RAIL` is 0x21, so the type is outside it. The loops that fill
-  and read it all cap at `NETLP_NUMAMMO` and compare with
-  `i < ARRAYCOUNT(p->ammoheldarr)`, so they simply stop short: the effect
-  is that a client's own rail reserve is never reconciled against the
-  host's on the stable-stretch path (`netents.c:2119`), and a migrating
-  host does not carry it (`netmigrate.c:757`). Silent rather than wrong -
-  nothing is compared, so nothing disagrees - and the gun itself still
-  travels as the weapon in hand. Widening it is a **protocol** change, not
-  a bug fix: `NETLP_SIZE`, every offset after byte 68, and the delta
-  codec's baseline all move, and a mismatched pair would desync rather
-  than refuse, so it wants `NET_PROTOCOL_VERSION` past 36 and the lobby
-  gates re-run. `netproto.h`'s layout comment says so at the field.
+- **The local block's `ammoheld[]` was the ROM's 33 (2026-11-15; widened
+  2026-11-25).** `NETLP_NUMAMMO` sized the wire array at 33, so the fork's
+  `AMMOTYPE_RAIL` (0x21), `BOWCASTER` (0x22) and `SHOCK` (0x23) were outside
+  it. The fill and read loops stopped at that cap, so a client's reserve
+  was never reconciled on the stable-stretch path and a migrating host did
+  not carry it: a pickup counted behind the scenes while the HUD read zero,
+  host correct throughout. It is now `NUM_AMMOTYPES` (36) with a static
+  assert beside the loops, which makes this **protocol 44**: every offset
+  after byte 68 moved by six and `NETLP_SIZE` is 742, so an older peer is
+  refused rather than desynced. The offsets are named in `netsnap.h` so
+  pack, unpack and the nettest cannot drift; `netammotest.sh` gives a
+  client a Moonrailer on a loopback host and asserts the client's log
+  names type 0x21 with the host's value. The respawn sweep's
+  `ammotypesheld[33]` was widened to `NUM_AMMOTYPES` too, so a co-op
+  respawn no longer zeroes the three new reserves as types nobody holds.
 - **Explosions online (030750)**: measured on a host with gdb on
   `chrDamage(explosion)`: the same rocket blast 100 units from the host's
   player and from a client's gives 18.0 on the first frame and 110-114 in

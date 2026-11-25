@@ -226,8 +226,8 @@ s32 snapTestLocalPlayer(void)
 				&& o.tank.hullyaw == s.tank.hullyaw && o.tank.speed == s.tank.speed && o.tank.turnsum == s.tank.turnsum
 				&& o.tank.turretyaw == s.tank.turretyaw);
 		// the aim is the last of the packed movement, then 3 bytes of 0
-		SCHECK(a[208 + NETMOVE_SIZE - 4] == (s.mv.insightaimmode ? 1 : 0));
-		SCHECK(a[208 + NETMOVE_SIZE - 3] == 0 && a[208 + NETMOVE_SIZE - 2] == 0 && a[208 + NETMOVE_SIZE - 1] == 0);
+		SCHECK(a[NETLP_MOVE_OFF + NETMOVE_SIZE - 4] == (s.mv.insightaimmode ? 1 : 0));
+		SCHECK(a[NETLP_MOVE_OFF + NETMOVE_SIZE - 3] == 0 && a[NETLP_MOVE_OFF + NETMOVE_SIZE - 2] == 0 && a[NETLP_MOVE_OFF + NETMOVE_SIZE - 1] == 0);
 	}
 
 	return fails;

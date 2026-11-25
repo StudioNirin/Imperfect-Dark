@@ -763,7 +763,7 @@ void playerStartNewLife(void)
 #endif
 	{
 		u32 stack;
-		bool ammotypesheld[33];
+		bool ammotypesheld[NUM_AMMOTYPES];
 		s32 stack2[2];
 
 		for (i = 0; i != ARRAYCOUNT(ammotypesheld); i++) {
@@ -774,7 +774,7 @@ void playerStartNewLife(void)
 			if (invHasSingleWeaponOrProp(i)) {
 				s32 ammotype = bgunGetAmmoTypeForWeapon(i, FUNC_PRIMARY);
 
-				if (ammotype >= 0 && ammotype <= AMMOTYPE_ECM_MINE) {
+				if (ammotype >= 0 && ammotype < NUM_AMMOTYPES) {
 					ammotypesheld[ammotype] = true;
 				}
 			}

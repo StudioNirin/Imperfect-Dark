@@ -28,6 +28,12 @@
 #include "modloader.h"
 #include "net/net.h"
 #include "net/netsnap.h"
+
+// The wire's reserve array must cover every type the HUD can name. At 33 it
+// stopped at the ROM's last ammo type, so the fork's Rail, Bowcaster and Shock
+// reserves were never reconciled on a client and its HUD read zero.
+_Static_assert(NETLP_NUMAMMO == NUM_AMMOTYPES,
+		"the local-player block must carry every ammo type the player can hold");
 #include "net/nettransport.h"
 #include "netint.h"
 
