@@ -40,6 +40,11 @@
 #
 # mod-base 69
 
+notes 102 2026-11-25
+DB-Shotgun: the fitted gun now ships inside the game, with no model pack to enable.
+DB-Shotgun: killing a player no longer crashes when their dropped gun falls.
+Downloads: the handbook travels with the game instead of in a separate assets file.
+
 notes 101 2026-11-25
 Online: the Moonrailer, Bowcaster and Shock Rifle reserves now display correctly for clients.
 
