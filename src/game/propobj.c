@@ -19011,6 +19011,7 @@ struct nameinfo var8006a944pf[] = {
 	{ AMMOTYPE_CROSSBOW,     L_PROPOBJ_045, L_PROPOBJ_068, { DETERMINER_A,        DETERMINER_A,     DETERMINER_A,        DETERMINER_AN,       DETERMINER_A        } },
 	{ AMMOTYPE_BOWCASTER,    L_PROPOBJ_045, L_PROPOBJ_068, { DETERMINER_A,        DETERMINER_A,     DETERMINER_A,        DETERMINER_AN,       DETERMINER_A        } }, // texts rewritten by ammotypePortNames()
 	{ AMMOTYPE_SHOCK,        L_PROPOBJ_045, L_PROPOBJ_068, { DETERMINER_A,        DETERMINER_A,     DETERMINER_A,        DETERMINER_AN,       DETERMINER_A        } }, // texts rewritten by ammotypePortNames()
+	{ AMMOTYPE_SHOCKORB,     L_PROPOBJ_045, L_PROPOBJ_068, { DETERMINER_A,        DETERMINER_A,     DETERMINER_A,        DETERMINER_AN,       DETERMINER_A        } }, // texts rewritten by ammotypePortNames()
 	{ AMMOTYPE_SHOTGUN,      L_PROPOBJ_010, L_PROPOBJ_074, { DETERMINER_A,        DETERMINER_A,     DETERMINER_AN,       DETERMINER_A,        DETERMINER_AN       } },
 	{ AMMOTYPE_FARSIGHT,     L_PROPOBJ_046, L_PROPOBJ_069, { DETERMINER_AN,       DETERMINER_A,     DETERMINER_AN,       DETERMINER_A,        DETERMINER_A        } },
 	{ AMMOTYPE_GRENADE,      L_PROPOBJ_013, L_PROPOBJ_077, { DETERMINER_A,        DETERMINER_A,     DETERMINER_AN,       DETERMINER_AN,       DETERMINER_AN       } },
@@ -19379,6 +19380,14 @@ void ammotypeGetDeterminer(char *dst, s32 ammotype, s32 qty)
 			determiner_some = true;
 		}
 		break;
+	case AMMOTYPE_SHOCKORB:
+		// "an orb", "some orbs" - the second pool, named by its own port text.
+		if (qty == 1) {
+			determiner_an = true;
+		} else {
+			determiner_some = true;
+		}
+		break;
 	case AMMOTYPE_TOKEN:
 		if (qty == 1) {
 			determiner_the = true;
@@ -19492,6 +19501,19 @@ static u16 ammotypeShockText(bool plural)
 	return *text;
 }
 
+/** The orb's own pool: an orb, not a cell, so a pickup says what it gives. */
+static u16 ammotypeShockOrbText(bool plural)
+{
+	static u16 texts[2];
+	u16 *text = &texts[plural];
+
+	if (!*text) {
+		*text = langAddPortText(plural ? "orbs" : "orb");
+	}
+
+	return *text;
+}
+
 #if VERSION < VERSION_PAL_BETA
 void ammotypeGetPickupName(char *dst, s32 ammotype2, s32 qty)
 {
@@ -19524,6 +19546,7 @@ void ammotypeGetPickupName(char *dst, s32 ammotype2, s32 qty)
 		case AMMOTYPE_CROSSBOW:     textnum = L_PROPOBJ_045; break; // "bolt"
 		case AMMOTYPE_BOWCASTER:    textnum = ammotypeBowcasterText(false); break; // "plasma bolt"
 		case AMMOTYPE_SHOCK:        textnum = ammotypeShockText(false); break; // "plasma cell"
+		case AMMOTYPE_SHOCKORB:     textnum = ammotypeShockOrbText(false); break; // "orb"
 		case AMMOTYPE_SHOTGUN:      textnum = L_PROPOBJ_011; break; // "cartridge"
 		case AMMOTYPE_FARSIGHT:     textnum = L_PROPOBJ_046; break; // "orb"
 		case AMMOTYPE_GRENADE:      textnum = L_PROPOBJ_014; break; // "grenade"
@@ -19613,6 +19636,7 @@ void ammotypePlayPickupSound(u32 ammotype)
 	case AMMOTYPE_RAIL:
 	case AMMOTYPE_BOWCASTER:
 	case AMMOTYPE_SHOCK:
+	case AMMOTYPE_SHOCKORB:
 		// The fork's own types: rounds a gun loads, so the ammunition sound
 		// rather than a mine's or a knife's. Without a case here the pickup
 		// was silent - the one pickup class with no sound at all.
@@ -19716,6 +19740,10 @@ static void ammotypePortNames(void)
 		else if (info->id == AMMOTYPE_SHOCK) {
 			info->singulartext = ammotypeShockText(false);
 			info->pluraltext = ammotypeShockText(true);
+		}
+		else if (info->id == AMMOTYPE_SHOCKORB) {
+			info->singulartext = ammotypeShockOrbText(false);
+			info->pluraltext = ammotypeShockOrbText(true);
 		}
 	}
 }
@@ -19896,6 +19924,7 @@ s32 ammocrateGetPickupAmmoQty(struct ammocrateobj *crate)
 	case AMMOTYPE_CROSSBOW : qty = 10;            break;
 	case AMMOTYPE_BOWCASTER: qty = 10;            break;
 	case AMMOTYPE_SHOCK    : qty = 10;            break;
+	case AMMOTYPE_SHOCKORB : qty = 10;            break;
 	case AMMOTYPE_RIFLE    : qty = 10;            break;
 	case AMMOTYPE_SHOTGUN  : qty = 5;             break;
 	case AMMOTYPE_MAGNUM   : qty = 5;             break;
@@ -19943,6 +19972,7 @@ s32 weaponGetPickupAmmoQty(struct weaponobj *weapon)
 		case AMMOTYPE_CROSSBOW:     qty = 5;           break;
 		case AMMOTYPE_BOWCASTER:    qty = 10;          break;
 		case AMMOTYPE_SHOCK:        qty = 10;          break;
+		case AMMOTYPE_SHOCKORB:     qty = 10;          break;
 		case AMMOTYPE_RIFLE:        qty = 20;          break;
 		case AMMOTYPE_SHOTGUN:      qty = 10;          break;
 		case AMMOTYPE_FARSIGHT:     qty = 4;           break;
@@ -19969,6 +19999,7 @@ s32 weaponGetPickupAmmoQty(struct weaponobj *weapon)
 		case AMMOTYPE_CROSSBOW:   qty = 5;           break;
 		case AMMOTYPE_BOWCASTER:  qty = 10;          break;
 		case AMMOTYPE_SHOCK:      qty = 10;          break;
+		case AMMOTYPE_SHOCKORB:   qty = 10;          break;
 		case AMMOTYPE_RIFLE:      qty = 10;          break;
 		case AMMOTYPE_SHOTGUN:    qty = 5;           break;
 		case AMMOTYPE_FARSIGHT:   qty = 4;           break;
@@ -20362,6 +20393,16 @@ s32 propPickupByPlayer(struct prop *prop, bool showhudmsg)
 							currentPlayerQueuePickupAmmoHudmsg(ammotype, pickupqty);
 						}
 					}
+				}
+			}
+
+			// The Shock Rifle has two pools, as the SuperDragon does: make a
+			// pickup of the gun hand over a magazine of orbs as well as the
+			// beam cells, or the secondary would be empty on first use.
+			if (weaponHost(weapon->weaponnum) == WEAPON_SHOCKRIFLE) {
+				if (bgunGetReservedAmmoCount(AMMOTYPE_SHOCKORB) < bgunGetCapacityByAmmotype(AMMOTYPE_SHOCKORB)) {
+					bgunSetAmmoQuantity(AMMOTYPE_SHOCKORB,
+							bgunGetReservedAmmoCount(AMMOTYPE_SHOCKORB) + 10);
 				}
 			}
 

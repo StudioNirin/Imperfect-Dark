@@ -403,17 +403,19 @@ void raillaserSelfTest(void)
 		s32 w;
 
 		for (w = 0; w < NUM_WEAPONS; w++) {
-			s32 t = botactGetAmmoTypeByFunction(w, FUNC_PRIMARY);
+			for (s32 func = 0; func < 2; func++) {
+				s32 t = botactGetAmmoTypeByFunction(w, func);
 
-			if (t > worst) {
-				worst = t;
-			}
-			if (t >= NUM_AMMOTYPES) {
-				bad = w;
+				if (t > worst) {
+					worst = t;
+				}
+				if (t >= NUM_AMMOTYPES) {
+					bad = w;
+				}
 			}
 		}
 		RAILLASER_CHECK(bad < 0, "no gun's ammunition type is past the arrays a bot indexes by it");
-		RAILLASER_CHECK(worst == AMMOTYPE_SHOCK, "the newest type appended is the highest there is, so it is the one that found the bound");
+		RAILLASER_CHECK(worst == AMMOTYPE_SHOCKORB, "the newest type appended is the highest there is, so it is the one that found the bound");
 		RAILLASER_CHECK(botactGetAmmoTypeByFunction(WEAPON_RAILLASER, FUNC_PRIMARY) == AMMOTYPE_RAIL, "a bot sees the Moonrailer as needing Rail ammunition");
 	}
 

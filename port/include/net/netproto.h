@@ -275,7 +275,10 @@
 // BOWCASTER (0x22) and SHOCK (0x23) to the client. Every field after byte 68
 // moves by six bytes and the block is 742 rather than 736 bytes, so an older
 // peer would desync rather than merely miss a value and must be refused.
-#define NET_PROTOCOL_VERSION 44
+// 45 (Shock Rifle orbs): the orb gets its own ammunition pool, so the block
+// carries 37 types and is 744 bytes; two more bytes after byte 68 move every
+// later field again. Same refusal for older peers.
+#define NET_PROTOCOL_VERSION 45
 
 #define NETMSG_CONNECT    1
 #define NETMSG_ACCEPT     2
@@ -655,7 +658,7 @@
  * mid-match sends its player as that host last had it
  *   u8      NETMSG_RESUME
  *   u32     oldmatch              the old host's id of the match
- *   u16     len                   NETLP_SIZE (742)
+ *   u16     len                   NETLP_SIZE (744)
  *   bytes   localplayer           the newest local-player block it had (the
  *                                 SNAP layout below): the new host gives that
  *                                 seat's player its next life where the block
@@ -1008,13 +1011,13 @@
  *     6-14 where the door stands (3 x 24-bit eighths, as OBJ's) and 15-16
  *     its first room: a fall-away door, Surface's vent hatch, falls)
  *   u8      haslp                 0 none, 1 keyframe, 2 against the baseline's
- *   delta   localplayer           NETLP_SIZE (742) bytes, full precision:
+ *   delta   localplayer           NETLP_SIZE (744) bytes, full precision:
  *     u8 flags (1 dead, 2 invincible), u8 respawns, u8 teleports (counters),
  *     u8 dualwielding, f32 pos[3], s16 rooms[8], f32 theta, f32 verta,
  *     f32 health, f32 shield, s16 weaponnum, s16 weaponleft (protocol 28: the
  *     left hand's gun, 0 for none; was 0), s32 loadedammo[4]
- *     (right 0, 1, left 0, 1), u16 ammoheld[36] (protocol 44: the ROM's 33
- *     plus Rail, Bowcaster and Shock), u16 0, u8 weapons[32]
+ *     (right 0, 1, left 0, 1), u16 ammoheld[37] (protocol 45: the ROM's 33
+ *     plus Rail, Bowcaster, Shock and the Shock Rifle's orb pool), u16 0, u8 weapons[32]
  *     (a bit per weapon number), u8 dualweapons[32], u16 blurdrug (protocol
  *     20: the chr's blurdrugamount, a tranquilizer's drugged screen), u8
  *     devices (protocol 31: NETLPDEV_CLOAKRCP120 1, NETLPDEV_CLOAKDEVICE 2,

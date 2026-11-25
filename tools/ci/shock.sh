@@ -84,8 +84,8 @@ grep -q "shock test: all .* checks as expected" "$LOG" || {
 # forty-two of them skipped some on the way, the way every other gate counts
 # verdicts rather than trusting one line.
 COUNT=$(grep -oE "shock test: all [0-9]+ checks" "$LOG" | grep -oE "[0-9]+")
-if [ "${COUNT:-0}" -lt 42 ]; then
-	echo "shock: $COUNT checks ran, expected at least 42"
+if [ "${COUNT:-0}" -lt 46 ]; then
+	echo "shock: $COUNT checks ran, expected at least 46"
 	exit 1
 fi
 
@@ -121,9 +121,9 @@ grep -A4 "case WEAPON_SHOCKRIFLE:" "$ROOT/src/game/playermgr.c" | grep -q "MODEL
 grep -qF 'weaponCreateProjectileFromWeaponNum(funcdef->projectilemodelnum, WEAPON_SHOCKORB' "$ROOT/src/game/bondgun.c" \
 	|| fail "the orb is created with the rifle's number, so it wears the beam's flags and nothing downstream can identify it"
 
-# And a spent orb has to be deleted rather than landed. Landed is not merely litter
-# here: a landed weapon prop is a pickup, and the orb's row is a full weapon with a
-# firing function, so the floor would hand the player another orb to hold.
+# And a spent orb has to be deleted rather than landed: it is a projectile
+# identity with no firing function now, but a landed weapon prop is still a
+# pickup the floor would hand out.
 grep -qF 'weapon->weaponnum == WEAPON_BOWCASTERBOLT || weapon->weaponnum == WEAPON_SHOCKORB' "$ROOT/src/game/propobj.c" \
 	|| fail "a spent orb lands instead of fizzling, which makes it a pickup the floor hands out"
 
@@ -154,6 +154,29 @@ if [ "$between" -lt 3 ]; then
 	fail "the Shock Rifle's ammunition hand-out is missing from $((3 - between)) of its 3 quantity tables"
 fi
 
+# The orb pool is a separate ammunition type with the same full set of words:
+# without any one of these a pickup says nothing, or says "cell" for an orb.
+awk '/^void ammotypeGetDeterminer/,/^}/' "$ROOT/src/game/propobj.c" | grep -q "case AMMOTYPE_SHOCKORB:" \
+	|| fail "ammotypeGetDeterminer has no case for the orb pool"
+awk '/^void ammotypeGetPickupName/,/^}/' "$ROOT/src/game/propobj.c" | grep -q "case AMMOTYPE_SHOCKORB:" \
+	|| fail "ammotypeGetPickupName has no case for the orb pool"
+awk '/^void ammotypePlayPickupSound/,/^}/' "$ROOT/src/game/propobj.c" | grep -q "case AMMOTYPE_SHOCKORB:" \
+	|| fail "the orb pool picks up in silence"
+grep -q "^	{ AMMOTYPE_SHOCKORB," "$ROOT/src/game/propobj.c" \
+	|| fail "the PAL and JPN ammo name table has no row for the orb pool"
+awk '/^static void ammotypePortNames/,/^}/' "$ROOT/src/game/propobj.c" | grep -qw "AMMOTYPE_SHOCKORB" \
+	|| fail "ammotypePortNames never rewrites the orb pool's row"
+between=$(grep -Ec "case AMMOTYPE_SHOCKORB *: *qty = " "$ROOT/src/game/propobj.c")
+if [ "$between" -lt 3 ]; then
+	fail "the orb pool's hand-out is missing from $((3 - between)) of its 3 quantity tables"
+fi
+grep -qF '(weaponnum) != WEAPON_SHOCKORB && (weaponnum) != WEAPON_BOWCASTERBOLT' "$ROOT/src/include/constants.h" \
+	|| fail "a projectile number can still be cycled to as a weapon"
+grep -qF 'weaponnum == WEAPON_SHOCKORB || weaponnum == WEAPON_BOWCASTERBOLT' "$ROOT/src/game/inv.c" \
+	|| fail "an orb or bolt can still become an inventory item"
+grep -qF '!WEAPON_IS_FORK(weapon1)' "$ROOT/src/game/inv.c" \
+	|| fail "a second fork gun can still become an Akimbo pair"
+
 # The orb's row: the bits it must not carry. Neither is visible as a wrong number in
 # a test - with STICKSTOWALL it sticks instead of bouncing, and with the explosive-
 # when-shot flag any bullet in the arena pops every orb, which is the design's own
@@ -169,7 +192,7 @@ awk '/^struct weapon invitem_shockorb = {/,/^};/' "$ROOT/src/game/invitems.c" | 
 
 # The counts that make the new numbers legal. Each is derived from the newest id,
 # not written as a literal, which is what lets the next gun append without a sweep.
-grep -q "#define NUM_AMMOTYPES         (AMMOTYPE_SHOCK + 1)" "$ROOT/src/include/constants.h" \
+grep -q "#define NUM_AMMOTYPES         (AMMOTYPE_SHOCKORB + 1)" "$ROOT/src/include/constants.h" \
 	|| fail "NUM_AMMOTYPES is not derived from the newest ammunition type"
 grep -q "#define NUM_MPWEAPONS             (MPWEAPON_GESHOTGUN + 1)" "$ROOT/src/include/constants.h" \
 	|| fail "NUM_MPWEAPONS is not derived from the newest Combat Simulator row"
@@ -218,12 +241,14 @@ echo "$ROW" | sed 's://.*::' | grep -qE '^[[:space:]]*20,' \
 echo "$ROW" | sed 's://.*::' | grep -qF '8, 16, 0, -1,' \
 	|| fail "the beam's shot gap is not 8 + 16 + 20 = 44, with the tap shortcut off"
 
-# Five cells for an orb, one for everything else, and read in all three places
-# that spend ammunition: the player's readiness and deduction, and a simulant's
-# firing loop. One missing call is a bot firing orbs four cells cheaper than a
-# person, or a player firing one with a clip that cannot pay for it.
-grep -qF 'weaponnum == WEAPON_SHOCKRIFLE && funcnum == FUNC_SECONDARY ? 5 : 1;' "$ROOT/port/src/shock.c" \
-	|| fail "the orb's five-cell price is not the one rule"
+# One round per shot from either pool, as with any other two-mode gun, and
+# read in all three places that spend ammunition: the player's readiness and
+# deduction, and a simulant's firing loop. The old five-cell price was only a
+# workaround for both modes sharing one reserve.
+grep -qF 'return 1;' "$ROOT/port/src/shock.c" \
+	|| fail "the orb's one-round price is not the one rule"
+! grep -qF 'FUNC_SECONDARY ? 5' "$ROOT/port/src/shock.c" \
+	|| fail "the old five-cell workaround is still in the ammo cost"
 [ "$(grep -cF 'shockAmmoCostForFunc(hand->gset.weaponnum, hand->gset.weaponfunc)' "$ROOT/src/game/bondgun.c")" -ge 2 ] \
 	|| fail "bondgun.c does not charge five cells on both the ready check and the shot"
 grep -qF 'shockAmmoCostForFunc(gset.weaponnum, gset.weaponfunc)' "$ROOT/src/game/chraction.c" \

@@ -681,14 +681,24 @@ both a tap and a held trigger repeat after 44 ticks (0.73s). The wait is
 shot comes from `bgun0f09a3f8()`, where `unk27 >= 0` used to let a fresh press
 jump the queue; with it negative there is no quick re-press.
 
-The orb costs five cells a shot (`shockAmmoCostForFunc()`, shock.c). That is a
-separate figure from `hand->shotstotake`, which is the **number of projectiles**
-as well as the old ammo figure: setting it to five would lob five orbs. The
-cost is read in four places, the player's ready check and deduction (bondgun.c)
-and a simulant's gate and deduction (bot.c, chraction.c), so a bot does not pay
-four cells less than a person. The ready check refuses a shot that cannot pay
-for a whole orb, which is why the deduction branch for a cost above one never
-has to go negative. Ten orbs to a clip, twenty to the full reserve.
+The orb now has its own ammunition pool, the way the SuperDragon's grenades
+do (`AMMOTYPE_SHOCKORB`, 0x24, twenty carried and ten per magazine). The beam
+still spends `AMMOTYPE_SHOCK` cells; `invfunc_shockrifle_ball` carries
+`ammoindex 1` and `invitem_shockrifle` carries a second `inventory_ammo`
+pointer, so `bgunDrawHud()` switches to the orb count with the function square.
+One orb costs one round of that pool (`shockAmmoCostForFunc()`, shock.c), and
+the helper is still read at the player's ready check and deduction and a
+simulant's gate and deduction. The old five-cell price was a workaround for
+both modes sharing one reserve. The new type widens the local-player wire
+block to 37 entries and is protocol 45.
+
+`WEAPON_SHOCKORB` (0x8b) is a projectile identity, not a second gun: its row
+has no functions, no ammo and no display name, it is excluded from
+`INV_CYCLEABLE` and the weapon wheel, and `invGiveSingleWeapon()` refuses it.
+The Bowcaster bolt (0x89) is treated the same way. Both numbers stay reserved
+so saved data and the DB-Shotgun's numbering do not move. `invGiveDoubleWeapon()`
+also refuses fork numbers, so Akimbo's global DUALWIELD override cannot turn a
+second rifle into a pair that the wheel and the hands disagree about.
 
 The orb's own `scale` is 1.2 and `objTestHit()` hit-tests that scaled box, so it
 is the knob for how easy a beam is to land on it; the detonation that makes a
@@ -700,9 +710,10 @@ banks are not loaded at `--test-*` time, so `ammotypeGetDeterminer()` and
 `ammotypeGetPickupName()` with a stock string (including the plural "s" the
 function appends) segfault there: only port-bank text at quantity 1 is safe to ask
 for, and the rest is gated at the source instead. And
-`bgunGetAmmoTypeForWeapon(weaponnum, FUNC_SECONDARY)` answers 0 for any gun whose
-two modes share one reserve - the engine indexes `ammos[func]` rather than the
-function's `ammoindex` - which the AR34 does and so does the Shock Rifle.
+`bgunGetAmmoTypeForWeapon(weaponnum, FUNC_SECONDARY)` still answers 0 for a gun
+whose two modes share one reserve, since the engine indexes `ammos[func]` rather
+than the function's `ammoindex` - which the AR34 does. The Shock Rifle no longer
+does: its second `ammos` row means the question answers `AMMOTYPE_SHOCKORB`.
 
 ## The DB-Shotgun, and its model pack (2026-11-22)
 

@@ -15347,6 +15347,7 @@ struct ammotype g_AmmoTypes[] = {
 	{ 5,            0, 0  }, // AMMOTYPE_RAIL: the Rail-Laser's five charged shots (invitems.c)
 	{ 100,          0, 0  }, // AMMOTYPE_BOWCASTER: a hundred spare bolts (invitems.c)
 	{ 100,          0, 0  }, // AMMOTYPE_SHOCK: a hundred spare cells (invitems.c)
+	{ 20,           0, 0  }, // AMMOTYPE_SHOCKORB: the Shock Rifle's own orb pool (invitems.c)
 };
 
 _Static_assert(ARRAYCOUNT(g_AmmoTypes) == NUM_AMMOTYPES,

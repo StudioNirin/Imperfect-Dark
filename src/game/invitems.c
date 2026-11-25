@@ -4608,8 +4608,10 @@ struct weapon invitem_bowcasterbolt = {
 	NULL,
 	NULL,
 	NULL,
-	{ &invfunc_bowcaster_shoot, NULL }, // functions
-	&invammo_default, // pri ammo
+	// A projectile identity, as the Shock Rifle's orb row: the bolt needs a
+	// weapon row for its flight flags, not a gun a player can hold.
+	{ NULL, NULL }, // functions
+	NULL, // pri ammo
 	NULL,
 	&invaimsettings_default,
 	1, // muzzlez
@@ -4626,7 +4628,7 @@ struct weapon invitem_bowcasterbolt = {
 	0, // flags
 	// Deliberately no STICKSTOWALL or BLADEHIT: this bolt never embeds and is
 	// never picked up as ammo. Its own weaponTick branch frees it instead.
-	WEAPONFLAG2_PICKUPSINGLE | WEAPONFLAG2_NOPICKUPINFLIGHT, // flags2
+	WEAPONFLAG2_NOPICKUPINFLIGHT, // flags2: a spent bolt is never a pickup
 };
 
 /**
@@ -4650,8 +4652,7 @@ void bowcasterInitNames(void)
 		name = langAddPortText("Bowcaster\n");
 		g_Weapons[WEAPON_BOWCASTER]->name = name;
 		g_Weapons[WEAPON_BOWCASTER]->shortname = name;
-		g_Weapons[WEAPON_BOWCASTERBOLT]->name = name;
-		g_Weapons[WEAPON_BOWCASTERBOLT]->shortname = name;
+		// The bolt is a projectile identity, not a second Bowcaster.
 
 		// The two firing modes, shown as the mode label when the alt button
 		// switches between them.
@@ -4714,6 +4715,18 @@ struct inventory_ammo invammo_shockrifle = {
 	0, // flags
 };
 
+// The orb is its own magazine, the way the SuperDragon's grenades are: the
+// beam spends cells from the 100-cell reserve and the orb spends one of these
+// twenty per shot. Both are still loaded by the AR34 animation the borrowed
+// body uses.
+struct inventory_ammo invammo_shockorb = {
+	AMMOTYPE_SHOCKORB,
+	CASING_NONE,
+	10, // clip size: ten orbs per magazine
+	invanim_ar34_reload,
+	0, // flags
+};
+
 struct weaponfunc_shootsingle invfunc_shockrifle_beam = {
 	INVENTORYFUNCTYPE_SHOOT_SINGLE,
 	L_GUN_016, // name: the AR34's, until shockInitNames() installs "Beam"
@@ -4747,7 +4760,7 @@ struct weaponfunc_shootprojectile invfunc_shockrifle_ball = {
 	INVENTORYFUNCTYPE_SHOOT_PROJECTILE,
 	L_GUN_016, // name: replaced by "Orb" in shockInitNames()
 	0, // unused
-	0, // ammoindex: invammo_shockrifle
+	1, // ammoindex: invammo_shockorb, the second pool on the rifle
 	&invnoisesettings_silenced,
 	NULL, // fire animation: as the primary's
 	// POWERED so the orb flies flat instead of arcing to the floor within a
@@ -4790,8 +4803,8 @@ struct weapon invitem_shockrifle = {
 	NULL, // pritosec
 	NULL, // sectopri
 	{ &invfunc_shockrifle_beam, &invfunc_shockrifle_ball }, // functions
-	&invammo_shockrifle, // pri ammo
-	NULL, // sec ammo
+	&invammo_shockrifle, // pri ammo: the beam's cells
+	&invammo_shockorb, // sec ammo: the orbs, as the SuperDragon's grenades
 	&invaimsettings_shockrifle,
 	1, // muzzlez
 	11.5, // posx: the AR34's pose, which is what the model above is posed for
@@ -4825,8 +4838,12 @@ struct weapon invitem_shockorb = {
 	NULL,
 	NULL,
 	NULL,
-	{ &invfunc_shockrifle_ball, NULL }, // functions
-	&invammo_default, // pri ammo
+	// A projectile identity, not a second gun: the engine needs a weapon row
+	// to carry the orb's flight flags and to index bot/net tables, but there
+	// is nothing here for a player to equip or fire. The rifle's secondary
+	// is the only way to make one.
+	{ NULL, NULL }, // functions
+	NULL, // pri ammo
 	NULL,
 	&invaimsettings_default,
 	1, // muzzlez
@@ -4846,7 +4863,7 @@ struct weapon invitem_shockorb = {
 	// WEAPONFLAG2_EXPLODESWHENSHOT, which the Rocket Launcher's rounds carry -
 	// that flag is "any bullet sets me off", and only this gun's beam is meant
 	// to. Its own weaponTick branch frees it when it times out.
-	WEAPONFLAG2_PICKUPSINGLE | WEAPONFLAG2_NOPICKUPINFLIGHT, // flags2
+	WEAPONFLAG2_NOPICKUPINFLIGHT, // flags2: a spent orb is never a pickup
 };
 
 /**
@@ -4869,8 +4886,9 @@ void shockInitNames(void)
 		name = langAddPortText("Shock Rifle\n");
 		g_Weapons[WEAPON_SHOCKRIFLE]->name = name;
 		g_Weapons[WEAPON_SHOCKRIFLE]->shortname = name;
-		g_Weapons[WEAPON_SHOCKORB]->name = name;
-		g_Weapons[WEAPON_SHOCKORB]->shortname = name;
+		// The orb row is a projectile identity, not a second Shock Rifle:
+		// giving it this name made a stray orb look like a second gun with
+		// no primary fire mode.
 
 		invfunc_shockrifle_beam.base.base.name = langAddPortText("Beam\n");
 		invfunc_shockrifle_ball.base.base.name = langAddPortText("Orb\n");

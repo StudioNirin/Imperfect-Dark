@@ -199,7 +199,7 @@ f32 netPosWire(f32 v);      // a place's coordinate as it comes off the wire (ei
 // ROM's 33: AMMOTYPE_RAIL, BOWCASTER and SHOCK are appended past 0x20 and a
 // 33-wide wire field left a client's HUD reading zero for all three. The game
 // half of the port asserts NETLP_NUMAMMO == NUM_AMMOTYPES.
-#define NETLP_NUMAMMO      36
+#define NETLP_NUMAMMO      37
 #define NETLP_AMMO_OFF     68
 // The spare u16 that followed the old 66-byte array is kept, so the fields
 // after it stay on the alignment they had before the array grew.

@@ -792,7 +792,8 @@ void amAssignWeaponSlots(void)
 		// the `host != self` half that lets every GoldenEye gun into a slot admits
 		// nothing here (WEAPON_IS_FORK, data.h).
 		if ((weaponnum >= WEAPON_UNARMED && weaponnum <= WEAPON_DISGUISE41 || weaponHost(weaponnum) != weaponnum)
-				|| WEAPON_IS_FORK(weaponnum)
+				|| (WEAPON_IS_FORK(weaponnum)
+						&& weaponnum != WEAPON_SHOCKORB && weaponnum != WEAPON_BOWCASTERBOLT)
 				|| weaponHost(weaponnum) == WEAPON_SUICIDEPILL
 				|| weaponHost(weaponnum) == WEAPON_BACKUPDISK
 				|| weaponHost(weaponnum) == WEAPON_SUITCASE) {
@@ -824,7 +825,8 @@ void amAssignWeaponSlots(void)
 			weaponnum = invGetWeaponNumByIndex(i);
 
 			if ((weaponnum >= WEAPON_UNARMED && weaponnum <= WEAPON_DISGUISE41 || weaponHost(weaponnum) != weaponnum)
-					|| WEAPON_IS_FORK(weaponnum)
+					|| (WEAPON_IS_FORK(weaponnum)
+							&& weaponnum != WEAPON_SHOCKORB && weaponnum != WEAPON_BOWCASTERBOLT)
 					|| weaponHost(weaponnum) == WEAPON_SUICIDEPILL
 					|| weaponHost(weaponnum) == WEAPON_SUITCASE) {
 				s32 useindex = -1;

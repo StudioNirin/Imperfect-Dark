@@ -408,7 +408,7 @@ struct mpweapon g_MpWeapons[NUM_MPWEAPONS] = {
 	// body it borrows (playermgrGetModelOfWeapon), until it has one of its own.
 	// Fifty cells in the magazine, so the hand-out is one magazine and
 	// bgunGetSpawnAmmoQuantity() tops it up to the cap.
-	/*0x53*/ { WEAPON_SHOCKRIFLE,        AMMOTYPE_SHOCK,       50,  0, 0, 1, 0,                   MODEL_CHRAR34,          256 },
+	/*0x53*/ { WEAPON_SHOCKRIFLE,        AMMOTYPE_SHOCK,       50,  AMMOTYPE_SHOCKORB, 10, 1, 0,                   MODEL_CHRAR34,          256 },
 	// The DB-Shotgun (invitems.c). Appended like the three above, with no
 	// unlock feature. It fires the existing shotgun ammunition and wears the
 	// alias model state, which falls back to FILE_GSHOTGUN until the pack's

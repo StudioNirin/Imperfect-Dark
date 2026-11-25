@@ -187,7 +187,7 @@ grep -qF 'ammoheldarr[NUM_AMMOTYPES]' "$ROOT/src/include/types.h" || fail "a pla
 # (netmigrate.c): the pickup counted behind the scenes and the HUD read zero.
 # The block's fields after byte 68 all move when this grows, so their offsets
 # are named rather than written twice by hand.
-grep -qE '^#define NETLP_NUMAMMO +36' "$ROOT/port/include/net/netsnap.h" \
+grep -qE '^#define NETLP_NUMAMMO +37' "$ROOT/port/include/net/netsnap.h" \
 	|| fail "the local-player block still carries only the ROM's 33 ammo types"
 grep -qF '_Static_assert(NETLP_NUMAMMO == NUM_AMMOTYPES' "$ROOT/port/src/net/netents.c" \
 	|| fail "nothing keeps the wire's ammo width equal to the game's"

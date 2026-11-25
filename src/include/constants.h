@@ -202,7 +202,7 @@ s32 langpackIsCjk(void);
 // used in three files, and a header that has GoldenEye's numbers to name does not
 // necessarily have the weaponHost() side of the seam - see that macro's comment for
 // why the bound is what it is.
-#define INV_CYCLEABLE(weaponnum) ((weaponnum) < NUM_CYCLEABLE_WEAPONS || ((weaponnum) >= WEAPON_GE_FIRST && (weaponnum) < WEAPON_GE_FIRST + NUM_GE_GUNS) || (weaponnum) == WEAPON_GE_DETONATOR || (weaponnum) == WEAPON_GE_TANKSHELLS || ((weaponnum) >= WEAPON_GE_EXTRA1 && (weaponnum) <= WEAPON_GE_TASER) || ((weaponnum) > WEAPON_GE_TASER && (weaponnum) < NUM_WEAPONS))
+#define INV_CYCLEABLE(weaponnum) ((weaponnum) < NUM_CYCLEABLE_WEAPONS || ((weaponnum) >= WEAPON_GE_FIRST && (weaponnum) < WEAPON_GE_FIRST + NUM_GE_GUNS) || (weaponnum) == WEAPON_GE_DETONATOR || (weaponnum) == WEAPON_GE_TANKSHELLS || ((weaponnum) >= WEAPON_GE_EXTRA1 && (weaponnum) <= WEAPON_GE_TASER) || (((weaponnum) > WEAPON_GE_TASER && (weaponnum) < NUM_WEAPONS) && (weaponnum) != WEAPON_SHOCKORB && (weaponnum) != WEAPON_BOWCASTERBOLT))
 #else
 #define INV_CYCLEABLE(weaponnum) ((weaponnum) < NUM_CYCLEABLE_WEAPONS)
 #endif
@@ -398,10 +398,14 @@ s32 langpackIsCjk(void);
 #define AMMOTYPE_RAIL         0x21
 #define AMMOTYPE_BOWCASTER    0x22
 #define AMMOTYPE_SHOCK        0x23
+// The Shock Rifle's orb has its own pool, the way the SuperDragon's grenades
+// do: the beam and the orb are two modes with two magazines, not one reserve
+// split by an artificial five-cell price.
+#define AMMOTYPE_SHOCKORB     0x24
 // Every ammo type the game can hold: g_AmmoTypes (bondgun.c), the player's
 // ammoheldarr (types.h) and the randomizer's carry-over copy (modrun.c) all
 // have to be this wide, and the _Static_assert by g_AmmoTypes says so
-#define NUM_AMMOTYPES         (AMMOTYPE_SHOCK + 1)
+#define NUM_AMMOTYPES         (AMMOTYPE_SHOCKORB + 1)
 
 // GoldenEye's golden bullets (its AMMO_GGUN), which only its Golden Gun
 // fires, in the port. The dart row is GoldenEye's leftover AMMO_DARTS, which

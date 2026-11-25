@@ -662,6 +662,13 @@ bool g_InvIntroGive = false;
 
 bool invGiveSingleWeapon(s32 weaponnum)
 {
+	// Projectile identities are not guns. A landed orb or bolt must never
+	// become an inventory item; its row exists only to carry flight flags and
+	// to index the bot and net tables.
+	if (weaponnum == WEAPON_SHOCKORB || weaponnum == WEAPON_BOWCASTERBOLT) {
+		return false;
+	}
+
 	frSetWeaponFound(weaponnum);
 
 	if (invHasSingleWeaponExcAllGuns(weaponnum) == 0) {
@@ -727,12 +734,20 @@ static bool invGiveDoubleWeaponLinked(s32 weapon1, s32 weapon2)
 
 static bool invGiveDoubleWeaponFlags(s32 weapon1, s32 weapon2, bool anyflags)
 {
-	if (invHasDoubleWeaponExcAllGuns(weapon1, weapon2) == 0) {
+	// Fork guns are single weapons with two firing modes, like any other
+	// Perfect Dark gun. Akimbo's global DUALWIELD override must not turn a
+	// second copy into a pair, or the wheel and the hands disagree about what
+	// is equipped.
+	if (invHasDoubleWeaponExcAllGuns(weapon1, weapon2) == 0 && !WEAPON_IS_FORK(weapon1)) {
 		if (anyflags || weaponHasFlag(weapon1, WEAPONFLAG_DUALWIELD)) {
 #else
 bool invGiveDoubleWeapon(s32 weapon1, s32 weapon2)
 {
-	if (invHasDoubleWeaponExcAllGuns(weapon1, weapon2) == 0) {
+	// Fork guns are single weapons with two firing modes, like any other
+	// Perfect Dark gun. Akimbo's global DUALWIELD override must not turn a
+	// second copy into a pair, or the wheel and the hands disagree about what
+	// is equipped.
+	if (invHasDoubleWeaponExcAllGuns(weapon1, weapon2) == 0 && !WEAPON_IS_FORK(weapon1)) {
 		if (weaponHasFlag(weapon1, WEAPONFLAG_DUALWIELD)) {
 #endif
 			struct invitem *item = invFindUnusedSlot();

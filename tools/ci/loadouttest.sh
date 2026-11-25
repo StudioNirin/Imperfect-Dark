@@ -44,7 +44,7 @@ grep -qF '"Loadout"' "$P/src/optionsmenu.c" || fail 'the Mods: Player dropdown h
 # The two chosen rows must reach clients before stage load.
 grep -qF '{ "Mod.LoadoutWeapon1",          NETKEY_SYNC }' "$P/src/net/netrules.c" || fail 'gun one is not a SYNC rule'
 grep -qF '{ "Mod.LoadoutWeapon2",          NETKEY_SYNC }' "$P/src/net/netrules.c" || fail 'gun two is not a SYNC rule'
-grep -qF '#define NET_PROTOCOL_VERSION 44' "$P/include/net/netproto.h" || fail 'the protocol was not bumped for the widened local-player ammo block'
+grep -qF '#define NET_PROTOCOL_VERSION 45' "$P/include/net/netproto.h" || fail 'the protocol was not bumped for the Shock Rifle orb pool'
 
 # Both humans (player.c) and sims (bot.c) get the two guns, in ordinary modes
 # and for Zombies survivors; infected keep fists.

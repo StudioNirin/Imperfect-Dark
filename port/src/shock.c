@@ -62,11 +62,13 @@
 
 s32 shockAmmoCostForFunc(s32 weaponnum, s32 funcnum)
 {
-	// The engine's ammo deduction is per shot (hand->shotstotake), which also
-	// controls how many projectiles are made, so charging five cells here is a
-	// separate figure from the number of shots. Firing an orb still makes one
-	// orb; it just costs five of the hundred cells instead of one.
-	return weaponnum == WEAPON_SHOCKRIFLE && funcnum == FUNC_SECONDARY ? 5 : 1;
+	// The orb has its own pool now, the way the SuperDragon's grenades do, so
+	// one orb costs one round in that pool. The beam still spends one cell of
+	// AMMOTYPE_SHOCK. Keeping the helper at every call site means simulants
+	// pay the same price as the player.
+	(void) weaponnum;
+	(void) funcnum;
+	return 1;
 }
 
 void shockSelfTest(void)
@@ -93,6 +95,17 @@ void shockSelfTest(void)
 		return;
 	}
 
+	// The orb number is the projectile's identity, not another Shock Rifle to
+	// pick up. It has no firing function, no ammo and no display name of its
+	// own, and it cannot be cycled to in the weapon wheel.
+	SHOCK_CHECK(orb->functions[FUNC_PRIMARY] == NULL && orb->functions[FUNC_SECONDARY] == NULL
+			&& orb->ammos[0] == NULL,
+			"the orb row carries no gun a player could hold");
+	SHOCK_CHECK(!INV_CYCLEABLE(WEAPON_SHOCKORB),
+			"the orb cannot be cycled to as a second weapon");
+	SHOCK_CHECK(g_Weapons[WEAPON_SHOCKRIFLE]->name != g_Weapons[WEAPON_SHOCKORB]->name,
+			"a stray orb can never be mistaken for another Shock Rifle");
+
 	beam = (const struct weaponfunc_shootsingle *) gun->functions[FUNC_PRIMARY];
 	ball = (const struct weaponfunc_shootprojectile *) gun->functions[FUNC_SECONDARY];
 	bowcasterbolt = (const struct weaponfunc_shootprojectile *)
@@ -113,30 +126,30 @@ void shockSelfTest(void)
 	// player's ammunition and by a simulant's, so a wrong answer is either a gun
 	// that spends its whole reserve in ten shots or two people paying different
 	// prices for the same orb.
-	SHOCK_CHECK(shockAmmoCostForFunc(WEAPON_SHOCKRIFLE, FUNC_SECONDARY) == 5,
-			"an orb spends five cells");
+	SHOCK_CHECK(shockAmmoCostForFunc(WEAPON_SHOCKRIFLE, FUNC_SECONDARY) == 1,
+			"an orb spends one round of its own pool");
 	SHOCK_CHECK(shockAmmoCostForFunc(WEAPON_SHOCKRIFLE, FUNC_PRIMARY) == 1,
-			"while a beam still spends one");
+			"and a beam still spends one cell");
 	SHOCK_CHECK(shockAmmoCostForFunc(WEAPON_CROSSBOW, FUNC_PRIMARY) == 1,
 			"and no other gun's price has moved");
 
-	// One reserve for both modes (ammoindex 0 on both, one ammos row), so a
-	// crate beside the gun fills the mode the player is not holding as well.
-	SHOCK_CHECK(beam->base.base.ammoindex == 0 && ball->base.base.ammoindex == 0
-			&& gun->ammos[0] != NULL && gun->ammos[1] == NULL
-			&& gun->ammos[0]->type == AMMOTYPE_SHOCK,
-			"both modes draw from the gun's own single ammunition reserve");
+	// Two pools on one weapon, as the SuperDragon has: the beam's cells in
+	// ammoindex 0 and the orbs in ammoindex 1. The HUD follows the function's
+	// ammoindex, so switching to Orb now shows the other count.
+	SHOCK_CHECK(beam->base.base.ammoindex == 0 && ball->base.base.ammoindex == 1
+			&& gun->ammos[0] != NULL && gun->ammos[1] != NULL
+			&& gun->ammos[0]->type == AMMOTYPE_SHOCK
+			&& gun->ammos[1]->type == AMMOTYPE_SHOCKORB,
+			"the beam and the orb draw from two pools on one gun");
 	SHOCK_CHECK(bgunGetAmmoTypeForWeapon(WEAPON_SHOCKRIFLE, FUNC_PRIMARY) == AMMOTYPE_SHOCK,
-			"and the game finds that type from the gun");
-	// bgunGetAmmoTypeForWeapon indexes the ammo slots rather than the function's
-	// ammoindex, so a gun whose secondary shares the primary's reserve answers 0
-	// for the secondary - which the AR34's row does as well. Pinned beside the
-	// AR34 so that answer reads as the engine's convention and not a hole here.
-	SHOCK_CHECK(bgunGetAmmoTypeForWeapon(WEAPON_SHOCKRIFLE, FUNC_SECONDARY) == 0
-			&& bgunGetAmmoTypeForWeapon(WEAPON_AR34, FUNC_SECONDARY) == 0,
-			"and its secondary claims no reserve of its own, exactly as the AR34's does");
+			"and the game finds the beam's type from the gun");
+	SHOCK_CHECK(bgunGetAmmoTypeForWeapon(WEAPON_SHOCKRIFLE, FUNC_SECONDARY) == AMMOTYPE_SHOCKORB,
+			"the secondary now names its own reserve, as the SuperDragon's does");
 	SHOCK_CHECK(bgunGetCapacityByAmmotype(AMMOTYPE_SHOCK) == 100, "a hundred cells carried");
 	SHOCK_CHECK(gun->ammos[0]->clipsize == 50, "and fifty in the magazine");
+	SHOCK_CHECK(bgunGetCapacityByAmmotype(AMMOTYPE_SHOCKORB) == 20
+			&& gun->ammos[1]->clipsize == 10,
+			"twenty orbs carried, ten to the magazine");
 
 	// The number, and the tables keyed by it. WEAPON_IS_FORK is deliberately
 	// anchored on the end of the enum rather than on the first fork gun, so the
@@ -204,8 +217,10 @@ void shockSelfTest(void)
 			&& g_MpWeapons[MPWEAPON_SHOCKRIFLE].model == playermgrGetModelOfWeapon(WEAPON_SHOCKRIFLE),
 			"the Combat Simulator's row is the gun, and its floor model is the model a body holds");
 	SHOCK_CHECK(g_MpWeapons[MPWEAPON_SHOCKRIFLE].priammotype == AMMOTYPE_SHOCK
-			&& g_MpWeapons[MPWEAPON_SHOCKRIFLE].priammoqty == 50,
-			"its spot stocks its own ammunition, one magazine to a crate");
+			&& g_MpWeapons[MPWEAPON_SHOCKRIFLE].priammoqty == 50
+			&& g_MpWeapons[MPWEAPON_SHOCKRIFLE].secammotype == AMMOTYPE_SHOCKORB
+			&& g_MpWeapons[MPWEAPON_SHOCKRIFLE].secammoqty == 10,
+			"its spot stocks both pools, one magazine of each");
 	SHOCK_CHECK(g_MpWeapons[MPWEAPON_SHOCKRIFLE].hasweapon
 			&& challengeIsFeatureUnlocked(g_MpWeapons[MPWEAPON_SHOCKRIFLE].unlockfeature)
 			&& mpCanSpawnWithWeapon(&g_MpWeapons[MPWEAPON_SHOCKRIFLE]),
@@ -223,8 +238,10 @@ void shockSelfTest(void)
 	SHOCK_CHECK(gun->flags & WEAPONFLAG_AICANUSE,
 			"a simulant is handed it, as with both other fork guns");
 	SHOCK_CHECK(botactGetAmmoTypeByFunction(WEAPON_SHOCKRIFLE, FUNC_PRIMARY) == AMMOTYPE_SHOCK
-			&& botactGetAmmoTypeByFunction(WEAPON_SHOCKRIFLE, FUNC_PRIMARY) < NUM_AMMOTYPES,
-			"and its ammunition type fits the arrays a bot indexes by type");
+			&& botactGetAmmoTypeByFunction(WEAPON_SHOCKRIFLE, FUNC_PRIMARY) < NUM_AMMOTYPES
+			&& botactGetAmmoTypeByFunction(WEAPON_SHOCKRIFLE, FUNC_SECONDARY) == AMMOTYPE_SHOCKORB
+			&& botactGetAmmoTypeByFunction(WEAPON_SHOCKRIFLE, FUNC_SECONDARY) < NUM_AMMOTYPES,
+			"and both ammunition types fit the arrays a bot indexes by type");
 	// The other half of the same class, and the one the ROM's own source warned
 	// about: a simulant scores the guns on the floor by indexing a preference
 	// table by weapon number, and that table was a literal 128 rows - below every

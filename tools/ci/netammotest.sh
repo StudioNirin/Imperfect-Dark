@@ -86,7 +86,7 @@ fi
 
 # The other two appended types travel in the same array, and the respawn
 # sweep must not zero them as types nobody is recorded as holding.
-grep -qE '^#define NETLP_NUMAMMO +36' "$ROOT/port/include/net/netsnap.h" \
+grep -qE '^#define NETLP_NUMAMMO +37' "$ROOT/port/include/net/netsnap.h" \
 	|| fail 'the local-player block is back to the ROM ammo count'
 grep -qF 'bool ammotypesheld[NUM_AMMOTYPES]' "$ROOT/src/game/player.c" \
 	|| fail 'a respawn still wipes the fork reserves'
