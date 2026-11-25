@@ -22,6 +22,7 @@
 #include "game/tex.h"
 #include "game/texdecompress.h"
 #include "modelpack.h"
+#include "modelpackembed.h"
 
 #ifndef PLATFORM_N64
 
@@ -61,6 +62,77 @@ PD_CONSTRUCTOR static void modelpackConfigInit(void)
 	configRegisterInt("Mod.LoadModels", &loadModels, 0, 1);
 	configRegisterString("Mod.ModelPack", packName, sizeof(packName));
 	configRegisterInt("Mod.ModelPackPrefer", &preferXbla, MODELPACK_PREFER_N64, MODELPACK_PREFER_XBLA);
+}
+
+// Meshes compiled into the game (the DB-Shotgun's two fits and their
+// pictures), mounted in memory so the ordinary OBJ and PNG readers can find
+// them without a folder, a config key or an updater asset.
+static s32 builtinDir = -1;
+
+void modelpackInitBuiltin(void)
+{
+	if (builtinDir >= 0 || g_EmbeddedModelNumFiles <= 0) {
+		return;
+	}
+
+	builtinDir = fsMemDirCreate("builtin-models");
+
+	if (builtinDir < 0) {
+		sysLogPrintf(LOG_WARNING, "modelpack: no memory directory for the built-in meshes");
+		return;
+	}
+
+	for (s32 i = 0; i < g_EmbeddedModelNumFiles; i++) {
+		const struct embeddedmodelfile *f = &g_EmbeddedModelFiles[i];
+
+		if (!f->name || !f->data) {
+			break;
+		}
+
+		if (fsMemDirAddFile(builtinDir, f->name, f->data, f->len) != 0) {
+			sysLogPrintf(LOG_WARNING, "modelpack: could not mount %s", f->name);
+		}
+	}
+
+	fsMemDirSeal(builtinDir);
+	sysLogPrintf(LOG_NOTE, "modelpack: %d meshes and pictures built in", fsMemDirCount(builtinDir));
+}
+
+/** The built-in file that serves a fileid, as a $N/ path the readers understand. */
+static const char *modelpackBuiltinPath(s32 fileid, const char *ext)
+{
+	static char path[FS_MAXPATH + 1];
+	const char *base = builtinDir >= 0 ? fsMemDirPath(builtinDir) : NULL;
+	const size_t extlen = strlen(ext);
+
+	if (!base || fileid <= 0) {
+		return NULL;
+	}
+
+	for (s32 i = 0; i < g_EmbeddedModelNumFiles; i++) {
+		const struct embeddedmodelfile *f = &g_EmbeddedModelFiles[i];
+		size_t len;
+		char stem[128];
+
+		if (!f->name || !f->data) {
+			break;
+		}
+
+		len = strlen(f->name);
+
+		if (len <= extlen || strcmp(f->name + len - extlen, ext)) {
+			continue;
+		}
+
+		snprintf(stem, sizeof(stem), "%.*s", (int)(len - extlen), f->name);
+
+		if (romdataFileGetNumForName(stem) == fileid) {
+			snprintf(path, sizeof(path), "%s/%s", base, f->name);
+			return path;
+		}
+	}
+
+	return NULL;
 }
 
 s32 modelpackLoadEnabled(void)
@@ -392,13 +464,19 @@ static void modelpackIndex(void)
 
 const char *modelpackFindN64(s32 fileid)
 {
-	if (!loadModels || fileid <= 0 || fileid >= NUM_FILE_SLOTS) {
-		return NULL;
+	// A player's own pack still wins: the meshes built into the executable are
+	// the default the weapon stands on, not a lock on what it can be drawn as.
+	const char *builtin = modelpackBuiltinPath(fileid, ".obj");
+
+	if (loadModels && fileid > 0 && fileid < NUM_FILE_SLOTS) {
+		modelpackIndex();
+
+		if (n64Paths && n64Paths[fileid]) {
+			return n64Paths[fileid];
+		}
 	}
 
-	modelpackIndex();
-
-	return n64Paths ? n64Paths[fileid] : NULL;
+	return builtin;
 }
 
 const char *modelpackFindXbla(s32 fileid)

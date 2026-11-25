@@ -158,6 +158,19 @@ PACK=$BUILD/model-packs/dbshotgun/n64
 [ -f "$PACK/PpdDbShotgunZ.mtl" ] || fail "the fitted viewmodel's material file is missing"
 [ -f "$PACK/PpdDbShotgunChr.obj" ] || fail "the fitted held mesh is missing from $PACK - a chr's gun would use the view fit"
 [ -f "$PACK/PpdDbShotgunChr.mtl" ] || fail "the fitted held mesh's material file is missing"
+
+# The pack folder above is the source the build embeds, not something a
+# player has to install. CMake compiles it into modelpacks.c, startup mounts
+# it in memory, and the self-test asks for both meshes with no pack selected.
+grep -qF 'tools/modelpack/embed.py' "$ROOT/CMakeLists.txt" \
+	|| fail "the build no longer compiles the fitted meshes into the executable"
+grep -qF 'modelpackInitBuiltin();' "$ROOT/port/src/main.c" \
+	|| fail "the built-in meshes are never mounted at startup"
+grep -q 'both fitted meshes are built in and resolve without a model pack' "$ROOT/port/src/dbshotgun.c" \
+	|| fail "nothing checks that the meshes work with model packs off"
+grep -qF 'dbshotgun test: ok   both fitted meshes are built in and resolve without a model pack' "$LOG" \
+	|| fail "the built-in meshes did not resolve with model packs off"
+
 for png in 00_0x098EA1A5 01_0x098E51A5 02_0x09BEA1A5 03_0x09BE51A5 04_0x0D0689B5 05_0x051D5125; do
 	[ -f "$PACK/shotgun/$png.png" ] || fail "the pack is missing texture $png.png"
 done

@@ -193,6 +193,7 @@ for platform in "${platforms[@]}"; do
 		"stage_${platform}_from_build" "$build" "$stage"
 		strip_one "$platform" "$stage"
 		cp "$ROOT/README.md" "$ROOT/LICENSE" "$stage/"
+		cp -a "$ROOT/docs" "$stage/"
 		: >"$stage/data/put_your_rom_here.txt"
 		: >"$stage/added-content/put_goldeneye_rom_and_xbla_releases_here.txt"
 	fi

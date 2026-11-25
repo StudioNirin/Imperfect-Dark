@@ -762,21 +762,17 @@ per-gun rotation is edited into the game. It joins everything into one
 Shape-matching `GshotgunZ` to `PchrshotgunZ` over all 24 proper signed axis
 permutations picks the same `(x,y,z) -> (-z,-x,y)` rotation the held fit uses.
 
-The fitted meshes are **not enabled by default**. They ship as a model pack
-under the build directory, `build/model-packs/dbshotgun/n64/PpdDbShotgunZ.obj`
-and `PpdDbShotgunChr.obj` with their MTLs and the six PNGs in its `shotgun/`
-subdirectory (the MTLs' `map_Kd shotgun/<name>.png` paths resolve there). To
-use them, put
-
-```
-Mod.LoadModels=1
-Mod.ModelPack=dbshotgun
-```
-
-in `pd.ini`, or switch **Mod.LoadModels** on and pick **dbshotgun** in the
-Options menu's model-pack dropdown. With neither, the gun fires exactly as
-described above and is drawn on the stock PD Shotgun's file. The alias is over a
-stock file, so it is always registered; only the mesh comes from the pack.
+The fitted meshes are **part of the weapon**, not an optional download. The
+`model-packs/dbshotgun/n64/` folder is the source the build compiles in:
+`tools/modelpack/embed.py` writes `modelpacks.c` from it at configure time, and
+`modelpackInitBuiltin()` mounts those files in an in-memory directory at
+startup (`$N/builtin-models/`). `objmeshRead()`, `objReadMtl()` and `pngRead()`
+now open through `fsFileOpenRead()` so they can read `$N/` paths as well as
+disk ones. `modelpackFindN64()` answers the built-in path for the two alias
+names even with `Mod.LoadModels=0`, and a player-selected pack still wins if
+one is installed. No config key, folder beside the game or updater asset is
+needed to see the fitted gun. Because of that the release no longer builds a
+separate `pd-assets-*.zip`; the docs go inside each platform's package.
 
 `--test-dbshotgun` (`tools/ci/dbshotgun.sh`) checks the alias and state, the
 two-round row, all three firing states, the untouched stock Shotgun and the MP

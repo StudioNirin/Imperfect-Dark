@@ -15,6 +15,7 @@
 #include <zlib.h>
 #include <PR/ultratypes.h>
 #include "system.h"
+#include "fs.h"
 #include "pngread.h"
 
 #define PNG_COLOUR_GREY       0
@@ -525,7 +526,7 @@ u8 *pngRead(const char *path, s32 *outWidth, s32 *outHeight)
 	u8 *file;
 	u8 *rgba;
 
-	f = fopen(path, "rb");
+	f = fsFileOpenRead(path);
 
 	if (!f) {
 		sysLogPrintf(LOG_ERROR, "png: could not open %s", path);

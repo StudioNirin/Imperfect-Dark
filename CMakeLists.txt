@@ -700,6 +700,28 @@ else()
 endif()
 list(APPEND SRC ${LANGPACK_C})
 
+# The DB-Shotgun's fitted meshes are part of the weapon, not an optional pack.
+# tools/modelpack/embed.py compiles the two OBJs, their MTLs and their pictures
+# into one C table, mounted by modelpack.c at startup. With no Python the table
+# is empty and the gun falls back to the stock PD Shotgun's files, as it did
+# before this fork's model was fitted.
+set(MODELPACK_C "${CMAKE_BINARY_DIR}/modelpacks.c")
+file(GLOB_RECURSE EMBEDDED_MODEL_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/model-packs/dbshotgun/n64/*")
+if(Python3_Interpreter_FOUND)
+  add_custom_command(
+    OUTPUT ${MODELPACK_C}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/modelpack/embed.py
+            --src ${CMAKE_SOURCE_DIR}/model-packs/dbshotgun/n64 --embed ${MODELPACK_C} --quiet
+    DEPENDS ${CMAKE_SOURCE_DIR}/tools/modelpack/embed.py
+            ${EMBEDDED_MODEL_FILES}
+    COMMENT "Embedding the DB-Shotgun's meshes"
+  )
+else()
+  message(WARNING "No Python 3: the build embeds no model packs")
+  file(WRITE ${MODELPACK_C} "#include \"modelpackembed.h\"\nconst struct embeddedmodelfile g_EmbeddedModelFiles[] = { { 0, 0, 0 } };\nconst int g_EmbeddedModelNumFiles = 0;\n")
+endif()
+list(APPEND SRC ${MODELPACK_C})
+
 # Game target
 
 set(BIN_NAME "${BIN_BASENAME}")

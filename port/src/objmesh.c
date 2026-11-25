@@ -698,7 +698,7 @@ static void objClassifyMaterial(struct objmaterial *mat, const char *objdir)
 
 static void objReadMtl(struct objmesh *m, const char *mtlpath, const char *objdir)
 {
-	FILE *f = fopen(mtlpath, "rb");
+	FILE *f = fsFileOpenRead(mtlpath);
 	char line[OBJ_LINE];
 	s32 current = -1;
 
@@ -782,7 +782,7 @@ struct objmesh *objmeshRead(const char *objpath)
 	s32 badfaces = 0;
 	char pendinggroup[OBJMESH_NAMELEN] = "";
 
-	f = fopen(objpath, "rb");
+	f = fsFileOpenRead(objpath);
 
 	if (!f) {
 		sysLogPrintf(LOG_ERROR, "objmesh: could not open %s", objpath);

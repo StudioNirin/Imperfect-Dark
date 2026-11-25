@@ -14,10 +14,9 @@ on:
     branches: [ "imperfect-dark" ]
     tags: [ "v*" ]
     # Two builds and a new executable offered to every dev-channel player is
-    # too much to ask for a change to a file that is not in the download and
-    # not in the binary. Only these qualify: README.md and LICENSE are
-    # copied into every package by the packaging steps below, so a fix to one
-    # of those has to be built and published like any other change.
+    # too much to ask for a change to a file that is neither in the download
+    # nor in the binary. README, LICENSE and docs are all copied into every
+    # package by the packaging steps, so a change to any of them is published.
     #
     # This is safe for releases: GitHub does not evaluate path filters for tag
     # pushes at all, so a v* tag still builds whatever it points at.
@@ -25,7 +24,6 @@ on:
       - 'CLAUDE.md'
       - 'CLAUDE-notes/**'
       - 'DabDavisGitHub.md'
-      - 'docs/**'
       # The packaging script makes archives out of a finished build; it is in
       # neither the download nor the binary, so it does not need a build.
       - 'tools/package/**'
@@ -124,6 +122,10 @@ jobs:
           objcopy --only-keep-debug bin/pd.x86_64.exe debug/pd.x86_64.exe.debug
           objcopy --strip-debug --add-gnu-debuglink=debug/pd.x86_64.exe.debug bin/pd.x86_64.exe
           cp README.md LICENSE bin/
+          # The handbook travels with the game rather than in a second download.
+          # The DB-Shotgun's meshes are compiled into the exe, so nothing else
+          # needs a separate assets archive.
+          cp -a docs bin/
           touch bin/data/put_your_rom_here.txt
           mkdir -p bin/added-content
           touch bin/added-content/put_goldeneye_rom_and_xbla_releases_here.txt
@@ -192,6 +194,10 @@ jobs:
           objcopy --only-keep-debug bin/pd.x86_64 debug/pd.x86_64.debug
           objcopy --strip-debug --add-gnu-debuglink=debug/pd.x86_64.debug bin/pd.x86_64
           cp README.md LICENSE bin/
+          # The handbook travels with the game rather than in a second download.
+          # The DB-Shotgun's meshes are compiled into the exe, so nothing else
+          # needs a separate assets archive.
+          cp -a docs bin/
           touch bin/data/put_your_rom_here.txt
           mkdir -p bin/added-content
           touch bin/added-content/put_goldeneye_rom_and_xbla_releases_here.txt
@@ -256,22 +262,11 @@ jobs:
             cp patchnotes.txt ci-release/patchnotes.txt
           fi
 
-          # The assets archive: the model packs and the docs, plus a
-          # PAYLOAD.txt naming every file in it. Check for Updates unpacks
-          # it beside the build, so an install that never saw the packs the
-          # release carries gets them rather than staying one release behind.
-          # A checksum list is written as well, so the extraction can be
-          # traced back file by file.
-          {
-            find model-packs docs -type f | sort | while read -r f; do
-              sha="$(sha256sum "$f" | cut -d" " -f1)"
-              printf '%s  %s  %s\n' "$sha" "$(stat -c%s "$f")" "$f"
-            done
-          } > ci-release/PAYLOAD.txt
-          for name in x86_64-linux x86_64-windows; do
-            zip -qr "ci-release/pd-assets-$name.zip" model-packs docs PAYLOAD.txt
-          done
-
+          # No assets archive any more. The DB-Shotgun's two fitted meshes are
+          # compiled into the executable, and the docs go out inside each
+          # platform's package, so there is nothing for Check for Updates to
+          # fetch beside the bare build. Older manifests may still name an
+          # assets archive; the game keeps reading those lines harmlessly.
           # The commit the binaries were built from, in the same form CMake put
           # inside them: `git rev-parse --short` picks its own length and both
           # sides have to agree, so both sides ask git rather than cutting a
@@ -304,15 +299,6 @@ jobs:
               sha="$(sha256sum "ci-release/$file" | cut -d" " -f1)"
               size="$(stat -c%s "ci-release/$file")"
               echo "build $name $file $sha $size"
-            done
-            # The assets archive, one line per target: the model packs, the
-            # docs and the payload list, the way the game unpacks it beside
-            # the build. Same hash and size treatment as the build it ships
-            # with, so a download that is not the release's is refused.
-            for name in x86_64-linux x86_64-windows; do
-              sha="$(sha256sum "ci-release/pd-assets-$name.zip" | cut -d" " -f1)"
-              size="$(stat -c%s "ci-release/pd-assets-$name.zip")"
-              echo "asset $name pd-assets-$name.zip $sha $size"
             done
           } > ci-release/update.txt
 

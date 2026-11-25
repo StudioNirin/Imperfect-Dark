@@ -16,6 +16,8 @@
 #include "game/mplayer/mplayer.h"
 #include "system.h"
 #include "romdata.h"
+#include "modelpack.h"
+#include "modelpackembed.h"
 #include "dbshotgun.h"
 
 #ifndef PLATFORM_N64
@@ -191,6 +193,12 @@ void dbShotgunSelfTest(void)
 			"a body holding it holds the alias model, not nothing");
 	DB_CHECK(g_ModelStates[MODEL_PD_GESHOTGUN].scale == g_ModelStates[MODEL_CHRSHOTGUN].scale,
 			"the fitted mesh keeps the PD Shotgun's own scale");
+	// Both fits ship inside the executable, so a player never has to find a
+	// model pack or turn one on to see the gun this fork actually drew.
+	DB_CHECK(g_EmbeddedModelNumFiles >= 10
+			&& modelpackFindN64(romdataFileGetNumForName(s_PdDbShotgunProp)) != NULL
+			&& modelpackFindN64(romdataFileGetNumForName(s_PdDbShotgunChrProp)) != NULL,
+			"both fitted meshes are built in and resolve without a model pack");
 
 	// Simulants: AICANUSE for the third-person pose, and a preference row with
 	// both goal flags and real scores so the row is actually read.

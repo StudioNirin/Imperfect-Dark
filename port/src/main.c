@@ -26,6 +26,7 @@
 #include "shock.h"
 #include "forkbots.h"
 #include "dbshotgun.h"
+#include "modelpack.h"
 #include "bss.h"
 #include "data.h"
 
@@ -257,6 +258,9 @@ int main(int argc, const char **argv)
 
 	sysInit();
 	fsInit();
+	// The DB-Shotgun's meshes live in the executable, mounted in memory before
+	// any mesh is built (modelpack.c). No model-packs folder is needed.
+	modelpackInitBuiltin();
 	configInit();
 	// the language, before anything is drawn (langpack.h)
 	langpackInit();

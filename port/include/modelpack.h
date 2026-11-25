@@ -47,6 +47,9 @@ extern "C" {
  */
 
 /** Mod.LoadModels. */
+/** Mount the meshes compiled into the executable. Call after fsInit(). */
+void modelpackInitBuiltin(void);
+
 s32 modelpackLoadEnabled(void);
 void modelpackSetLoadEnabled(s32 enabled);
 
