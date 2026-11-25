@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 105 2026-11-25
+Bowcaster: bolts no longer turn up or down when fired over a chasm.
+
 notes 104 2026-11-25
 Bowcaster: bolts no longer fire upward through passages online.
 Bowcaster: the bolt's glow now follows the shot every frame instead of stuttering.
