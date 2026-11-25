@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 103 2026-11-25
+Model packs: replaced guns now get a bounding box from their mesh, fixing hit tests and dropped guns.
+
 notes 102 2026-11-25
 DB-Shotgun: the fitted gun now ships inside the game, with no model pack to enable.
 DB-Shotgun: killing a player no longer crashes when their dropped gun falls.
