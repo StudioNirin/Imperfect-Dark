@@ -30,8 +30,14 @@ Run with Blender, once per target model:
 The space is inferred from the reference name (G* = viewmodel, Pchr* = held)
 or can be given explicitly with ``--space view|held``. The output OBJ is
 collapsed into one ``node0`` group, which is what both of these PD models
-have. Its MTL keeps the bean_N material names and points the pictures at a
-local folder (``--textures``, default ``shotgun``).
+have. Its MTL keeps the bean_N material names and points the pictures at
+``--textures``, a folder of PNGs anywhere, defaulting to the one canonical set
+in the pack (``model-packs/dbshotgun/n64/shotgun``, which CMakeLists globs into
+the embed); each path written into the MTL is made relative to that MTL, so the
+run is correct whether the pair lands in this working area or in the pack. What
+``--textures`` is not is a second copy of the PNGs: one set of bytes to keep
+true. The script ends by checking every picture it named resolves, because an
+MTL with a broken path loads the mesh untextured in Blender and says nothing.
 """
 
 import bpy
@@ -45,7 +51,10 @@ src = args[0]
 ref = args[1]
 out = args[2]
 space = args[args.index('--space') + 1] if '--space' in args else None
-textures = args[args.index('--textures') + 1] if '--textures' in args else 'shotgun'
+# models-custom/db-shotgun/fit-to-pd.py -> models-custom/ -> the repository root.
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+textures = (args[args.index('--textures') + 1] if '--textures' in args
+            else os.path.join(REPO, 'model-packs', 'dbshotgun', 'n64', 'shotgun'))
 
 
 def bbox(objs):
@@ -181,15 +190,30 @@ if not any(line.startswith('g ') for line in objlines):
         f.write('\n'.join(objlines) + '\n')
 
 # Blender resolves the dump's relative picture paths against its own location
-# and writes those absolute paths into the new MTL. Point them back at the
-# pack's local texture folder; the material names are what bind in game.
+# and writes those absolute paths into the new MTL. Point them at the pack's one
+# canonical set, made relative to the MTL being written; the material names are
+# what bind in game, and the pack keeps its pictures beside its own MTLs.
 mtl = os.path.splitext(out)[0] + '.mtl'
+texdir = os.path.abspath(textures)
 lines = open(mtl, encoding='utf-8').read().splitlines()
+named = []
 with open(mtl, 'w', encoding='utf-8') as f:
     for line in lines:
         if line.startswith('map_Kd ') or line.startswith('map_d '):
             key, _, value = line.partition(' ')
-            f.write(f'{key} {textures}/{os.path.basename(value.strip())}\n')
+            rel = os.path.relpath(os.path.join(texdir, os.path.basename(value.strip())),
+                                  os.path.dirname(os.path.abspath(mtl)))
+            rel = rel.replace(os.sep, '/')
+            named.append(rel)
+            f.write(f'{key} {rel}\n')
         else:
             f.write(line + '\n')
+# A picture path that does not resolve is not something Blender or the viewer
+# reports: the mesh simply loads untextured. So it is reported here.
+missing = [r for r in dict.fromkeys(named)
+           if not os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(mtl)), r))]
+if missing:
+    sys.exit(f'fit-to-pd: {len(missing)} picture path(s) in {mtl} do not resolve, '
+             f'first {missing[0]}; pass --textures pointing at the PNGs '
+             f'(default is the pack\'s set)')
 print('WROTE', mtl)

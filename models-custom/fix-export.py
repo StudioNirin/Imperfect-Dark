@@ -25,17 +25,29 @@ true for shape edits (moving vertices). If you changed the topology, the face
 boundaries of the three parts have to be worked out again by hand.
 
 Usage:
-    python3 fix-export.py shotgun-output-test.obj
-    python3 fix-export.py my-edit.obj --out my-edit-game
+    python3 ../fix-export.py db-shotgun-game.obj
+    python3 ../fix-export.py my-edit.obj --out my-edit-game
 
-Defaults: original=shotgun.obj, materials=shotgun.mtl, textures=shotgun/,
-output=<input stem>-game.obj / .mtl. All paths are relative to this folder
-unless given as absolute paths.
+Defaults: original=shotgun.obj, materials=shotgun.mtl,
+textures=<repo>/model-packs/dbshotgun/n64/shotgun, the one canonical set, which
+CMakeLists globs into the embed, output=<input stem>-game.obj / .mtl. original
+and materials are relative to the input's folder; the picture folder may be
+anywhere, and each path written into the MTL is made relative to that MTL, so
+the same run is correct whether the pair lands in the working area or in the
+pack. What the picture folder is *not* is a second copy of the PNGs: point it at
+the pack and there is one set of bytes to keep true. The script ends by checking
+every picture it named resolves, because an MTL with a broken path loads the
+mesh untextured in Blender and says nothing at all.
 """
 
 import argparse
 import os
 import sys
+
+# The one canonical set of picture PNGs, the folder CMakeLists.txt globs into the
+# embed. models-custom/fix-export.py -> models-custom/ -> the repository root.
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_TEXTURES = os.path.join(REPO, "model-packs", "dbshotgun", "n64", "shotgun")
 
 
 def read_lines(path):
@@ -76,16 +88,25 @@ def main():
     p.add_argument("input", help="OBJ exported from Blender")
     p.add_argument("--original", default="shotgun.obj", help="dumped OBJ to take group boundaries from")
     p.add_argument("--mtl", default="shotgun.mtl", help="dumped MTL to take material names and picture names from")
-    p.add_argument("--textures", default="shotgun", help="local folder holding the picture PNGs")
+    p.add_argument("--textures", default=DEFAULT_TEXTURES,
+                   help="folder holding the picture PNGs (default: the pack's one set)")
     p.add_argument("--out", help="output prefix (default: <input stem>-game)")
     p.add_argument("--export-groups", action="store_true",
                    help="the export already carries the groups: rename them in place and keep "
                         "their face boundaries, for edits that changed the mesh's topology")
     args = p.parse_args()
 
-    here = os.path.dirname(os.path.abspath(args.input))
+    # The input resolves the way every command-line path does, against the current
+    # directory; the dump's own files are then looked for beside it, which is what
+    # makes one command work from anywhere. (Joining the input's folder onto the
+    # input path doubled it: models-custom/db-shotgun/<here>/shotgun.obj.)
+    input_path = os.path.abspath(args.input)
+    here = os.path.dirname(input_path)
     def local(path):
-        return path if os.path.isabs(path) else os.path.join(here, path)
+        if os.path.isabs(path):
+            return path
+        beside = os.path.join(here, path)
+        return beside if os.path.exists(beside) else os.path.abspath(path)
 
     lines = read_lines(local(args.input))
     prefix = args.out or (os.path.splitext(os.path.basename(args.input))[0] + "-game")
@@ -163,14 +184,29 @@ def main():
         f.write("\n".join(out) + "\n")
 
     mtlpath = local(prefix + ".mtl")
+    texdir = os.path.abspath(args.textures)
+    named = []
     with open(mtlpath, "w", encoding="utf-8") as f:
-        f.write("# Material names kept exactly; pictures are local to this folder.\n")
+        f.write("# Material names kept exactly; picture paths are relative to this file.\n")
         for name, pic in material_pictures(local(args.mtl)):
+            # Relative to the MTL being written, so the same run is right whether
+            # this lands in the working area or in the pack.
+            rel = os.path.relpath(os.path.join(texdir, pic), os.path.dirname(mtlpath))
+            rel = rel.replace(os.sep, "/")
+            named.append(rel)
             f.write(f"newmtl {name}\nKd 1 1 1\n")
-            f.write(f"map_Kd {args.textures}/{pic}\nmap_d {args.textures}/{pic}\n\n")
+            f.write(f"map_Kd {rel}\nmap_d {rel}\n\n")
 
     ngroups = sum(1 for line in out if line.startswith("g "))
     nfaces = sum(1 for line in out if line.startswith("f "))
+    # A picture path that does not resolve is not a warning to Blender or to the
+    # viewer: the mesh loads untextured and nothing is printed. So make it one.
+    missing = [r for r in dict.fromkeys(named)
+               if not os.path.isfile(os.path.join(os.path.dirname(mtlpath), r))]
+    if missing:
+        sys.exit(f"fix-export: {len(missing)} picture path(s) in {mtlpath} do not "
+                 f"resolve, first {missing[0]}; pass --textures pointing at the "
+                 f"PNGs (default is the pack's set)")
     print(f"fix-export: {ngroups} groups, faces {nfaces}, "
           f"materials {len(pics)}")
     print(f"fix-export: {objpath}")

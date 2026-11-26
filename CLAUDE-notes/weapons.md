@@ -756,7 +756,15 @@ two-alias pattern, `dbShotgunModelsRefresh()` registers `PpdDbShotgunZ` over
 `FILE_PCHRSHOTGUN` for `g_ModelStates[MODEL_PD_GESHOTGUN]`.
 
 Both OBJs come from the same Blender export through
-`models-custom/db-shotgun/fit-to-pd.py`. Run it once per target:
+`models-custom/db-shotgun/fit-to-pd.py`, which is the last step of a three-script
+path in `models-custom/`: `db-shotgun.blend` is the authored mesh,
+`fix-export.py` puts back the `g node0` / `part1_if1` / `part2` group lines and
+the material picture paths that a Blender OBJ round trip drops (the group number
+is what `xblamesh.c` uses to index the release's group table, so it is not
+decoration), and `fit-to-pd.py` fits the result to a PD space.
+`make-viewer.py OBJ MTL OUT.html` writes the throwaway three-page viewer used to
+look at a mesh without opening Blender; the generated HTML is not committed. Run
+the fit once per target:
 
 ```
 blender -b --python fit-to-pd.py -- db-shotgun-game.obj \
@@ -769,9 +777,19 @@ The script drops the `node0` muzzle-flash group, takes its forward sign from
 that group, and aligns the mesh's forward and up to the target space's axes
 (view = +Z/+Y, held = -X/+Z) before a uniform scale and bbox-centre fit. No
 per-gun rotation is edited into the game. It joins everything into one
-`node0` group and points the two remaining `bean_` materials at the local PNGs.
-Shape-matching `GshotgunZ` to `PchrshotgunZ` over all 24 proper signed axis
-permutations picks the same `(x,y,z) -> (-z,-x,y)` rotation the held fit uses.
+`node0` group and points the two remaining `bean_` materials at the pack's one
+set of PNGs - by a path made relative to the MTL it writes, so the same run
+yields `shotgun/NN.png` inside `model-packs/dbshotgun/n64/` and
+`../../model-packs/dbshotgun/n64/shotgun` here, where the working area keeps no
+PNGs of its own. Both scripts now end by checking that every picture they named
+resolves: an MTL with a broken path loads the mesh untextured in Blender and
+prints nothing, which is how the move into `db-shotgun/` went unnoticed for a
+day. Regenerating `PpdDbShotgunZ.obj` from `db-shotgun.blend` on 2026-11-26
+reproduced the pack's copy with identical counts (2366 v, 2712 f, one `node0`
+group, 419 vt, 717 vn) and vertex data agreeing to 4e-6, so the pack is current
+with the authored mesh rather than left behind it. Shape-matching `GshotgunZ` to
+`PchrshotgunZ` over all 24 proper signed axis permutations picks the same
+`(x,y,z) -> (-z,-x,y)` rotation the held fit uses.
 
 The fitted meshes are **part of the weapon**, not an optional download. The
 `model-packs/dbshotgun/n64/` folder is the source the build compiles in:
