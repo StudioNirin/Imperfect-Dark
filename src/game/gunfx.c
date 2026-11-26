@@ -80,7 +80,18 @@ void beamCreate(struct beam *beam, s32 weaponnum, struct coord *from, struct coo
 		distance = 500;
 	}
 
-	if (weaponnum == -1) {
+	if (weaponnum == WEAPON_SHOCKRIFLE && weaponHasFlag2(weaponnum, WEAPONFLAG2_LASERFLIGHT)) {
+		// The lance hangs a little longer than the Moonraker's flash so the
+		// extra thickness can actually be seen.
+		beam->speed = 0.16f * distance;
+		beam->mindist = 0.6f * distance;
+
+		if (beam->mindist > 3000) {
+			beam->mindist = 3000;
+		}
+
+		beam->dist = (-0.1f - RANDOMFRAC() * 0.3f) * distance;
+	} else if (weaponnum == -1) {
 		beam->speed = 0;
 		beam->mindist = distance;
 
@@ -349,7 +360,7 @@ Gfx *beamRender(Gfx *gdl, struct beam *beam, bool arg2, u8 arg3)
 		struct coord sp10c;
 		struct coord sp100 = {0, 0, 0};
 		struct coord spf4 = {0, 0, 0};
-		f32 spf0 = 1.4142f;
+		f32 spf0 = weaponHost(beam->weaponnum) == WEAPON_SHOCKRIFLE ? 2.0f : 1.4142f;
 		struct textureconfig *texconfig = &g_TexBeamConfigs[arg3];
 		s32 i;
 		Mtxf *worldtoscreenmtx = camGetWorldToScreenMtxf();
@@ -417,6 +428,13 @@ Gfx *beamRender(Gfx *gdl, struct beam *beam, bool arg2, u8 arg3)
 			// Mauler
 			sp130 = sp130 * ((beam->weaponnum + 3) * 2.0f + 1.0f);
 			texconfig = &g_TexBeamConfigs[4];
+		}
+
+		if (weaponHost(beam->weaponnum) == WEAPON_SHOCKRIFLE) {
+			// The Shock Rifle's lance is a thick, bright beam rather than the
+			// Moonraker's thin tracer: a wider main quad and a wider crossed
+			// halo, both still drawn with the laser's own textures.
+			sp130 = 85.0f;
 		}
 
 		sp138.f[0] = beam->from.f[0];
@@ -1032,6 +1050,14 @@ void boltbeamSetGlow(s32 beamnum)
 	}
 }
 
+/** A plasma orb's trail: the same glow, in the Shock Rifle's blue. */
+void boltbeamSetBlue(s32 beamnum)
+{
+	if (beamnum >= 0 && beamnum < ARRAYCOUNT(g_BoltBeams)) {
+		g_BoltBeams[beamnum].unk04 = 2;
+	}
+}
+
 Gfx *boltbeamsRender(Gfx *gdl)
 {
 	s32 i;
@@ -1039,10 +1065,14 @@ Gfx *boltbeamsRender(Gfx *gdl)
 	for (i = 0; i < ARRAYCOUNT(g_BoltBeams); i++) {
 		if (g_BoltBeams[i].unk00 != -1) {
 			if (g_BoltBeams[i].unk04) {
-				// Head (behind) is fully transparent, tail (at the bolt) is
-				// solid white - the alpha gradient fades the trailing end
-				// into a bright point rather than a solid line.
-				gdl = beamRenderGeneric(gdl, g_TexLaserConfigs, 1, &g_BoltBeams[i].headpos, 0xffffff00, 7, &g_BoltBeams[i].tailpos, 0xffffffff);
+				// Head (behind) is fully transparent, tail (at the shot) is
+				// solid - the alpha gradient fades the trailing end into a
+				// bright point rather than a solid line. The orb keeps the
+				// Shock Rifle's blue; the Bowcaster's bolt is white.
+				const u32 head = g_BoltBeams[i].unk04 == 2 ? 0x5080ff00 : 0xffffff00;
+				const u32 tail = g_BoltBeams[i].unk04 == 2 ? 0x90c0ffff : 0xffffffff;
+
+				gdl = beamRenderGeneric(gdl, g_TexLaserConfigs, 1, &g_BoltBeams[i].headpos, head, 7, &g_BoltBeams[i].tailpos, tail);
 			} else {
 				gdl = beamRenderGeneric(gdl, g_TexLaserConfigs, 1, &g_BoltBeams[i].headpos, 0xafafff00, 2, &g_BoltBeams[i].tailpos, 0xafafff7f);
 			}

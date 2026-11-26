@@ -25,6 +25,7 @@ void boltbeamSetTailPos(s32 beamnum, struct coord *pos);
 void boltbeamIncrementHeadPos(s32 beamnum, f32 newlength, bool arg2);
 void boltbeamSetAutomatic(s32 beamnum, f32 speed);
 void boltbeamSetGlow(s32 beamnum);
+void boltbeamSetBlue(s32 beamnum);
 Gfx *boltbeamsRender(Gfx *gdl);
 void boltbeamsTick(void);
 

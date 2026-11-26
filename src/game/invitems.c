@@ -4752,7 +4752,7 @@ struct weaponfunc_shootsingle invfunc_shockrifle_beam = {
 	0, // slidemax
 	0, // impactforce
 	3, // duration60
-	SFX_8043, // shootsound: the Moonraker's pulse, the tree's plasma-voice
+	SFX_813E, // shootsound: the Farsight's discharge, a brighter plasma crack
 	1, // penetration
 };
 
@@ -4779,13 +4779,13 @@ struct weaponfunc_shootprojectile invfunc_shockrifle_ball = {
 	4,
 	SFX_8073, // shootsound: the Devastator's grenade launch, a lobbed shot's voice
 	1, // penetration
-	MODEL_CHRGRENADE, // projectilemodelnum: an orb that exists. Loaded by
-		// modelmgrLoadProjectileModeldefs() from this row the way the Rocket
-		// Launcher's MODEL_CHRDYROCKETMIS is, so a placed gun brings its own shot
+	MODEL_CHRFLASHBANG, // projectilemodelnum: a round ball, not a grenade. The
+		// Bowcaster's bolt uses the same model at 0.01 scale to hide the mesh;
+		// here it is the visible shot, loaded from this row as a placed gun's
+		// projectile is.
 	0, // unused
-	1.2, // scale: large. The bolt's 0.01 hid its model on purpose; this one is the
-		// shot's picture, and objTestHit() hit-tests these boxes, so a small mesh
-		// would be a beam that passes through the orb
+	1.8, // scale: large and easy to hit. The boltbeam's glow is the orb's light;
+		// this box is what objTestHit() hit-tests on the way to a detonation.
 	0, // speed: no continuous acceleration, a steady flight
 	0, // unk50
 	8, // traveldist: slow against the Bolt's 20 (about 130 units a second), so the

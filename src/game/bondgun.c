@@ -5814,6 +5814,7 @@ void bgun0f09ebcc(struct defaultobj *obj, struct coord *coord, RoomNum *rooms, M
 
 		if (obj->type == OBJTYPE_WEAPON
 				&& (((struct weaponobj *) obj)->weaponnum == WEAPON_BOWCASTERBOLT
+					|| ((struct weaponobj *) obj)->weaponnum == WEAPON_SHOCKORB
 					|| weaponHost(((struct weaponobj *) obj)->weaponnum) == WEAPON_BOLT)) {
 			s32 beamnum = boltbeamFindByProp(objprop);
 
@@ -5825,7 +5826,9 @@ void bgun0f09ebcc(struct defaultobj *obj, struct coord *coord, RoomNum *rooms, M
 				boltbeamSetHeadPos(beamnum, pos);
 				boltbeamSetTailPos(beamnum, pos);
 
-				if (((struct weaponobj *) obj)->weaponnum == WEAPON_BOWCASTERBOLT) {
+				if (((struct weaponobj *) obj)->weaponnum == WEAPON_SHOCKORB) {
+					boltbeamSetBlue(beamnum);
+				} else if (((struct weaponobj *) obj)->weaponnum == WEAPON_BOWCASTERBOLT) {
 					boltbeamSetGlow(beamnum);
 				}
 			}
@@ -5865,9 +5868,20 @@ void bgun0f09ed2c(struct defaultobj *obj, struct coord *newpos, Mtxf *arg2, stru
 	if (objprop) {
 		struct prop *playerprop = g_Vars.currentplayer->prop;
 
-		pos.x = playerprop->pos.x;
-		pos.y = playerprop->pos.y;
-		pos.z = playerprop->pos.z;
+		// A slow orb launched from the player's body root appears at the
+		// bottom of the screen, not at the gun. Fast grenades hide the same
+		// mistake; the orb does not. The muzzle is the last argument, already
+		// handed in by bgunCreateFiredProjectile() from hand->muzzlepos.
+		if (obj->type == OBJTYPE_WEAPON
+				&& ((struct weaponobj *) obj)->weaponnum == WEAPON_SHOCKORB) {
+			pos.x = newpos->x;
+			pos.y = newpos->y;
+			pos.z = newpos->z;
+		} else {
+			pos.x = playerprop->pos.x;
+			pos.y = playerprop->pos.y;
+			pos.z = playerprop->pos.z;
+		}
 
 		roomsCopy(playerprop->rooms, rooms);
 

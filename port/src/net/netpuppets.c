@@ -1408,14 +1408,15 @@ static void netPupObj(struct netpup *u, struct prop *prop, const struct netentst
 			}
 		}
 
-		// The bolt's trail is the glow beam itself, and it is the whole shot.
-		// Drive it from the blended pose on every frame rather than from the
-		// snapshot delta on every sixth: the host lays a 180-unit trail behind
-		// the bolt each tick, so the puppet lays the same trail along the way
-		// it has just moved. Keeping the last drawn pose means a bounce simply
-		// turns the beam on the next frame instead of leaving a long extrapolation.
+		// The bolt's and the orb's trail is the glow beam itself, and it is
+		// the whole shot. Drive it from the blended pose on every frame rather
+		// than from the snapshot delta on every sixth: the host lays a fixed
+		// trail behind the shot each tick, so the puppet lays the same trail
+		// along the way it has just moved. Keeping the last drawn pose means a
+		// bounce simply turns the beam on the next frame.
 		if (u->havestate && obj->type == OBJTYPE_WEAPON && prop->weapon
-				&& prop->weapon->weaponnum == WEAPON_BOWCASTERBOLT
+				&& (prop->weapon->weaponnum == WEAPON_BOWCASTERBOLT
+					|| prop->weapon->weaponnum == WEAPON_SHOCKORB)
 				&& ((s->flags & NETOBJ_PROJECTILE) || isdyn)) {
 			if (!u->beamposevalid) {
 				u->beampose[0] = s->pos[0];
@@ -1435,7 +1436,8 @@ static void netPupObj(struct netpup *u, struct prop *prop, const struct netentst
 				if (beamnum >= 0) {
 					s_BoltBeams++;
 
-					const f32 scale = 180.0f / sqrtf(blen2);
+					const f32 trail = prop->weapon->weaponnum == WEAPON_SHOCKORB ? 120.0f : 180.0f;
+					const f32 scale = trail / sqrtf(blen2);
 					struct coord head;
 
 					head.x = prop->pos.x - bx * scale;
@@ -1710,11 +1712,15 @@ static struct prop *netPupMakeWeapon(const struct netdesc *d, const struct neten
 
 	// A plasma bolt draws the same trail it does on the host: the beam is
 	// the whole glow, so a puppet's bolt is invisible without one
-	if (weapon->weaponnum == WEAPON_BOWCASTERBOLT) {
+	if (weapon->weaponnum == WEAPON_BOWCASTERBOLT || weapon->weaponnum == WEAPON_SHOCKORB) {
 		const s32 beamnum = boltbeamCreate(prop);
 
 		if (beamnum >= 0) {
-			boltbeamSetGlow(beamnum);
+			if (weapon->weaponnum == WEAPON_SHOCKORB) {
+				boltbeamSetBlue(beamnum);
+			} else {
+				boltbeamSetGlow(beamnum);
+			}
 		}
 	}
 

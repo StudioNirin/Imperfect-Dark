@@ -121,6 +121,10 @@ void shockSelfTest(void)
 			"the secondary is a shot that travels");
 	SHOCK_CHECK(beam->base.damage == 1.5f, "the beam does the 1.5 it was specified at");
 	SHOCK_CHECK(ball->base.damage == 2.5f, "and the orb 2.5 on a direct hit");
+	SHOCK_CHECK(beam->base.shootsound == SFX_813E,
+			"the lance fires with the Farsight's brighter discharge");
+	SHOCK_CHECK(ball->projectilemodelnum == MODEL_CHRFLASHBANG && ball->scale >= 1.5f,
+			"the orb is a large round ball, not a grenade");
 
 	// Five cells for an orb, one for everything else. The figure is read by the
 	// player's ammunition and by a simulant's, so a wrong answer is either a gun
@@ -188,8 +192,8 @@ void shockSelfTest(void)
 	SHOCK_CHECK(bowcasterbolt != NULL && ball->traveldist < bowcasterbolt->traveldist,
 			"it travels slower than the Bowcaster's bolt, so it hangs in the air");
 	SHOCK_CHECK(ball->timer60 >= 240, "and it lives long enough to be shot at");
-	SHOCK_CHECK(ball->projectilemodelnum == MODEL_CHRGRENADE,
-			"its shot is drawn from a mesh that exists, loaded from this row as the rocket's is");
+	SHOCK_CHECK(ball->projectilemodelnum == MODEL_CHRFLASHBANG,
+			"its shot is a round ball loaded from this row, not a grenade");
 	SHOCK_CHECK(ball->scale >= 1.0f, "at a scale big enough for a beam to hit it");
 
 	// The beam's picture. The tracer itself is drawn from a whitelist in

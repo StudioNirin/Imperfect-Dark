@@ -84,8 +84,8 @@ grep -q "shock test: all .* checks as expected" "$LOG" || {
 # forty-two of them skipped some on the way, the way every other gate counts
 # verdicts rather than trusting one line.
 COUNT=$(grep -oE "shock test: all [0-9]+ checks" "$LOG" | grep -oE "[0-9]+")
-if [ "${COUNT:-0}" -lt 46 ]; then
-	echo "shock: $COUNT checks ran, expected at least 46"
+if [ "${COUNT:-0}" -lt 48 ]; then
+	echo "shock: $COUNT checks ran, expected at least 48"
 	exit 1
 fi
 
@@ -255,5 +255,31 @@ grep -qF 'shockAmmoCostForFunc(gset.weaponnum, gset.weaponfunc)' "$ROOT/src/game
 	|| fail "a simulant's shot does not spend the five cells"
 grep -qF 'shockAmmoCostForFunc(aibot->weaponnum, aibot->gunfunc)' "$ROOT/src/game/bot.c" \
 	|| fail "a simulant can start firing an orb with a clip too small to pay for it"
+
+# The four feel tweaks: the lance is a thick bright beam with the Farsight's
+# sound, the orb starts at the muzzle, is a glowing ball, and only this gun's
+# beam can set it off.
+awk '/^struct weaponfunc_shootsingle invfunc_shockrifle_beam = {/,/^};/' "$ROOT/src/game/invitems.c" \
+		| grep -qF 'SFX_813E' \
+	|| fail "the beam no longer fires with the Farsight's sound"
+awk '/^struct weaponfunc_shootprojectile invfunc_shockrifle_ball = {/,/^};/' "$ROOT/src/game/invitems.c" \
+		| grep -qF 'MODEL_CHRFLASHBANG' \
+	|| fail "the orb is back to a grenade-shaped projectile"
+grep -qF 'weaponHost(beam->weaponnum) == WEAPON_SHOCKRIFLE' "$ROOT/src/game/gunfx.c" \
+	|| fail "the Shock Rifle's beam has no wider lance of its own"
+grep -qF 'pos.x = newpos->x;' "$ROOT/src/game/bondgun.c" \
+	|| fail "the orb still starts from the player's body root"
+grep -qF 'weaponnum == WEAPON_SHOCKORB' "$ROOT/src/game/bondgun.c" \
+	|| fail "the orb has no glow beam at launch"
+grep -qF 'weapon->timer240 == 0' "$ROOT/src/game/propobj.c" \
+	|| fail "nothing detonates an orb when the beam hits it"
+grep -qF 'propExplode(prop, EXPLOSIONTYPE_PHOENIX)' "$ROOT/src/game/propobj.c" \
+	|| fail "a detonating orb makes no burst"
+grep -qF 'weaponnum == WEAPON_SHOCKORB' "$ROOT/port/src/net/netpuppets.c" \
+	|| fail "a client's orb has no glow trail"
+grep -qF 'boltbeamSetBlue(beamnum)' "$ROOT/src/game/bondgun.c" \
+	|| fail "the orb's glow is not tinted blue"
+grep -qF 'boltbeamSetBlue(beamnum)' "$ROOT/port/src/net/netpuppets.c" \
+	|| fail "a client's orb glow is not tinted blue"
 
 echo "shock: as expected"

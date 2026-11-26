@@ -827,6 +827,26 @@ Two separate causes, both visible on an online host in a room passage:
 fires from the client, and asserts the puppet log's `bolt beams` count climbs
 alongside source pins for the camera threading and launch grace.
 
+### Feel tweaks (2026-11-26)
+
+- The lance is a wider beam: `gunfx.c` gives `WEAPON_SHOCKRIFLE` a 85-unit
+  half-width (the laser's usual 50), a 2.0 cross-beam halo (the usual 1.4142)
+  and a slightly slower flight so the extra width is visible. The colour was
+  already opaque white; thickness and the halo are what make it brighter.
+- Its firing sound is `SFX_813E`, the Farsight's discharge, rather than the
+  Moonraker pulse `SFX_8043` the orb still uses in flight.
+- A player-fired orb now starts at `hand->muzzlepos` rather than the player's
+  body root (`bgun0f09ed2c()`). Fast grenades hid the same difference; the
+  slow orb did not. A simulant's orb was already correct.
+- The projectile mesh is `MODEL_CHRFLASHBANG` at 1.8 scale, a round ball
+  instead of a grenade, with a blue boltbeam glow driven each tick and
+  replicated for clients (`boltbeamSetBlue()`, `netpuppets.c`).
+- A beam hit reaches `objDamage()` with the rifle's weapon number, which now
+  zeroes a `WEAPON_SHOCKORB`'s timer. `weaponTick()` turns that into
+  `propExplode(EXPLOSIONTYPE_PHOENIX)`; the row still has no
+  `EXPLODESWHENSHOT`, so only this gun's beam and blasts can pop an orb. All
+  of it is host-authoritative.
+
 A third symptom showed up on G5: over a bridge whose room has no floor, the
 bolt turned up or down at the edge. It is not the camera fix and not a portal
 collision. The no-floor branch in `projectileTick()` (`propobj.c:8446`) moves

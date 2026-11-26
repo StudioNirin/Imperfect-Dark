@@ -2816,14 +2816,16 @@ void objFree(struct defaultobj *obj, bool freeprop, bool canregen)
 		}
 
 		if (weaponHost(weapon->weaponnum) == WEAPON_BOLT
-				|| weapon->weaponnum == WEAPON_BOWCASTERBOLT) {
+				|| weapon->weaponnum == WEAPON_BOWCASTERBOLT
+				|| weapon->weaponnum == WEAPON_SHOCKORB) {
 			s32 beammnum = boltbeamFindByProp(obj->prop);
 
 			if (beammnum != -1) {
-				// The plasma trail is longer, so let it retract a little
+				// The plasma trails are longer, so let them retract a little
 				// faster on release; both are manual beams until here, and
 				// without this the beam slot leaks and keeps drawing forever.
-				boltbeamSetAutomatic(beammnum, weapon->weaponnum == WEAPON_BOWCASTERBOLT ? 2600 : 1400);
+				boltbeamSetAutomatic(beammnum,
+						weapon->weaponnum == WEAPON_BOLT ? 1400 : 2600);
 			}
 		}
 
@@ -5510,6 +5512,53 @@ void weaponTick(struct prop *prop)
 		// A plasma bolt is not a crossbow bolt: its timer really is a timer.
 		// When it runs out the bolt fizzles rather than staying in the world.
 		if (weapon->timer240 >= 0) {
+			weapon->timer240 -= g_Vars.lvupdate240;
+
+			if (weapon->timer240 < 0) {
+				obj->hidden |= OBJHFLAG_DELETING;
+			}
+		}
+	} else if (weapon->weaponnum == WEAPON_SHOCKORB) {
+		struct projectile *projectile = obj->projectile;
+
+		// The orb's glow is the same near-opaque streak the Bowcaster's bolt
+		// uses, laid along its flight so it reads as a ball of light rather
+		// than a grenade. The scaled flashbang mesh supplies the hit box.
+		if (projectile && !(obj->hidden & OBJHFLAG_DELETING)) {
+			s32 beamnum = boltbeamFindByProp(prop);
+
+			if (beamnum != -1) {
+				f32 sx = projectile->speed.x;
+				f32 sy = projectile->speed.y;
+				f32 sz = projectile->speed.z;
+				f32 speed = sqrtf(sx * sx + sy * sy + sz * sz);
+
+				if (speed > 0.01f) {
+					const f32 trail = 120.f / speed;
+					struct coord head;
+
+					head.x = prop->pos.x - sx * trail;
+					head.y = prop->pos.y - sy * trail;
+					head.z = prop->pos.z - sz * trail;
+					boltbeamSetHeadPos(beamnum, &head);
+					boltbeamSetTailPos(beamnum, &prop->pos);
+				}
+			}
+		}
+
+		// Only the Shock Rifle's beam (or a blast) sets this to zero through
+		// objDamage(): a stray bullet must not pop every orb in the arena.
+		if (weapon->timer240 == 0) {
+			if (propExplode(prop, EXPLOSIONTYPE_PHOENIX)) {
+				weapon->timer240 = -1;
+
+				if (!(obj->hidden & OBJHFLAG_DELETING)) {
+					boltbeamSetAutomatic(boltbeamFindByProp(prop), 2600);
+				}
+
+				obj->hidden |= OBJHFLAG_DELETING;
+			}
+		} else if (weapon->timer240 > 0) {
 			weapon->timer240 -= g_Vars.lvupdate240;
 
 			if (weapon->timer240 < 0) {
@@ -17907,6 +17956,17 @@ void objDamage(struct defaultobj *obj, f32 damage, struct coord *pos, s32 weapon
 			// If damaging an explosive item, make it explode immediately by
 			// zeroing its timer
 			weapon = (struct weaponobj *) obj;
+
+			// The Shock Rifle's orb deliberately has no EXPLODESWHENSHOT
+			// flag: only this gun's beam, and a blast, may set it off. The
+			// weapon number handed to objDamage() is the rifle's for a shot
+			// and REMOTEMINE for blast damage (explosions.c), so a stray AR34
+			// round leaves the orb alone.
+			if (weapon->weaponnum == WEAPON_SHOCKORB
+					&& (weaponHost(weaponnum) == WEAPON_SHOCKRIFLE
+						|| weaponnum == WEAPON_REMOTEMINE)) {
+				weapon->timer240 = 0;
+			}
 
 			if (weaponHasFlag2(weapon->weaponnum, WEAPONFLAG2_EXPLODESWHENSHOT)
 					// the rocket shares its definition with the Skedar rocket,
