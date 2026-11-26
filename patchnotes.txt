@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 111 2026-11-26
+Shock Rifle: the orb is truly round and its blast is as large as a Devastator's.
+
 notes 110 2026-11-26
 Shock Rifle: orbs are round and depth-tested, and their burst is a real fast blast.
 
