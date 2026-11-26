@@ -28,11 +28,39 @@ The toolchain file expects a prefix at `~/.local/mingw64`, built once:
 - `apt install g++-mingw-w64-x86-64` — the C compiler alone is not enough,
   fast3d is C++.
 
+Pass the toolchain file on the configure line. `cmake -Bbuild-win .` without it
+configures for the *host*: it prints `Configuring done`, `Built target pd`, and
+leaves a Linux ELF in build-win with no `.exe`. That is what `netallgates.sh`
+did to every sweep until 2026-11-26, so the sweep's own header claimed a mingw
+build while its `netlobbywinetest` line read "no pd.x86_64.exe" with no cause.
+It now passes the file and fails the run if the exe is missing.
+
+What is in this box's prefix, so nobody has to guess whether it was ever built:
+
+```sh
+ls ~/.local/mingw64/lib     # libSDL2.a libSDL2.dll.a libz.a  (SDL2 2.32.10, zlib 1.3.1)
+```
+
+SDL2 from `SDL2-devel-2.32.10-mingw.tar.gz` on libsdl.org, unpacked and its
+`x86_64-w64-mingw32/` copied in, as above. zlib static only, which is all the
+build wants (`find_package(ZLIB REQUIRED)`), built in the source directory:
+
+```sh
+make -f win32/Makefile.gcc PREFIX=x86_64-w64-mingw32- libz.a
+cp libz.a ~/.local/mingw64/lib/ && cp zlib.h zconf.h ~/.local/mingw64/include/
+```
+
 Watch the configure output for `using WinHTTP - ghost server support enabled`;
-without it the updater and the encoder download are compiled out.
+without it the updater and the encoder download are compiled out. Confirm it on
+the exe rather than trusting the log: `x86_64-w64-mingw32-objdump -p
+build-win/pd.x86_64.exe | grep DLL.Name` should show `WINHTTP.dll` and no
+`LIBCURL`.
 
 Running it under wine: copy `SDL2.dll` from the prefix and
-`/usr/lib/gcc/x86_64-w64-mingw32/*-win32/libgcc_s_seh-1.dll` next to the exe, put
+`/usr/lib/gcc/x86_64-w64-mingw32/*-win32/libgcc_s_seh-1.dll` next to the exe (that
+glob is empty unless the win32-threads variant of mingw is installed; Debian's
+`g++-mingw-w64-x86-64` puts it at `/usr/x86_64-w64-mingw32/bin/libgcc_s_seh-1.dll`,
+which `tools/ci/netlobbywinetest.sh` searches too), put
 the ROM in `build-win/data/`, and
 
 ```sh

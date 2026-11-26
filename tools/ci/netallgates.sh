@@ -7,7 +7,9 @@
 # source files link), runs each tools/ci/net*test.sh alone (several are load
 # sensitive: CLAUDE-notes/netplay.md lists them), the replay gate against
 # build/pd-base.x86_64 (the pre-netplay baseline), pdlobbyd's tests and
-# pd-nettest. Read the log: a gate prints "exit N" and its last lines.
+# pd-nettest. Read the log: a gate prints "exit N" and its last lines. A Windows
+# build that cannot be configured is reported too, so a missing
+# build-win/pd.x86_64.exe cannot pass for a silent build.
 #
 # A gate that fails is run once more (RERUN=0 turns that off): passing the
 # second time it counts as FLAKY, not failed, and its first run's log is kept
@@ -34,8 +36,29 @@ rungate() {
 
 {
 cmake -Bbuild . >/dev/null && cmake --build build -j8 2>&1 | grep -E "error|Built target pd$"
-cmake -Bbuild-win . >/dev/null 2>&1 && cmake --build build-win -j8 2>&1 | grep -E " error|Built target pd$"
 npass=0; nflaky=0; nfail=0; notes=""
+
+# The Windows build, and a report on it. This used to be
+# `cmake -Bbuild-win . >/dev/null 2>&1 && cmake --build build-win -j8`, which
+# threw the configure's output away and short-circuited on failure: a machine
+# without mingw SDL2 and zlib therefore ran no Windows build at all, printed
+# nothing, and the sweep still reported its gates - while its own header said it
+# builds mingw. netlobbywinetest's bare "no pd.x86_64.exe" was the first anyone
+# saw of it, with no cause. Keep the logs and fail the run on the missing exe.
+# And pass the toolchain file: without it cmake configures build-win for the
+# host, so the step built a Linux binary under build-win, printed "Built target
+# pd", and still left netlobbywinetest looking for a pd.x86_64.exe that the
+# configuration was never going to make.
+echo "== mingw (build-win)"
+cmake -Bbuild-win . -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64.cmake > build/mingw-configure.log 2>&1
+cmake --build build-win -j8 > build/mingw-build.log 2>&1
+grep -E " error|Built target pd$" build/mingw-build.log 2>/dev/null
+if [ ! -f build-win/pd.x86_64.exe ]; then
+	echo "     no build-win/pd.x86_64.exe; the last of the configure:"
+	tail -4 build/mingw-configure.log | sed 's/^/     /'
+	nfail=$((nfail + 1))
+	notes="$notes\nFAIL   mingw: no build-win/pd.x86_64.exe, so netlobbywinetest has no WinHTTP client to run (build/mingw-configure.log)"
+fi
 for t in $GATES; do
 	[ -x tools/ci/$t.sh ] || { echo "MISSING $t"; nfail=$((nfail + 1)); notes="$notes\nFAIL   $t: no tools/ci/$t.sh"; continue; }
 	echo "== $t"
