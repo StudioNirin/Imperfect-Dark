@@ -115,8 +115,10 @@ struct explosiontype g_ExplosionTypes[] = {
 	/*23*/ { 100, 80,  4,   1.4,  210,  220,  500,  90,  2, 5, SMOKETYPE_LARGE,        0x809f, 4     },
 	/*24*/ { 80,  60,  4,   1.4,  500,  200,  400,  90,  2, 5, SMOKETYPE_LARGE,        0x809f, 4     },
 	/*25*/ { 640, 480, 32,  11.2, 1600, 1000, 1000, 180, 2, 5, SMOKETYPE_NONE,         0x80a4, 4     },
-	// 26 is the orb's flash: a six-frame expansion with no fire or smoke.
-	/*26*/ { 110, 110, 0,   0,    110,   0,    0,    6,   1, 1, SMOKETYPE_NONE,         0x0000, 0     },
+	// 26 is the orb's flash: a six-frame expansion with no fire or smoke,
+	// but a real blast so a hit does damage. The short duration and high
+	// propagation rate make it an instant burst, not a lingering flame.
+	/*26*/ { 110, 110, 0,   0,    110,   90,   140,  6,   4, 1, SMOKETYPE_NONE,         0x809f, 2     },
 };
 
 bool explosionCreateSimple(struct prop *prop, struct coord *pos, RoomNum *rooms, s16 type, s32 playernum)
@@ -1594,20 +1596,20 @@ Gfx *explosionRender(struct prop *prop, Gfx *gdl, bool xlupass)
 
 			vertices[0].s = 0;
 			vertices[0].t = 0;
-			vertices[1].s = g_TexShieldConfigs[0].width * 32;
+			vertices[1].s = g_TexLightGlareConfigs[0].width * 32;
 			vertices[1].t = 0;
-			vertices[2].s = g_TexShieldConfigs[0].width * 32;
-			vertices[2].t = g_TexShieldConfigs[0].height * 32;
+			vertices[2].s = g_TexLightGlareConfigs[0].width * 32;
+			vertices[2].t = g_TexLightGlareConfigs[0].height * 32;
 			vertices[3].s = 0;
-			vertices[3].t = g_TexShieldConfigs[0].height * 32;
+			vertices[3].t = g_TexLightGlareConfigs[0].height * 32;
 
 			for (j = 0; j < 4; j++) {
 				vertices[j].colour = 0;
 			}
 
-			texSelect(&gdl, &g_TexShieldConfigs[0], 4, 0, 2, true, NULL);
+			texSelect(&gdl, &g_TexLightGlareConfigs[0], 4, 0, 2, true, NULL);
 			gDPSetCycleType(gdl++, G_CYC_2CYCLE);
-			gDPSetRenderMode(gdl++, G_RM_PASS, G_RM_CLD_SURF2);
+			gDPSetRenderMode(gdl++, G_RM_AA_ZB_XLU_SURF, G_RM_AA_ZB_XLU_SURF2);
 			gDPSetEnvColor(gdl++, 100, 180, 255, (s32) alpha);
 			gDPSetPrimColor(gdl++, 0, 0, 255, 255, 255, (s32) alpha);
 			gDPSetCombineMode(gdl++, G_CC_CUSTOM_00, G_CC_CUSTOM_01);

@@ -862,9 +862,17 @@ world position by `camGetProjectionMtxF()`, which is view-to-world, instead
 of `camGetWorldToScreenMtxf()` (world-to-view); the sphere was somewhere
 else entirely. And `beamRenderGeneric()` is one flat ribbon, so the blue
 glow was a small 2D streak: `orbRender()` in `gunfx.c` now draws a single
-camera-facing round shield-textured sprite at the projectile's position,
-45 units in radius, matching the hit sphere. The timeout now always lands
-on zero so a spent orb flashes deterministically.
+camera-facing sprite at the projectile's position, 45 units in radius,
+matching the hit sphere. The timeout now always lands on zero so a spent
+orb flashes deterministically.
+
+The first sprite choice was wrong: `g_TexShieldConfigs[0]` is a cubed
+shield pattern and the render mode had no depth test, so players saw a blue
+cube floating in front of scenery. Both the orb and its flash now use the
+round `g_TexLightGlareConfigs[0]` and `G_RM_AA_ZB_XLU_SURF`, which restores
+depth sorting. The flash type's radii and damage are non-zero: it is a real
+blast with a six-frame burst rather than a cosmetic puff, which is what the
+detonation was missing when the type had zeroes in those fields.
 
 A third symptom showed up on G5: over a bridge whose room has no floor, the
 bolt turned up or down at the edge. It is not the camera fix and not a portal
