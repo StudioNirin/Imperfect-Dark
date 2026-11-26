@@ -24,7 +24,7 @@
 #include "netint.h"
 
 /**
- * Combat Simulator scenarios online (PLANS/NETPLAY.md phase 7a).
+ * Combat Simulator scenarios online (CLAUDE-notes/netplay.md phase 7a).
  *
  * The host plays every scenario as it always has: its scenarioTick, every
  * player's scenarioTickChr (the remote players' in their passes on the

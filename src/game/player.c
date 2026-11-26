@@ -4229,7 +4229,7 @@ bool playerHasSharedViewport(void)
 {
 #ifndef PLATFORM_N64
 	// netplay: every machine draws one view, its own player's, whatever
-	// the player count (spec-coop.md)
+	// the player count (CLAUDE-notes/netplay.md)
 	if (g_NetMode != NETMODE_NONE) {
 		return false;
 	}

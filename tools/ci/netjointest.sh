@@ -1,5 +1,5 @@
 #!/bin/bash
-# netjointest.sh — join in progress, spectators and reconnects (PLANS/NETPLAY.md
+# netjointest.sh — join in progress, spectators and reconnects (CLAUDE-notes/netplay.md
 # phase 7; netproto.h "Join in progress", protocol 9).
 #
 # Loopback, offscreen on the GPU, every machine with a lobby ticket of its own

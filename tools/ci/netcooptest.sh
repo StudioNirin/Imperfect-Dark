@@ -1,6 +1,6 @@
 #!/bin/bash
 # netcooptest.sh — online co-op: the solo missions for up to twelve players
-# (PLANS/netplay/spec-coop.md, CLAUDE-notes/netplay.md "Online co-op").
+# CLAUDE-notes/netplay.md "Online co-op".
 #
 # Loopback, offscreen on the GPU, a listen host and its clients on 127.0.0.1:
 #

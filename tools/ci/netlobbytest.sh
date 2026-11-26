@@ -1,7 +1,7 @@
 #!/bin/bash
 # netlobbytest.sh — do two games meet through a lobby room and come back to it?
 #
-# Phase 6a (PLANS/NETPLAY.md "Lobby"): a local pdlobbyd (tools/pdlobbyd,
+# Phase 6a (CLAUDE-notes/netplay.md "Lobby"): a local pdlobbyd (tools/pdlobbyd,
 # ephemeral ports, --auth open) and two pairs of games offscreen on the GPU,
 # each game signed in with its own Ghost Trials account and driven by
 # --net-lobby-script through the same calls the Online Game menus make:

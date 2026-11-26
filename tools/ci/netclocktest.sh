@@ -4,8 +4,8 @@
 # Runs replaytest.sh's 0x32 match case (80 sims, seeded, --fixed-step) once
 # through the stock loop and once per tick count through mainNetFrame with
 # --net-clock-test N (N tick passes per presented frame, every pass but the
-# last one's display list dropped, one pad sample per tick: PLANS/netplay/
-# spec-tick.md), hashing the state at every level frame. Each N must print the
+# last one's display list dropped, one pad sample per tick: CLAUDE-notes/netplay.md
+# CLAUDE-notes/netplay.md), hashing the state at every level frame. Each N must print the
 # stock run's lines exactly.
 #
 #   netclocktest.sh [BIN]     BIN a file name in build/ (pd.x86_64) or a path

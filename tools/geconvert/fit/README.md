@@ -3,7 +3,7 @@
 These scripts fit the GoldenEye XBLA release ("Project Bean") onto GoldenEye's
 own geometry and write the tables the port uses to draw the HD look over
 GE Plus. Moved here from `.xbla-work/ge-bean/` and `.xbla-work/ge-arena/`
-(step 1 of `PLANS/GE-CONVERT-DECOUPLE.md`) so the headers can be regenerated
+(step 1 of decoupling the conversion from the ROM) so the headers can be regenerated
 and checked from the repo.
 
 Only scripts and numbers are kept here: fit results, scales, offsets, and
@@ -139,7 +139,7 @@ at run time), `pdmodel.py` (PD model file walk), `pdbg.py` (PD bg rooms),
 - **`gunfit.json` is fitted on the decomp**
   (`assets/obseg/prop/<name>/Model.c`), not the ROM. It reproduces exactly.
 - **Inputs still derived from GoldenEye X.** GE Plus is built from the ROM
-  alone (`PLANS/GE-CONVERT-DECOUPLE.md`); these are not:
+  alone; these are not:
   - `gebeantable.h` (`gen_beantable.py`, for GE-X's own character files) and
     its `gemap.json`, `gexassign.json`, `texcompare.json`
   - `stagetable.json` and `stagefit_all.json` (`stagefit_all.py`,

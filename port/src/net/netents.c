@@ -38,8 +38,8 @@ _Static_assert(NETLP_NUMAMMO == NUM_AMMOTYPES,
 #include "netint.h"
 
 /**
- * The entity table and snapshots, the game's side (PLANS/netplay/
- * spec-entities.md §1, §6, §7; the wire in netsnap.c and netproto.h).
+ * The entity table and snapshots, the game's side (CLAUDE-notes/netplay.md
+ * CLAUDE-notes/netplay.md; the wire in netsnap.c and netproto.h).
  *
  * Stage 4a: the host enumerates its props, quantizes each into a fixed
  * record, and sends every client a snapshot every two or three ticks,
@@ -316,7 +316,7 @@ static void netDumpState(FILE *f, const struct netentstate *st, s32 kind)
 /*
  * The stage's setup table: setup command index <-> prop index, built on
  * both sides at the stage's start (after lvReset). setupGetCmdIndexByProp
- * is not used: it reads padding on x86_64 (spec-entities.md correction 2).
+ * is not used: it reads padding on x86_64 (CLAUDE-notes/netplay.md correction 2).
  */
 
 static s32 netCmdIsObj(u8 type)
@@ -404,7 +404,7 @@ static void netEntsBuildSetupTable(void)
 				s_SetupPropOfCmd[cmdindex] = idx;
 			}
 		} else if ((u8)PD_BE32(cmd[0]) == OBJTYPE_CHR) {
-			// a mission's chr (spec-coop.md): every machine spawns it from
+			// a mission's chr (CLAUDE-notes/netplay.md): every machine spawns it from
 			// the setup (bodyAllocateChr), so the host's maps to the
 			// client's by this command, as an object does
 			struct packedchr *packed = (struct packedchr *)cmd;

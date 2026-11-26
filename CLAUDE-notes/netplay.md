@@ -8,9 +8,13 @@
   host runs the only real simulation, clients send commands and pose the
   host's world from delta-coded snapshots, predict their own player and
   get lag-compensated hits. Rooms, the connectivity ladder and join tickets
-  come from `tools/pdlobbyd` on the VPS. Plan of record and specs live
-  outside the tree (`~/perfect-dark/PLANS/NETPLAY.md`,
-  `PLANS/netplay/spec-*.md`).
+  come from `tools/pdlobbyd` on the VPS. This file is the record: the plan
+  of record and the per-area specs were kept outside the tree, in
+  `~/perfect-dark/PLANS/`, that directory is gone, and the notes never carried
+  its `§` section numbering - so where code cites the old specs, read the
+  section of this file that covers the subject. Not every spec detail was
+  carried over: where a rule is load-bearing the comment states it, and the
+  commit named beside the code has the rest.
 - **Files** — the section of that name: `port/src/net/*` (one file per
   layer), `port/include/net/*` (what game code may include),
   `port/src/netlobbymenu.c` (the Online Game pages), `tools/pdlobbyd`,
@@ -30,7 +34,7 @@
   `bool` being two sizes to a client's START and a name's newline.
 - **Online co-op** — the section of that name: the solo missions for up to
   twelve players (`netcoop.c`, `src/game/coop.c`, protocol 12,
-  PLANS/netplay/spec-coop.md): the host plays PD's own co-op widened to N,
+  the specs, folded in here): the host plays PD's own co-op widened to N,
   clients pose its world; the mission's state rides in the scenario block.
   Also there: **a death online (protocol 22, 2026-10-08)** - the open
   seats that kept a room played alone on black for ever, the dead watching
@@ -363,7 +367,7 @@ and needs a cause.
 | `netjointest.sh` | 5.5 min | join in progress, a spectator, reconnect and its hold running out |
 | `netchattest.sh` | 4.5 min | protocol 18: chat on every machine in order, the host's burst limit (5 of 7, the sender alone told), the notices of a join in progress (with "3/4"), a spectator, a drop, a return within the hold, a hold running out and a spectator gone, a client's first PLAYERS, the host's pause Control page and Players page, screenshots of the feed, panel and open line |
 | `netwidetest.sh` | 2 min | phase 8: a host and eleven clients (twelve games at once, alone), every slot 1-11 walks from its own commands; a room of two refuses a third |
-| `netcooptest.sh` | 19.5 min (pair 4.5, twelve 2, lobby 1.2, ge 1.5, campaign 1.5, geend 2, camproom 1.5, death 1.5, endjoin 4, nomodroom 0.7, campleave 4) | online co-op (spec-coop.md; ge: GoldenEye's Dam as a co-op mission, the client mounting the conversion on demand and taking the set from RULES): a host and one, four and eleven clients on Defection (eleven: stacked on one spot): the host's mission in RULES, every client loads and passes GO, the opening cutscene starts and ends on a client at the host's clock, the guards are posed from SETUPCHR records, prediction matches after the opening, a client's death and START respawn, the host's abort reaching every end screen and every client back in the menus; a lobby room created as a co-op mission; campaign: a GoldenEye campaign host starting Dam alone from its folder, the opening ending on its own player, a client joining in progress with no opening, on the host's spot, predicting at 95% or better; geend: Dam's own ending kicked on a campaign host with a client in, the client taking the host's outro shot and fades, its START skipping the outro on the host, both screens fading, each machine on GoldenEye's REPORT page for its own player (the client's kills the host's), no PD end screen, the client's NEXTs closing its folder; camproom: a GoldenEye campaign room on a local pdlobbyd launched by its host alone, Dam started from the folder and aborted, the room still launched, a newcomer connecting between missions and taken into Facility; death: Mission Respawn off on a GoldenEye campaign's Dam with two seats open, the client killed (no respawn offered, out to watch the host's player), then the host killed (the mission lost, GoldenEye's replay three times on the host, the end after it, both on the report, killed); endjoin: a Perfect Dark campaign room, a joiner refused STARTED past 30 tries through a held barrier (gdb) and in once it lets go, its game killed, the host's death losing Defection, its game back while the host's end screen stays up (`--net-lobby-keep-endscreen`): taken at once for the next mission and in it; nomodroom: a Perfect Dark campaign room whose host has a mod the guest lacks, the guest's Game Lobby status line giving the NOMOD reason (not "connecting") and one connect only; campleave: a PD campaign room's host leaves it for another host's launched co-op room whose end screen is up, accepted for the next match (protocol 26), its Game Lobby saying so, the host told, and in the room's next launch; the pair's respawn runs with Mission Respawn on |
+| `netcooptest.sh` | 19.5 min (pair 4.5, twelve 2, lobby 1.2, ge 1.5, campaign 1.5, geend 2, camproom 1.5, death 1.5, endjoin 4, nomodroom 0.7, campleave 4) | online co-op (the specs, folded in here; ge: GoldenEye's Dam as a co-op mission, the client mounting the conversion on demand and taking the set from RULES): a host and one, four and eleven clients on Defection (eleven: stacked on one spot): the host's mission in RULES, every client loads and passes GO, the opening cutscene starts and ends on a client at the host's clock, the guards are posed from SETUPCHR records, prediction matches after the opening, a client's death and START respawn, the host's abort reaching every end screen and every client back in the menus; a lobby room created as a co-op mission; campaign: a GoldenEye campaign host starting Dam alone from its folder, the opening ending on its own player, a client joining in progress with no opening, on the host's spot, predicting at 95% or better; geend: Dam's own ending kicked on a campaign host with a client in, the client taking the host's outro shot and fades, its START skipping the outro on the host, both screens fading, each machine on GoldenEye's REPORT page for its own player (the client's kills the host's), no PD end screen, the client's NEXTs closing its folder; camproom: a GoldenEye campaign room on a local pdlobbyd launched by its host alone, Dam started from the folder and aborted, the room still launched, a newcomer connecting between missions and taken into Facility; death: Mission Respawn off on a GoldenEye campaign's Dam with two seats open, the client killed (no respawn offered, out to watch the host's player), then the host killed (the mission lost, GoldenEye's replay three times on the host, the end after it, both on the report, killed); endjoin: a Perfect Dark campaign room, a joiner refused STARTED past 30 tries through a held barrier (gdb) and in once it lets go, its game killed, the host's death losing Defection, its game back while the host's end screen stays up (`--net-lobby-keep-endscreen`): taken at once for the next mission and in it; nomodroom: a Perfect Dark campaign room whose host has a mod the guest lacks, the guest's Game Lobby status line giving the NOMOD reason (not "connecting") and one connect only; campleave: a PD campaign room's host leaves it for another host's launched co-op room whose end screen is up, accepted for the next match (protocol 26), its Game Lobby saying so, the host told, and in the room's next launch; the pair's respawn runs with Mission Respawn on |
 | `netmigratetest.sh` | 8 min (quit 1.5, crash 1.7, lobby 1.5, coop 1.6, served 1.7) | host migration (protocol 21): a host and two joiners per case, a lobby of its own each. quit: the host quits mid-match on 0x32 (two sims, three kills given to a seat): a joiner takes the room over, the other reconnects with a new ticket and its RESUME, the match carries on (clock within 4 s of the old host's, the kill table, every living record's life back at its place); crash: the same with the host gone as a crash is (the joiners' `hostlost` move the room on); lobby: the host leaves between matches, the room stays open under a joiner who plays the next match with the other on the room's arena; coop: Defection, the mission starts again under the new host; served: a GoldenEye arena whose joiner has nothing installed, hosted after the host quits from the served copy and served on to a newcomer |
 | `nettwelvetest.sh` | 6.5 min | phase 8: a `--dedicated` host and 2, 4, 8 and 12 clients (`COUNTS`) with six sims in a one-minute match: every slot plays, the last opens and shuts its pause menu with its pad's START (commands neutral meanwhile, the host playing on and playing it neutral), every name with its newline, reaches the end screen and leaves it; kill tables equal the host's at every sample and at MATCH_END; snapshot bytes and ENet's per-client rates measured against a budget, and printed as a table per player count |
 
@@ -645,7 +649,7 @@ then lists, joins, READYs and plays; the Linux host is
   host unless that player is dead, where it is the death screen's respawn as
   offline (`playerTick` reads A, Z or START; before protocol 11 a client's
   "Press START" did nothing). While a menu is up the client sends neutral
-  commands (spec-players §6) and logs "this machine's menu up/down", which
+  commands (the players spec, folded into this file) and logs "this machine's menu up/down", which
   nettwelvetest reads; `--net-test-menu-shot` has the game screenshot its
   first menu a third of a second in (a gdb stop came a second late, after a
   death had shut it). Phase 8 thought START never paused a client: its test
@@ -845,7 +849,7 @@ then lists, joins, READYs and plays; the Linux host is
 
 ## Online co-op
 
-The solo missions for up to twelve players (PLANS/netplay/spec-coop.md; the
+The solo missions for up to twelve players (the specs, folded in here; the
 user, 2026-10-07: "add online co-op up to 12 players for the game's solo
 missions", "no need for it to affect offline progress, like the locked
 progression").
@@ -1427,7 +1431,7 @@ nothing is ever sent from one machine to another but names and hashes.
   the client predicts while the host holds the player, so prediction
   wobbles for the opening and settles (75% -> 83% matched in the smoke
   run); not judged by the gate. GoldenEye's own code addresses players
-  through `g_Vars.currentplayernum`, so the pad-0 fear in spec-coop.md was
+  through `g_Vars.currentplayernum`, so the pad-0 fear in the specs, folded in here was
   unfounded. A mission ends on the folder's REPORT and STATISTICS pages
   online too, each machine's for its own player (protocol 16: "GoldenEye's
   end of a mission online", below); Perfect Dark's missions keep PD's co-op
@@ -2416,7 +2420,7 @@ settings would remain static."
 - **Where the host's settings leaked in.** Two ways. RULES' SYNC keys put
   the host's COD Style Aiming (and with it Aim Lock), Quick Weapon Swap,
   Skip Death Screen, Disable Fog, Glass See-Through and Tranquilizer Effect
-  over a client's own for the whole match (spec-stage.md had them SYNC for
+  over a client's own for the whole match (the specs, folded in here had them SYNC for
   prediction and, for the last three, fairness). And the host simulated a
   client's player by the host's own values of whatever it read during that
   player's tick or HUD pass. Probe (scratchpad own/run.sh: host all off,
@@ -3053,8 +3057,9 @@ in their own sections' notes.
 
 ## State and events apart (protocol 29, 2026-10-11)
 
-EverQuest Online Adventures' DRDP (`~/claude-eqoa/entity-channels.md`,
-`claude-notes/drdp-decompiled.md` "State Channel XOR Delta") keeps two
+EverQuest Online Adventures' DRDP (two notes kept outside the tree,
+`~/claude-eqoa/entity-channels.md` and `claude-notes/drdp-decompiled.md`, both
+since deleted; "State Channel XOR Delta") keeps two
 kinds of traffic: **state channels**, each a latest-value-wins buffer
 XOR-delta'd against what the other side acked and never resent, and a
 reliable stream for true one-shot **events** only. Our snapshots had been

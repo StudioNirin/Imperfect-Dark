@@ -5,7 +5,7 @@
 
 /**
  * The session: --host/--connect, the handshake, the match's rules and stage,
- * the load barrier and the match end (PLANS/netplay/spec-stage.md, the wire
+ * the load barrier and the match end (CLAUDE-notes/netplay.md, the wire
  * in netproto.h). Game code includes this through net.h, so it holds no bool
  * and nothing of ENet's. Every hook named H1..H14/HA..HD in the spec is one
  * of these calls, made behind g_NetMode != NETMODE_NONE.

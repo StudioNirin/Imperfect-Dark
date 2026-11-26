@@ -495,7 +495,7 @@ void joyConsumeSamples(struct joydata *joydata)
 
 #ifndef PLATFORM_N64
 /**
- * Netplay's present-only pass (PLANS/netplay/spec-tick.md §3d): the frame
+ * Netplay's present-only pass (CLAUDE-notes/netplay.md): the frame
  * sees no samples and nothing pressed or released, and the sample waiting
  * for the next tick stays where it is. Held buttons read samples[curlast].
  */
@@ -524,7 +524,7 @@ s32 joyHasPendingSample(void)
 }
 
 /**
- * Netplay's host (PLANS/netplay/spec-players.md §2): a remote player's
+ * Netplay's host (CLAUDE-notes/netplay.md): a remote player's
  * command goes into its pad of the sample the next tick consumes, before
  * joyConsumeSamples works out the presses from it
  */
@@ -548,7 +548,7 @@ void joyNetGetCurrentPad(s32 idx, OSContPad *pad)
 }
 
 /**
- * Netplay's prediction replay (PLANS/netplay/spec-players.md §7): the client
+ * Netplay's prediction replay (CLAUDE-notes/netplay.md): the client
  * plays its own commands again through bmoveTick, each one a sample of its
  * own consumed as a tick's, so presses and held timers come out as they did
  * live. What it borrows (the samples, the cooldown) is saved first and put

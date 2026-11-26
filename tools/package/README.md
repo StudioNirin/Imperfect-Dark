@@ -39,7 +39,7 @@ a package that will not start.
 ## Building the Windows package here
 
 Needs the cross toolchain the project already documents:
-`docs/windows-build.md` and `cmake/mingw-w64.cmake`, which looks for SDL2 and a
+`CLAUDE-notes/windows-build.md` and `cmake/mingw-w64.cmake`, which looks for SDL2 and a
 static zlib in `~/.local/mingw64`. Without it the script says so rather than
 configuring a build that cannot work.
 

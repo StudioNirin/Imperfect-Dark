@@ -37,7 +37,7 @@
 #include "netint.h"
 
 /**
- * Puppets on the client (PLANS/netplay/spec-entities.md §2, §3, §4).
+ * Puppets on the client (CLAUDE-notes/netplay.md).
  *
  * In a match's stage the client's world is the host's. The gates C1-C14 keep
  * this machine's own simulation off every prop but its player (no AI, no
@@ -2154,7 +2154,7 @@ static struct prop *netPupDyn(struct netpup *u, u16 id, u16 gen, s32 kind, s32 r
 	if (u->dyn) {
 		if (netEntsPropGen(netPupLocalIndex(u->dyn)) != u->dyngen) {
 			// this machine's weaponCreate/ammocrateAllocate took it back
-			// (spec-entities §1's slot-steal trap): made again below
+			// (the slot-steal trap): made again below
 			u->dyn = NULL;
 			s_Stolen++;
 		} else if (u->hostgen != gen) {
@@ -2326,7 +2326,7 @@ static void netClientPosePuppetsRun(void);
 
 /**
  * The pose step, then every event the render clock has reached: a tick's
- * records are posed before its events are applied (spec-entities.md §5)
+ * records are posed before its events are applied (CLAUDE-notes/netplay.md)
  */
 void netClientPosePuppets(void)
 {

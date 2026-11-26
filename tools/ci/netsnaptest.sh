@@ -1,7 +1,7 @@
 #!/bin/bash
 # netsnaptest.sh — does a client decode the host's snapshots exactly?
 #
-# Loopback (PLANS/netplay/spec-entities.md §1, §6, §7): a listen host (its
+# Loopback (CLAUDE-notes/netplay.md): a listen host (its
 # own player 0 on a scripted pad) and one client (slot 1) on 127.0.0.1, both
 # offscreen on the GPU, the 0x32 match with 8 sims. Both dump entity state
 # for host ticks DUMP_FROM..DUMP_TO (--net-snap-dump): the host what it

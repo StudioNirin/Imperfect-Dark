@@ -1,5 +1,5 @@
 /**
- * Mod.SimBrain: stock's decisions, the navmesh's legs (PLANS/AI-REWORK.md M3).
+ * Mod.SimBrain: stock's decisions, the navmesh's legs (CLAUDE-notes/simnav.md M3).
  * port/include/simbrain.h has the overview; this is the adapter between
  * stock's go-pos action (chraction.c) and the agents on the stage's mesh
  * (port/src/simnavagents.cpp).

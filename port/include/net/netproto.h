@@ -2,7 +2,7 @@
 #define _IN_NET_NETPROTO_H
 
 /**
- * Netplay's session messages, byte by byte (PLANS/netplay/spec-stage.md).
+ * Netplay's session messages, byte by byte (CLAUDE-notes/netplay.md).
  *
  * Every message is written and read field by field through netbuf (netbuf.h),
  * never a struct copied whole. Notation:
@@ -51,7 +51,7 @@
 // 11: a command's buttons keep START; the host plays it only for a dead
 //    player (the death screen's respawn), never for a living one (the
 //    client's pause menu is its own)
-// 12 (online co-op, spec-coop.md): RULES carries a mission block after
+// 12 (online co-op, CLAUDE-notes/netplay.md): RULES carries a mission block after
 //    maxexplosions (u8 coop, stageindex, difficulty, radar, friendlyfire);
 //    SNAP's scenario block is a mission block (scenario 0xfe) on a mission;
 //    the SETUPCHR descriptor (kind 10)
@@ -381,7 +381,7 @@
  *                               "all", the lobby's, is rom, borrow and
  *                               geconv alone)
  *   str(31) name              Net.Name, or the agent's name
- *   per-slot settings (spec-players.md §2):
+ *   per-slot settings (CLAUDE-notes/netplay.md):
  *     u8 mpheadnum, u8 mpbodynum   g_PlayerConfigsArray[0].base
  *     s16 headrow, s16 bodyrow     (protocol 15) the rows those name here
  *                                  (netWriteMpChar: past the list end, -1-k
@@ -484,8 +484,8 @@
  *   u8      code              NETREFUSE_*
  *   str(255) text
  *
- * RULES (host -> client, BULK) - the match state (spec-stage.md §3a) then
- * the SYNC ini values (§3b):
+ * RULES (host -> client, BULK) - the match state (CLAUDE-notes/netplay.md) then
+ * the SYNC ini values:
  *   u8      NETMSG_RULES
  *   u32     matchid
  *   g_MpSetup:
@@ -529,7 +529,7 @@
  *   u8      gexplusscenario       gexPlusGetScenario()
  *   u8      endless               g_MpEndlessMatch
  *   s32     maxexplosions         Game.MaxExplosions (a client keeps the larger)
- *   mission (protocol 12; spec-coop.md):
+ *   mission (protocol 12; CLAUDE-notes/netplay.md):
  *     u8 coop                     1: an online co-op mission, the fields below
  *                                 (0: a Combat Simulator match, zeros)
  *     u8 stageindex               g_SoloStages index (0 Defection .. 19 WAR)
@@ -568,7 +568,7 @@
  * STAGE_LOAD (host -> client, BULK, after its RULES)
  *   u8      NETMSG_STAGE_LOAD
  *   u32     matchid
- *   stage key (spec-stage.md §4):
+ *   stage key (CLAUDE-notes/netplay.md):
  *     u8 kind                     0 stock, 1 mod or Stage Loader map, 2 overlay arena,
  *                                 3 a conversion's mission (protocol 14)
  *     kind 0: u8 id
@@ -835,7 +835,7 @@
  *   per-slot settings             exactly CONNECT's block
  *
  * CMD (client -> host, UNRELIABLE, once a tick from GO) - the client's
- * usercmds (spec-players.md §2): every one the host has not acked, newest
+ * usercmds (CLAUDE-notes/netplay.md): every one the host has not acked, newest
  * last, at most NET_MAXCMDSEND (the oldest are dropped past that; the host
  * then skips them). A command's tick is the client's g_NetTick it was
  * captured on; the host plays them in tick order, one per host tick.
@@ -924,7 +924,7 @@
  * newest it has, with as depth how far that is ahead of the host's tick.
  *
  * CMDACK (host -> client, UNRELIABLE, once a host tick) - what the host has
- * of this client's commands, and the clock (spec-tick.md §3b). (protocol
+ * of this client's commands, and the clock (CLAUDE-notes/netplay.md). (protocol
  * 30) 9 bytes: u8 NETMSG_CMDACK, u8 matchid's low byte, u32 hosttick, s16
  * ack - hosttick (-32768 none), u8 depth; before it, whole:
  *   u8      NETMSG_CMDACK
@@ -939,7 +939,7 @@
  * SNAP (host -> client, UNRELIABLE sequenced, every 2 host ticks, 3 while
  * snapshots are lost (protocol 23: never for the cap leaving changes); at most
  * NET_MAXUNRELIABLE bytes) - the world as this client may see it
- * (PLANS/netplay/spec-entities.md §7; netsnap.c builds and checks it)
+ * (CLAUDE-notes/netplay.md; netsnap.c builds and checks it)
  *   u8      NETMSG_SNAP
  *   u32     matchid
  *   u16     seq                   per client, wraps, never 0
@@ -971,7 +971,7 @@
  *                builds one from the body and head a chr there wears)
  *     SETUPCHR:  (protocol 12; kind 10, CHR records) a mission's setup
  *                chr: u16 setup command index, s16 bodynum, s16 headnum.
- *                Every machine spawns it from the setup (spec-coop.md);
+ *                Every machine spawns it from the setup (CLAUDE-notes/netplay.md);
  *                the client poses its own from the record
  *     DYNWEAPON: u8 weaponnum, u8 gunfunc, s16 modelnum, u8 objtype
  *     SCENOBJ:   (protocol 7; kind 9, OBJ records only) a scenario's prop,
@@ -1130,7 +1130,7 @@
  *
  * EVENTS (host -> client, RELIABLE, at the end of a host tick that had any
  * for this client, before that tick's SNAP; and before MATCH_END) - what
- * happened in the tick (PLANS/netplay/spec-entities.md §5; netevents.c).
+ * happened in the tick (CLAUDE-notes/netplay.md; netevents.c).
  * The client applies a tick's events once its render clock reaches the
  * tick, after the snapshot records it poses for it, in tick order.
  * (protocol 29) Three classes, each a message type on a channel of its own,

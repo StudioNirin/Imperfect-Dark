@@ -1388,7 +1388,7 @@ char *endscreenMenuTextTargetTime(struct menuitem *item)
 void endscreenSetCoopCompleted(void)
 {
 #ifndef PLATFORM_N64
-	// netplay: an online mission never writes offline progress (spec-coop.md)
+	// netplay: an online mission never writes offline progress (CLAUDE-notes/netplay.md)
 	if (g_NetMode != NETMODE_NONE) return;
 #endif
 

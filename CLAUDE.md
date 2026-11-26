@@ -57,9 +57,12 @@ missions; the other instruments (view, guns, AI trace, converter read census and
 listed in its contract table. Every instrument runs its own null and refuses to report when it fails. Reach for it
 before writing a one-off probe for a GE Plus F3.
 
-Long-range plans (modularity, simulant AI, GE converter decoupling,
-optimisations, head fit) are in `~/perfect-dark/PLANS/`, outside this tree;
-start at its `README.md`.
+What each area does, and why it is that way, is in `CLAUDE-notes/`: one file
+per area (`netplay.md`, `weapons.md`, `simnav.md`, `mods.md`, `performance.md`
+and the rest), written up as the decisions were made, traps included.
+Long-range plans were kept in `~/perfect-dark/PLANS/`, outside this tree, and
+that directory is gone; a citation that named one now points at the notes file
+that covers the same ground, and the commit named beside it has the detail.
 
 The GE-X import's pick-up list (2026-09-05) is in mods.md's digest.
 

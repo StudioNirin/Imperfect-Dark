@@ -57,7 +57,7 @@ extern s32 g_NumReasonsToEndMpMatch;
 #include "netrdv.h"
 
 /**
- * The session (PLANS/netplay/spec-stage.md; every message in netproto.h):
+ * The session (CLAUDE-notes/netplay.md; every message in netproto.h):
  *
  *   --host [port]          a listen host (dedicated with --dedicated) on
  *                          Net.Port, 27100 unless set
@@ -6517,7 +6517,7 @@ void netSessionLobbyStartMatch(void)
 		return;
 	}
 
-	// a co-op room: the mission (spec-coop.md)
+	// a co-op room: the mission (CLAUDE-notes/netplay.md)
 	if (g_NetCoopSetup.on) {
 		sysLogPrintf(LOG_NOTE, "net: lobby: starting the room's co-op mission %d of %s, %d clients", g_NetCoopSetup.stageindex,
 				netCoopGameName(g_NetCoopSetup.game), netSessionHostNumClients());

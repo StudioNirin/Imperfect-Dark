@@ -8,7 +8,7 @@
 
 /**
  * Netplay's face to the game: the mode, the pass the main loop is on, and the
- * one-line calls the hooks make (PLANS/NETPLAY.md, PLANS/netplay/spec-*.md).
+ * one-line calls the hooks make (CLAUDE-notes/netplay.md, CLAUDE-notes/netplay.md).
  *
  * Game code includes this, so it must never pull in <stdbool.h> or ENet
  * (bool-two-sizes): nothing here is a bool, everything is s32/u32. Every hook
@@ -61,7 +61,7 @@ s32 netSlotHasMouse(s32 playernum);
 #define NET_LOCAL_UI(pn) (g_NetMode == NETMODE_NONE ? (pn) == 0 : netIsLocalSlot(pn))
 
 /**
- * Remote players (PLANS/netplay/spec-players.md). A pad index is a player's
+ * Remote players (CLAUDE-notes/netplay.md). A pad index is a player's
  * mpindex (its contpad1); a slot or playernum is g_Vars.players' index.
  */
 
@@ -105,7 +105,7 @@ struct player;
 struct player *netLocalPlayer(struct player *fallback);
 
 /**
- * Prediction (PLANS/NETPLAY.md "Prediction", netpredict.c). A client runs
+ * Prediction (CLAUDE-notes/netplay.md "Prediction", netpredict.c). A client runs
  * its own player on its own commands at once; when the host's state for a
  * command it played differs from what this machine had after the same
  * command, the host's state is taken and the commands since are played
@@ -133,7 +133,7 @@ void netPredictView(struct coord *eye, struct coord *up, struct coord *look);
 /**
  * Set around code that belongs to the player of the current pass (its gun,
  * its HUD, its own life) when that player is not this machine's: sndStart
- * then plays nothing, as nobody here is that player (spec-players.md §6).
+ * then plays nothing, as nobody here is that player (CLAUDE-notes/netplay.md).
  * World sounds started from the same pass still play: positional ones
  * lift the flag with netWorldSoundBegin/End.
  */
@@ -274,7 +274,7 @@ u32 netGfxVtxExtra(void);
 s32 netSessionMaxPlayers(void);
 
 /**
- * Entities (PLANS/netplay/spec-entities.md §1, §6): a prop slot's
+ * Entities (CLAUDE-notes/netplay.md): a prop slot's
  * generation, bumped whenever the slot is allocated or freed, so an entity
  * id (pool index, generation) never names two props. A side table, never a
  * field of struct prop.
@@ -287,7 +287,7 @@ void netPropGenBump(struct prop *prop); // H2 propAllocate, H3 propFree
 void netHostNoteVisible(s32 playernum);
 
 /**
- * Puppets on the client (PLANS/netplay/spec-entities.md §2-§4). In a
+ * Puppets on the client (CLAUDE-notes/netplay.md). In a
  * match's stage a client's world is the host's: no AI, no damage, no drops,
  * no pickups; every chr but its own player, every object, door and
  * projectile is posed from the snapshots (netpuppets.c). g_NetClientWorld
@@ -377,7 +377,7 @@ s32 netHudPanelUp(void);       // the players panel (hold P) is up: killfeed.c k
 s32 netHudPlayerRow(s32 k, char *name, s32 namesize, char *value, s32 valuesize);
 
 /**
- * Events (PLANS/netplay/spec-entities.md §5; the wire is EVENTS in
+ * Events (CLAUDE-notes/netplay.md; the wire is EVENTS in
  * netproto.h, netevents.c does the work). The host's hooks record, behind
  * g_NetMode == NETMODE_SERVER; the ones that return 1 tell the caller to
  * return (a hudmsg or pickup sound sent to the machine whose player it is;
@@ -404,7 +404,7 @@ void netEvNbomb(struct coord *pos, struct prop *owner);                         
 void netEvGas(struct coord *pos);                                                                                       // E9
 
 /**
- * Hits (PLANS/NETPLAY.md "Hits", netlagcomp.c). Around shotCalculateHits'
+ * Hits (CLAUDE-notes/netplay.md "Hits", netlagcomp.c). Around shotCalculateHits'
  * chr loop: on the host, in a remote player's pass, every other chr on that
  * screen is put where that player saw it when it fired (its matrices
  * rebuilt in fresh gfx memory, the live ones never written) and put back
@@ -439,7 +439,7 @@ void netLagCompAimTrace(void);  // --net-lagcomp-debug: a line per tick of a pla
 
 /**
  * Online co-op: the solo missions for up to twelve players (netcoop.c,
- * PLANS/netplay/spec-coop.md). The host plays the mission as offline co-op
+ * CLAUDE-notes/netplay.md). The host plays the mission as offline co-op
  * does (src/game/coop.c widens "the other player"); a client's world is the
  * host's, the mission's own state (cutscene, objectives, timer, alarm)
  * coming in the snapshots' block.

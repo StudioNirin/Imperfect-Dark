@@ -38,7 +38,7 @@
 
 /**
  * Remote players on the host and the client's usercmds
- * (PLANS/netplay/spec-players.md, spec-tick.md §3d; the wire in netproto.h).
+ * (CLAUDE-notes/netplay.md, CLAUDE-notes/netplay.md; the wire in netproto.h).
  *
  * A client captures one command a tick from the pad sample its own tick
  * consumed (its player's pad, START cleared) and the tick's mouse, and sends
@@ -57,7 +57,7 @@
  *
  * Each host tick tells each client how many of its commands wait (CMDACK);
  * the client trims its clock by up to 5% to keep one or two waiting
- * (Overwatch's time dilation, overwatch-netcode/NOTES.md §1.4).
+ * (Overwatch's time dilation).
  *
  * Slot numbering is the same on every machine: a client allocates all the
  * match's players, its own is g_NetLocalSlot (a playernum) on pad s_LocalPad
@@ -2164,7 +2164,7 @@ void netPlayersClientMatchStart(s32 pad)
 	}
 
 	// this machine's player is the client's own first player, whatever slot
-	// the host gave it (spec-players.md, correction 15)
+	// the host gave it (CLAUDE-notes/netplay.md, correction 15)
 	g_NetExtCfg[s_LocalPad] = g_PlayerExtCfg[0];
 
 	if (s_LocalPad != 0) {
@@ -2331,7 +2331,7 @@ static void netPlayersClientCapture(void)
 	}
 
 	// a menu open here has the pad: the player stands still on the host
-	// meanwhile (spec-players.md §6). So has GoldenEye's watch on a converted
+	// meanwhile (CLAUDE-notes/netplay.md). So has GoldenEye's watch on a converted
 	// level, which leaves the level running online (gewatch.c)
 	{
 		const s32 up = g_NetLocalSlot >= 0 && g_NetLocalSlot < MAX_PLAYERS

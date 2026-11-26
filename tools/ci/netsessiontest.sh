@@ -1,7 +1,7 @@
 #!/bin/bash
 # netsessiontest.sh — do two processes meet in a net game, and is a mismatch refused?
 #
-# Loopback (PLANS/netplay/spec-stage.md): a --dedicated host and one client
+# Loopback (CLAUDE-notes/netplay.md): a --dedicated host and one client
 # (offscreen, on the GPU) on 127.0.0.1. The host starts the 0x32 match once
 # the client has joined (--net-test-host 1); both must load the same stage
 # (every stage hash component equal, the post-load RNG among them), pass the

@@ -28,10 +28,10 @@
 #include "netint.h"
 
 /**
- * Lag-compensated hits on the host (PLANS/NETPLAY.md "Hits", step 3; phase
+ * Lag-compensated hits on the host (CLAUDE-notes/netplay.md "Hits", step 3; phase
  * 5b). Our own code: Source's player_lagcompensation.cpp and Unlagged's
- * g_unlagged.c were read for the shape only, and Overwatch's notes
- * (overwatch-netcode/NOTES.md) for the swept-volume broad phase and the rule
+ * g_unlagged.c were read for the shape only, and notes kept outside the tree
+ * (since deleted) for the swept-volume broad phase and the rule
  * that only positions and poses are rewound.
  *
  * Host, after every tick (netTickEnd, before the gfx swap): each chr's pose

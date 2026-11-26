@@ -14,7 +14,7 @@
 # run only on a box quiet enough to say so - before calling a red run here a
 # regression.
 #
-# Loopback (PLANS/NETPLAY.md "Prediction", phase 5a): a listen host and one
+# Loopback (CLAUDE-notes/netplay.md "Prediction", phase 5a): a listen host and one
 # client on 127.0.0.1, offscreen on the GPU, the 0x32 match with no sims
 # (flat ground, nothing to bump into), Start Armed, jumping on. The client's
 # pad and mouse come from a per-tick script (--net-test-input): walk,

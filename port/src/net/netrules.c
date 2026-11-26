@@ -26,7 +26,7 @@
 #include "mpweaponsets.h"
 
 /**
- * The match's rules (spec-stage.md §3): the host's match state and its
+ * The match's rules (CLAUDE-notes/netplay.md): the host's match state and its
  * gameplay ini values, written into RULES at the match start; a client takes
  * them over its own for the match (H3) and gives them back after (H12), and
  * pd.ini never sees them (H13).
@@ -100,7 +100,7 @@ static const struct {
 	// match. MUST_GE kept two players with it set differently out of each
 	// other's GoldenEye rooms whoever hosted (F3 20261009-053550, -060337)
 	{ "Mod.GePlusRevisionFixes",     NETKEY_SYNC },
-	// a mission's guards (spec-coop.md): the host's, as the AI is
+	// a mission's guards (CLAUDE-notes/netplay.md): the host's, as the AI is
 	{ "Mod.GuardsAlerted",           NETKEY_SYNC },
 	{ "Mod.AlertedGuards",           NETKEY_SYNC },
 	{ "Mod.GuardSpawnSpeed",         NETKEY_SYNC },
@@ -204,7 +204,7 @@ struct netrulesmsg {
 	u8 endless;
 	s32 maxexplosions;
 	u32 cheats[2];            // protocol 28: the host's g_CheatsEnabledBank0/1
-	struct netcooprules coop; // protocol 12: a mission (spec-coop.md)
+	struct netcooprules coop; // protocol 12: a mission (CLAUDE-notes/netplay.md)
 	struct netcontentneed content; // protocol 13: the host's mod and ROM hack mode (netcontent.c)
 	struct netkeyvalue keys[NET_MAXKEYS];
 	s32 nkeys;
@@ -1686,7 +1686,7 @@ static void netRulesPut(const struct netrulesmsg *rules, s32 coop)
 		g_BossFile.locktype = MPLOCKTYPE_NONE;
 	}
 
-	// a mission's settings (spec-coop.md): the host's mission and difficulty
+	// a mission's settings (CLAUDE-notes/netplay.md): the host's mission and difficulty
 	if (rules->coop.on && coop) {
 		netCoopClientApplyRules(&rules->coop);
 	}

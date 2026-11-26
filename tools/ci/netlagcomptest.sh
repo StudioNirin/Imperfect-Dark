@@ -1,7 +1,7 @@
 #!/bin/bash
 # netlagcomptest.sh — does the host count a remote player's shot where that player saw its target?
 #
-# Loopback (PLANS/NETPLAY.md "Hits", phase 5b): a listen host and two
+# Loopback (CLAUDE-notes/netplay.md "Hits", phase 5b): a listen host and two
 # clients on 127.0.0.1, offscreen on the GPU, Temple (0x25; with --rng-seed 1
 # the two clients start in sight of each other), Start Armed with the DY357
 # (no spread, so a shot goes where it is aimed on both machines),

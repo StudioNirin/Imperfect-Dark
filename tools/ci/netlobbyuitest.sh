@@ -2,7 +2,7 @@
 # netlobbyuitest.sh — the Online Game pages as a player sees them, and a
 # room's host reached by its second advertised endpoint
 #
-# Phase 7d polish (PLANS/NETPLAY.md "Lobby"): a local pdlobbyd (ephemeral
+# Phase 7d polish (CLAUDE-notes/netplay.md "Lobby"): a local pdlobbyd (ephemeral
 # ports, --auth open), three filler rooms made over its HTTP API (a long
 # name, a locked one, other content) kept alive by heartbeats, and one pair
 # of games offscreen on the GPU driven by --net-lobby-script with

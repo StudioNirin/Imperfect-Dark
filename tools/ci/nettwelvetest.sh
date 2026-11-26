@@ -18,7 +18,7 @@
 #     the script (ticks 630, 930, ... 2130: a press toggles it) as
 #     MENUROOT_MPPAUSE (4), draws, and goes down again (from START, or a
 #     death closes it); every command it sent while the menu was up was
-#     neutral (spec-players.md §6), and the host played on meanwhile
+#     neutral (CLAUDE-notes/netplay.md), and the host played on meanwhile
 #     (others moved on the host between those ticks) while that player
 #     was played as paused there: only neutral commands, its walk speed 0
 #     (its script walks in every window). That player

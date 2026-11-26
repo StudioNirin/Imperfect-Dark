@@ -4,7 +4,7 @@
 #include <PR/ultratypes.h>
 
 /**
- * The connectivity ladder (PLANS/NETPLAY.md "Lobby", phase 6b): how a room's
+ * The connectivity ladder (CLAUDE-notes/netplay.md "Lobby", phase 6b): how a room's
  * joiner reaches its host. netrdv.c speaks pdlobbyd's UDP rendezvous and
  * relay (tools/pdlobbyd/README.md, "UDP rendezvous" and "The relay") from
  * the game's own ENet socket, and the punch packets between the two games.

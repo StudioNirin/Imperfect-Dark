@@ -306,7 +306,7 @@ u32 configDumpSection(const char *section, char *dst, u32 dstsize)
 /**
  * A registered setting's type and variable, by key: netplay applies the
  * host's values for a match through it, many of them file statics nothing
- * else can reach (PLANS/netplay/spec-stage.md §3b). 0 if nothing has that key.
+ * else can reach (CLAUDE-notes/netplay.md). 0 if nothing has that key.
  */
 s32 configGetEntry(const char *key, s32 *type, void **ptr, u32 *maxstr)
 {

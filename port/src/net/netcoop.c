@@ -49,7 +49,7 @@
 
 /**
  * Online co-op: the solo missions for up to twelve players
- * (PLANS/netplay/spec-coop.md).
+ * (CLAUDE-notes/netplay.md).
  *
  * The host plays a mission as offline co-op does, bond (slot 0) and every
  * other seat a coop player (src/game/coop.c widens "the other player" to

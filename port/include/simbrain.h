@@ -2,7 +2,7 @@
 #define _IN_SIMBRAIN_H
 
 /**
- * The simulants' brain switch, Mod.SimBrain (PLANS/AI-REWORK.md M3 onwards).
+ * The simulants' brain switch, Mod.SimBrain (CLAUDE-notes/simnav.md M3 onwards).
  *
  * "stock" (the default) is Perfect Dark's simulant AI with this fork's fixes,
  * bit for bit: nothing below runs, nothing is built or allocated.

@@ -1,7 +1,7 @@
 #!/bin/bash
 # netnattest.sh — does the connectivity ladder find its way through NATs?
 #
-# Phase 6b (PLANS/NETPLAY.md "Lobby"): a joiner reaches its room's host over
+# Phase 6b (CLAUDE-notes/netplay.md "Lobby"): a joiner reaches its room's host over
 # the first rung that answers - LAN, direct, a hole punched through both NATs,
 # or pdlobbyd's relay - and the match then connects over it with the lobby's
 # ticket. Here every rung is made to be the one that answers, on emulated

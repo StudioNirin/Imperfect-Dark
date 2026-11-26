@@ -2,7 +2,7 @@
 # netlobbywinetest.sh — the Windows build's lobby client (WinHTTP) through a
 # whole room: list, join, ready, launch, a match, back in the room, chat
 #
-# Phase 7d (PLANS/NETPLAY.md "Lobby"): the lobby's HTTP runs over WinHTTP in
+# Phase 7d (CLAUDE-notes/netplay.md "Lobby"): the lobby's HTTP runs over WinHTTP in
 # the Windows build (port/src/ghostnet.c), curl in the Linux one; this runs
 # the WinHTTP side for real. A local pdlobbyd (ephemeral ports, --auth open),
 # the Linux build as the room's host offscreen on the GPU, and the mingw

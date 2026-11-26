@@ -617,7 +617,7 @@ void mpReset(void)
 		}
 
 		// A player per human slot: 0 and 1 (chrslots 0x03) offline; online
-		// co-op seats up to twelve (spec-coop.md), the host's mask in
+		// co-op seats up to twelve (CLAUDE-notes/netplay.md), the host's mask in
 		// g_MpHumanSlotsHi as a Combat Simulator match's
 		g_MpNumChrs = 0;
 

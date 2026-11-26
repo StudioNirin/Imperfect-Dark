@@ -576,7 +576,7 @@ void mainLoop(void)
 				g_MpSetup.storedbotbits = g_MpSetup.chrslots & 0xfff0;
 			}
 			// netplay: an online co-op mission keeps the seats H1/H3 set
-			// (spec-coop.md); offline co-op is players 0 and 1
+			// (CLAUDE-notes/netplay.md); offline co-op is players 0 and 1
 			if (g_NetMode == NETMODE_NONE) {
 				g_MpSetup.chrslots = 0x03;
 			} else {
@@ -714,7 +714,7 @@ void mainLoop(void)
 }
 
 /**
- * Netplay's frame (PLANS/netplay/spec-tick.md §3b): the ticks the clock says
+ * Netplay's frame (CLAUDE-notes/netplay.md): the ticks the clock says
  * are due, each one the whole of mainTick() as a stock frame of diff (1, 4)
  * with one pad sample of its own, and only the last of them drawn. No tick
  * due is a present-only pass, a paused frame that consumes no input; a host

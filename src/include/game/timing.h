@@ -10,7 +10,7 @@ void frametimeCalculate(void);
 void func0f16cf94(void);
 
 #ifndef PLATFORM_N64
-// Netplay's fixed tick (PLANS/netplay/spec-tick.md §2): a 60 Hz integer
+// Netplay's fixed tick (CLAUDE-notes/netplay.md): a 60 Hz integer
 // accumulator on the wall clock, and each tick pass applied as a stock frame
 void frametimeNetReset(void);
 s32 frametimeNetTicksDue(s32 maxticks, s32 rateppm);

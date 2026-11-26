@@ -5,7 +5,7 @@
 
 /**
  * The rules and colours a console mod's code changes that the port carries as
- * settings (CLAUDE-notes/lua.md, "The tail"): each has the stock value as its
+ * settings (CLAUDE-notes/mods.md, the section on what a mod's own code may change): each has the stock value as its
  * default, is set by a modconfig block or the pd call of the same name, and
  * is put back by modRulesReset() when a mod is swapped out.
  */

@@ -1,7 +1,7 @@
 #!/bin/bash
 # netpuppettest.sh — does the client pose the host's world?
 #
-# Loopback (PLANS/netplay/spec-entities.md §2-§4): a listen host (its own
+# Loopback (CLAUDE-notes/netplay.md): a listen host (its own
 # player 0 on a scripted pad) and clients on 127.0.0.1, offscreen on the GPU,
 # with 8 sims. The host dumps what it offered each client, unquantized, for
 # every snapshot (--net-snap-dump); each client traces its puppets as drawn

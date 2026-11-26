@@ -1,6 +1,6 @@
 /**
  * A hash of the simulation's state, for telling whether two runs played the
- * same game (tools/ci/replaytest.sh, PLANS/OPTIMIZATIONS.md #2).
+ * same game (tools/ci/replaytest.sh).
  *
  * Vertex counts off `--gfxstats` were the check before this: they catch a
  * divergence only once it reaches the screen, and a draw count carries a HUD

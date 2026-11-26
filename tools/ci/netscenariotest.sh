@@ -2,7 +2,7 @@
 # netscenariotest.sh — every Combat Simulator scenario online: does the
 # client's scenario state, its HUD's inputs and its scores follow the host's?
 #
-# Loopback (PLANS/NETPLAY.md phase 7a): for each case a listen host and one
+# Loopback (CLAUDE-notes/netplay.md phase 7a): for each case a listen host and one
 # client on 127.0.0.1, offscreen on the GPU, with sims playing the scenario
 # to a time limit, so the host ends the match and sends MATCH_END. Both
 # write --net-scen-log: the host a line per tick for the client's player

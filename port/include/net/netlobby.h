@@ -4,7 +4,7 @@
 #include <PR/ultratypes.h>
 
 /**
- * The lobby client (PLANS/NETPLAY.md "Lobby", phase 6a): rooms on pdlobbyd
+ * The lobby client (CLAUDE-notes/netplay.md "Lobby", phase 6a): rooms on pdlobbyd
  * (tools/pdlobbyd/README.md is the API) for the Online Game menus.
  *
  * Every request runs on one of the lobby's own two threads - one for the

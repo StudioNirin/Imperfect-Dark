@@ -200,7 +200,7 @@ s32 netSessionPort(void);                    // netsession.c: Net.Port
 void netSessionSetPort(s32 port);
 
 // netplayers.c: remote players on the host, the client's usercmds, the
-// clock (PLANS/netplay/spec-players.md, the wire in netproto.h)
+// clock (CLAUDE-notes/netplay.md, the wire in netproto.h)
 void netPlayersArgs(void);
 void netPlayersHostSlotStart(s32 slot, const struct netslotcfg *cfg); // H1, per joined client
 void netPlayersHostSlotCfg(s32 slot, const struct netslotcfg *cfg);   // SLOTCFG mid-match
@@ -280,7 +280,7 @@ struct prop *netEntsSetupLocal(s32 cmd);  // client: this machine's prop of a se
 u16 netEntsPropGen(s32 idx);
 void netEntsClientApplyLocal(void); // the local-player block (pose step)
 
-// netevents.c: the event channel (spec-entities.md §5)
+// netevents.c: the event channel (CLAUDE-notes/netplay.md)
 void netEventsStageStart(void);
 void netEventsMatchStopped(void);
 void netEventsHostFlush(void);       // the tick's events to each remote slot (netTickEnd)
@@ -335,7 +335,7 @@ void netPuppetsTraceFlush(void); // after the frame's lvRender: the traced poses
 
 // netlagcomp.c: lag-compensated hits on the host
 extern s32 g_NetLagComp;
-// Online co-op (netcoop.c, PLANS/netplay/spec-coop.md)
+// Online co-op (netcoop.c, CLAUDE-notes/netplay.md)
 struct netcooprules {
 	u8 on;
 	u8 stageindex;

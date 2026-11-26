@@ -1,7 +1,7 @@
 #!/bin/bash
 # netplayertest.sh — does the host play a remote player from its usercmds?
 #
-# Loopback (PLANS/netplay/spec-players.md): a listen host (its own player 0
+# Loopback (CLAUDE-notes/netplay.md): a listen host (its own player 0
 # on a scripted pad) and one client (slot 1) on 127.0.0.1, both offscreen on
 # the GPU, the 0x32 match with no sims, Start Armed with the Falcon 2. The client's local pad
 # and mouse come from a per-tick script (--net-test-input): walk forward,

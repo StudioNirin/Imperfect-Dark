@@ -6,7 +6,7 @@
 #include "net/netdelta.h"
 
 /**
- * Snapshots on the wire (PLANS/netplay/spec-entities.md §1, §6, §7; the
+ * Snapshots on the wire (CLAUDE-notes/netplay.md; the
  * message layout is in netproto.h, SNAP and CMD's ack block).
  *
  * This file is the game-free half: fixed quantized records, spawn
@@ -217,7 +217,7 @@ f32 netPosWire(f32 v);      // a place's coordinate as it comes off the wire (ei
  * The movement state in the local-player block (bytes 208..687): what the
  * walk carries from one tick into the next, at full precision, so a client
  * can start its replay of the commands the host has not played yet from the
- * host's own state (netpredict.c, PLANS/NETPLAY.md "Prediction"). Fields
+ * host's own state (netpredict.c, CLAUDE-notes/netplay.md "Prediction"). Fields
  * are struct player's of the same name; fallage is lvframe60 - fallstart,
  * as the two machines' level clocks differ.
  */

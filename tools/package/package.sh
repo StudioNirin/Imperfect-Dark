@@ -17,7 +17,7 @@
 # files it added, so a tree can be put back.
 #
 # A Windows package can be made here with the cross toolchain (see
-# docs/windows-build.md and cmake/mingw-w64.cmake) or taken from a CI run with
+# CLAUDE-notes/windows-build.md and cmake/mingw-w64.cmake) or taken from a CI run with
 # --from-artifact, which is what to use when the toolchain is not set up:
 #
 #   gh run download <run-id> -R StudioNirin/Imperfect-Dark -D /tmp/art
@@ -86,7 +86,7 @@ stage_windows_from_build() { # <build dir> <staging>
 	# libgcc must be linked in rather than shipped, because Check for
 	# Updates replaces only the exe and would leave an old copy beside it.
 	if objdump -p "$exe" | grep -qi -E 'DLL Name: (libwinpthread|libgcc_s)'; then
-		die "pd.x86_64.exe imports winpthreads or libgcc from a DLL; see docs/windows-build.md"
+		die "pd.x86_64.exe imports winpthreads or libgcc from a DLL; see CLAUDE-notes/windows-build.md"
 	fi
 	for sysroot in "$MINGW_PREFIX/bin" /usr/x86_64-w64-mingw32/bin; do
 		[ -d "$sysroot" ] || continue
@@ -160,7 +160,7 @@ build_one() { # <platform> -> the build directory on stdout
 	esac
 
 	if [ "$platform" = windows ] && [ ! -d "$MINGW_PREFIX" ]; then
-		die "$MINGW_PREFIX is not set up; see docs/windows-build.md, or pass --from-artifact"
+		die "$MINGW_PREFIX is not set up; see CLAUDE-notes/windows-build.md, or pass --from-artifact"
 	fi
 
 	note "configuring $platform"

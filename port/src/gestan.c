@@ -155,7 +155,7 @@ static u8 *stanLoadFile(u32 *len)
 /**
  * The SHA-256 of the stage's tile graph file as it is on disk, for netplay's
  * stage hash (the graph is read lazily, outside fileLoad(), so the hash
- * window never sees it: spec-stage.md §5 HD). 0 if the stage has none.
+ * window never sees it: CLAUDE-notes/netplay.md HD). 0 if the stage has none.
  */
 s32 geStanFileHash(u8 *out)
 {

@@ -2,7 +2,7 @@
 # neteventtest.sh — do the host's events reach the client, in order, and
 # does the client's scoreboard follow the host's?
 #
-# Loopback (PLANS/netplay/spec-entities.md §5): a listen host and one client
+# Loopback (CLAUDE-notes/netplay.md): a listen host and one client
 # on 127.0.0.1, offscreen on the GPU, Skedar (0x32) with 8 sims and a two
 # minute time limit, so the match ends on its own and the host sends
 # MATCH_END. Both write every event to --net-event-log (the host each it

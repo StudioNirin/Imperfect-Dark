@@ -7,7 +7,7 @@
 
 /**
  * Co-operative with more than two players (online co-op: up to twelve on a
- * mission, PLANS/netplay/spec-coop.md). The game's own co-op is bond
+ * mission, CLAUDE-notes/netplay.md). The game's own co-op is bond
  * (g_Vars.bond, player g_Vars.bondplayernum) and one coop player
  * (g_Vars.coop, g_Vars.coopplayernum); every place that asked "the other
  * player" or "bond or coop" asks these instead. At two players each gives

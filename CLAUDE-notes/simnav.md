@@ -24,8 +24,9 @@
 
 ## The navmesh (M1-M2, 2026-09-30)
 
-PLANS/AI-REWORK.md (outside the tree) has the plan and each milestone's
-numbers; the commits ae6f200ff, 0f191c80d and 708e46063 have the detail. In
+The plan itself was kept outside the tree, in
+`~/perfect-dark/PLANS/AI-REWORK.md`, and is gone: this file is the record. The
+commits ae6f200ff, 0f191c80d and 708e46063 have the detail. In
 short: every GEOFLAG_FLOOR1/2 tile is walkable, every GEOFLAG_WALL tile is
 solid, a GEOFLAG_DIE floor is solid ground nobody may stand on; radius 20,
 height 185 (90 kept on AIBOTDUCK/AIBOTCROUCH floors as areas DUCK/CROUCH),

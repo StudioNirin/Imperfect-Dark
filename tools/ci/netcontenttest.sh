@@ -1,5 +1,5 @@
 #!/bin/bash
-# netcontenttest.sh — content breadth online (PLANS/NETPLAY.md phase 7b):
+# netcontenttest.sh — content breadth online (CLAUDE-notes/netplay.md phase 7b):
 # GoldenEye's arenas, guns and scenarios, the Stage Loader's mod maps, an
 # overlay mod's arena, the XBLA look as one machine's own, and the props
 # phase 4 left unexercised (Mod.Bodies corpses, hats, lifts, glass, rockets,

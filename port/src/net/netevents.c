@@ -33,8 +33,8 @@
 #include "killfeed.h"
 
 /**
- * Events: the reliable, tick-stamped channel (PLANS/netplay/spec-entities.md
- * §5; the wire is EVENTS in netproto.h).
+ * Events: the reliable, tick-stamped channel (CLAUDE-notes/netplay.md
+ * the wire is EVENTS in netproto.h).
  *
  * Host: the hooks E1-E9 record what happened during the tick into one
  * buffer, each event marked with the player it is for (a hudmsg, a pickup

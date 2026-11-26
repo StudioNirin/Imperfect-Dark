@@ -22,7 +22,7 @@
  * file is the game's side: it sees types.h's bool, so it never includes
  * ENet; the transport is reached through nettransport.h's plain C face.
  *
- * Phase 2 (PLANS/netplay/spec-tick.md): the fixed tick, one pad sample per
+ * Phase 2 (CLAUDE-notes/netplay.md): the fixed tick, one pad sample per
  * tick, the mouse summed over a frame and spent by one tick, the host's slow
  * motion, and --dedicated. The session itself (--host/--connect, rules,
  * stage, barrier, match end) is netsession.c. Commands and snapshots come
@@ -289,7 +289,7 @@ void netWait(s32 us)
 }
 
 /**
- * One pad sample per tick (spec-tick.md §3d): held timers then advance once
+ * One pad sample per tick (CLAUDE-notes/netplay.md): held timers then advance once
  * a tick, and a press is seen by one tick only. A sample the stock loop read
  * before this stage loop took over stands for the first tick.
  */
@@ -297,7 +297,7 @@ void netTickReadPad(void)
 {
 	// only the local read is skipped for a pending sample: whatever this
 	// function later writes into the tick's sample (remote players' pads,
-	// spec-tick.md §3d) must run on every tick pass, the first included
+	// CLAUDE-notes/netplay.md) must run on every tick pass, the first included
 	if (!joyHasPendingSample()) {
 		joyStartReadData(&g_PiMesgQueue);
 		joyReadData();

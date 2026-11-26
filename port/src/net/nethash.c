@@ -22,8 +22,8 @@
 #include "netint.h"
 
 /**
- * What two machines must agree on before they play (spec-stage.md §5,
- * NETPLAY.md "Content safety"), as named components so that a refusal can
+ * What two machines must agree on before they play (CLAUDE-notes/netplay.md,
+ * CLAUDE-notes/netplay.md "Content safety"), as named components so that a refusal can
  * say which part differs.
  *
  * The session hash, sent in CONNECT, is taken once at startup over what

@@ -2,7 +2,7 @@
 #define _IN_SIMNAV_H
 
 /**
- * The simulants' navmesh (PLANS/AI-REWORK.md, milestones M1-M3):
+ * The simulants' navmesh (CLAUDE-notes/simnav.md, milestones M1-M3):
  * Recast/Detour (port/src/external/recastnavigation) built from a stage's
  * collision tiles, with off-mesh links for ladders, lifts, drops and jumps,
  * path queries, and agents that follow paths (M3,

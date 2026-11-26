@@ -31,7 +31,7 @@
 #include "netint.h"
 
 /**
- * Prediction (PLANS/NETPLAY.md "Prediction", phase 5a): a client runs its
+ * Prediction (CLAUDE-notes/netplay.md "Prediction", phase 5a): a client runs its
  * own player on its own commands the tick it makes them, and squares that
  * with the host afterwards by re-simulating, Quake 3 and Source's way (our
  * own code: cg_predict.c and prediction.cpp were read for the shape only).

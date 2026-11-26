@@ -2270,7 +2270,7 @@ void setupCreateProps(s32 stagenum)
 			if (g_Vars.mplayerisrunning) {
 #ifndef PLATFORM_N64
 				// online co-op past two players: the mission as its two-player
-				// co-op lays it out (spec-coop.md)
+				// co-op lays it out (CLAUDE-notes/netplay.md)
 				if (g_NetMode != NETMODE_NONE && g_Vars.coopplayernum >= 0) {
 					diffflag |= OBJFLAG2_EXCLUDE_2P;
 				} else
