@@ -317,8 +317,21 @@ without `CAP_SYS_PTRACE`); on this box gdb answers `warning: the
 treat a failed injection as an error, so on such a machine they report the missing
 artefact and any figure the injection was meant to create: `no events-explosion
 screenshot`, `no host screenshot`, `explosions 0`, `shots not heard (0/0)` - and
-they fail identically on the rerun, so they read as FAIL rather than FLAKY. The
-gates that need it are `neteventtest`, `netpuppettest`, `netantitest`,
+they fail identically on the rerun, so they read as FAIL rather than FLAKY.
+`tools/ci/quiety.sh GATE...` is the way to get a result worth having from the
+timing-sensitive ones: it waits for the 1-minute load average to come under
+`QUIET_LOAD` (8) before each gate and prints the load it saw with the exit code,
+because an exit code from `netpredicttest` or `netplayersonlinetest` carries no
+evidence without it. Stopping `netallgates.sh` is its own trap: the `bash -c`
+wrapper the harness reports as the job's PID is not the sweep, which runs as
+`timeout 3600 tools/ci/netallgates.sh` in its own process group, so signalling the
+wrapper leaves the sweep running, and it keeps launching three-game matches next to
+whatever you start next (that is how a `netpredicttest` relay figure doubled and a
+`netplayersonlinetest` key press went missing). Signal the group, `kill -TERM
+-PGID`, and check with `pgrep -x pd.x86_64`. Do not `pkill -f netallgates.sh` to
+clean up: the pattern matches your own command line, so it kills your own shell
+instead (exit 137, no output). The gates that need it are `neteventtest`,
+`netpuppettest`, `netantitest`,
 `netscenariotest`, `netcontenttest`, `netjointest`, `netchattest`,
 `nettwelvetest` and `netcooptest` (19 uses). None of that says anything about the
 change under test, so check the ptrace state before chasing one. A second class of
@@ -4741,6 +4754,17 @@ moved with conditions (62 ticks, 55 ticks) while `relay`'s **10.9 corrections a
 minute did not move at all** across three configurations of the same seed.
 Treat the timing cases as load-shaped until a quiet box says otherwise, and the
 corrections figure as a candidate real finding.
+
+**Read the two snap counters before touching the `snaps` check.** The summary
+line's `snaps %u, respawn/teleport snaps %u` are `s_Snaps` and `s_AbsSnaps`, and
+they are **disjoint** by declaration (`netpredict.c`: "corrections too large to
+ease (not respawns)" and "respawns and teleports"), not subset and superset. So
+`sims: 1 snaps` alongside `respawn/teleport snaps 1` is one genuine over-large
+correction *plus* a respawn snap, and `netpredicttest.sh`'s `snaps()` gating on
+total `snaps == 0` - while only *printing* the respawn count, and while its own
+comment and header say "no snaps but respawns and teleports" - is correct as it
+stands. Subtracting `s_AbsSnaps` there to match the comment would silence a real
+snap.
 
 **What the box was doing during run 4**: `load average 8.68` on 32 cores;
 61 GiB of RAM with **662 MiB free and 7.4 GiB in swap**; `basalt` - the model
