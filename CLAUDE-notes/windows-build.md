@@ -70,6 +70,16 @@ DISPLAY=:99 WINEDEBUG=-all wine pd.x86_64.exe --savedir 'C:\pdsave'
 with that directory made under `~/.wine/drive_c/` first. The
 `glDebugMessage*KHR` errors in the log are wine's GL lacking `KHR_debug`.
 
+`VERSION_HASH` comes from `git rev-parse` inside `execute_process`, so it is
+taken at *configure* time and a rebuild does not refresh it. That matters for
+`tools/ci/netlobbywinetest.sh`, which pairs `build/pd.x86_64` with
+`build-win/pd.x86_64.exe`: two directories configured at different commits make
+the host refuse the client's connect with a `[build]` refusal, and every check
+after READY then fails as if the lobby or WinHTTP were broken. It is not: on
+2026-11-26 the wine client signed in, listed, joined and reached READY over
+WinHTTP against a stale Linux host, and only the connect failed. Re-configure
+both directories at one commit before running it.
+
 `pd.ini` is a sectioned INI, not a flat one: `Mod.LoadTextures=1` on its own
 line is silently ignored, and has to be `[Mod]` then `LoadTextures=1`. The keys
 the code registers are `Section.Key`.

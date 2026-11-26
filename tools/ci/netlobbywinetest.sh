@@ -120,6 +120,16 @@ if command -v x86_64-w64-mingw32-objdump >/dev/null; then
 	x86_64-w64-mingw32-objdump -p "$WINEEXE" | grep -q "DLL Name: WINHTTP.dll" && pass "the exe's HTTP is WinHTTP (imports WINHTTP.dll)" \
 		|| fail "the exe does not import WINHTTP.dll"
 fi
+# The two binaries come from two different build directories, and VERSION_HASH is
+# baked by execute_process at configure time (CMakeLists.txt), so a directory
+# configured before the other's commit refuses the connect with a [build]
+# refusal. Every check after READY then fails while looking like a netplay bug;
+# the refusal says which side is stale, so lead with it.
+stale=$(grep -ho "The host's build is .*same build\." "$J" "$H" 2>/dev/null | head -1 | tr -d '\r')
+if [ -n "$stale" ]; then
+	fail "the two builds are not the same commit, so the host refused the connect: $stale"
+	fail "re-configure both (cmake -Bbuild . and cmake -Bbuild-win . -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64.cmake) and rebuild: the stamp is taken at configure time"
+fi
 room=$(sed -n 's/.*lobby: made room \([0-9a-f]*\).*/\1/p' "$H" | head -1)
 [ -n "$room" ] && pass "host made room $room" || fail "host made no room"
 grep -q "lobby: signed in as winejoiner" "$J" && pass "join (WinHTTP): signed in (POST /login)" || fail "join: never signed in"
