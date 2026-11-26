@@ -307,6 +307,29 @@ matters is each changed area's own case, `replaytest.sh compare` against the
 deployed build, `pd-nettest` and `netlobbywinetest.sh` (~25 min); the full
 run follows the deploy in the background.
 
+Some gates drive the running game from outside with `gdb -p PID -batch -ex
+'call ...'` to take a screenshot (`screenshotRequest`), to stage an explosion or
+a scorch, or to hold a joiner at a breakpoint. That needs ptrace, which a
+hardening setting can deny (`kernel.yama.ptrace_scope` above 0, or a container
+without `CAP_SYS_PTRACE`); on this box gdb answers `warning: the
+/proc/sys/kernel/yama/ptrace_scope setting of 1 might prevent attaching` and then
+`ptrace: Operation not permitted.`, and the call never happens. The gates do not
+treat a failed injection as an error, so on such a machine they report the missing
+artefact and any figure the injection was meant to create: `no events-explosion
+screenshot`, `no host screenshot`, `explosions 0`, `shots not heard (0/0)` - and
+they fail identically on the rerun, so they read as FAIL rather than FLAKY. The
+gates that need it are `neteventtest`, `netpuppettest`, `netantitest`,
+`netscenariotest`, `netcontenttest`, `netjointest`, `netchattest`,
+`nettwelvetest` and `netcooptest` (19 uses). None of that says anything about the
+change under test, so check the ptrace state before chasing one. A second class of
+local failure is a missing fixture: `netsessiontest`'s swap case runs both ends
+with `--moddir mod_allinone`, a loose mod folder beside the executable that the
+repository does not carry, and without it the client has no mod to switch to and
+the case fails with `mod none`. Neither class is checked in CI, which runs no
+`tools/ci/` gate at all, so a clean push says nothing about them either way - they
+are local-only, and a failure **outside** these two classes is a different matter
+and needs a cause.
+
 | Gate | Time (2026-10-06 run) | What it proves |
 |---|---|---|
 | `netclocktest.sh` | 0.5 min | `--net-clock-test N` state hashes equal the stock run |
