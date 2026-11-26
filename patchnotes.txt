@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 110 2026-11-26
+Shock Rifle: orbs are round and depth-tested, and their burst is a real fast blast.
+
 notes 109 2026-11-26
 Shock Rifle: orbs are round blue lights that can be reliably shot to set off a brief flash.
 
