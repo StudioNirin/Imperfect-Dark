@@ -40,6 +40,10 @@
 #
 # mod-base 69
 
+notes 112 2026-11-26
+Shock Rifle: the orb is a round glowing ball that sits behind scenery as it should, and shooting one sets off a blast as large as a rocket's.
+Shock Rifle: spawning with the gun now gives orbs as well as beam cells.
+
 notes 111 2026-11-26
 Shock Rifle: the orb is truly round and its blast is as large as a Devastator's.
 
