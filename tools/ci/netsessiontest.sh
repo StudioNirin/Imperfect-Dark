@@ -42,6 +42,17 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 BUILD=${BUILD:-$ROOT/build}
 OUT=${OUT:-$BUILD/netsession-out}; PORT=${PORT:-27160}
 MODDIR=${MODDIR:-mod_allinone}; FRAMES=${FRAMES:-700}
+
+# Four of the checks below play *inside* the host's mod: they ask the client to
+# enter it, load its stage and come back. That mod is a download the repo cannot
+# build (the All in One Mod; it goes beside the executable as mod_allinone), so
+# where it is absent those checks cannot run at all and say so instead of
+# reporting a failure - the idiom netcontenttest.sh already uses, and
+# netallgates.sh prints and counts the lines. Every other check in this gate
+# runs without the mod, and still fails for real when it should.
+mod_here() { local b=${BUILD:-${ROOT:-.}/build}; [ -e "$b/$MODDIR" ] || [ -e "$b/mods/$MODDIR" ]; }
+skip() { echo "skip $*"; }
+wantmod() { if mod_here; then fail "$*"; else skip "$* (no $MODDIR beside the executable, which this check plays inside)"; fi; }
 BIN=${1:-pd.x86_64}
 case $BIN in /*) ;; */*) BIN=$(realpath "$BIN") ;; *) BIN=$BUILD/$BIN ;; esac
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
@@ -202,7 +213,7 @@ fi
 
 # the client's --moddir carried a trailing slash: the stage key still matched
 grep -q "net: match 1: loading stage 0x32 of mod $MODDIR as" "$C" \
-	&& pass "loopback: --moddir $MODDIR/ resolved the host's stage key" || fail "loopback: stage key with a trailing slash"
+	&& pass "loopback: --moddir $MODDIR/ resolved the host's stage key" || wantmod "loopback: stage key with a trailing slash"
 
 if grep -q "renderD128: Permission denied" "$C"; then
 	fail "loopback: the client fell back to llvmpipe"
@@ -229,7 +240,7 @@ if grep -q "net: content: leaving \[nomod $MODDIR\]: The host plays with the mod
 		&& grep -q "net: session ended \[nomod\]" "$N" && grep -q "net-test-join: exiting 3" "$N"; then
 	pass "r-nomod: $(grep -m1 -o 'net: content: leaving.*' "$N" | cut -c1-120)"
 else
-	fail "r-nomod: $(grep -E 'net: (content|session ended|the host)' "$N" | head -3 | tr '\n' ';')"
+	wantmod "r-nomod: $(grep -E 'net: (content|session ended|the host)' "$N" | head -3 | tr '\n' ';')"
 fi
 S=$OUT/qclient.log
 if grep -q "net: content: entering for the host at the next stage from .*$MODDIR (this machine's Perfect Dark comes back after the session)" "$S" \
@@ -239,9 +250,14 @@ if grep -q "net: content: entering for the host at the next stage from .*$MODDIR
 		&& grep -qx "ModDir=" "$OUT/save-qclient/pd.ini"; then
 	pass "swap: qclient entered $MODDIR at the match's stage change (protocol 25, modmode.c), played its stage, back to Perfect Dark after the session, pd.ini's ModDir still empty"
 else
-	fail "swap: $(grep -E 'net: (content|match 1: loading|match 1: GO|session ended)' "$S" | head -5 | tr '\n' ';') pd.ini $(grep -m1 '^ModDir' "$OUT/save-qclient/pd.ini")"
+	wantmod "swap: $(grep -E 'net: (content|match 1: loading|match 1: GO|session ended)' "$S" | head -5 | tr '\n' ';') pd.ini $(grep -m1 '^ModDir' "$OUT/save-qclient/pd.ini")"
 fi
-if grep -q "net: stage hash mod " "$S" && grep -q 'slot 0 ("[^"]*") loaded the stage, every component the host' "$OUT/qhost.log"; then
+# With no mod this check passes on its face: both sides hash the mod component as
+# zero, which is the row the loopback stage-hash check above already covers. It
+# claims the mod's components, so without one it says so rather than passing.
+if ! mod_here; then
+	skip "swap: the host's stage-hash components including the mod's (no $MODDIR beside the executable, and both sides hashing no mod proves nothing about it)"
+elif grep -q "net: stage hash mod " "$S" && grep -q 'slot 0 ("[^"]*") loaded the stage, every component the host' "$OUT/qhost.log"; then
 	pass "swap: the host found every stage hash component (the mod among them) the client's"
 else
 	fail "swap: $(grep -m1 'net: stage hash mod' "$S"); host: $(grep -m1 'loaded the stage\|stagehash' "$OUT/qhost.log")"

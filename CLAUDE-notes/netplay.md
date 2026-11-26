@@ -339,12 +339,28 @@ instead (exit 137, no output). The gates that need it are `neteventtest`,
 `netscenariotest`, `netcontenttest`, `netjointest`, `netchattest`,
 `nettwelvetest` and `netcooptest` (19 uses). None of that says anything about the
 change under test, so check the ptrace state before chasing one. A second class of
-local failure is a missing fixture: `netsessiontest`'s swap case runs both ends
-with `--moddir mod_allinone`, a loose mod folder beside the executable that the
-repository does not carry, and without it the client has no mod to switch to and
-the case fails with `mod none`. Neither class is checked in CI, which runs no
+local failure is a missing fixture, and there are two fixtures, both player
+content the repository cannot build:
+
+- **`mod_allinone`**, the All in One Mod, a folder you download and put beside the
+  executable. `netsessiontest` runs both ends with `--moddir mod_allinone`, and the
+  four checks that play *inside* the host's mod (swap, the swap's stage-hash
+  components, `r-nomod`, and the trailing-slash stage key) have nothing to enter
+  without it. Everything else that gate checks runs fine without it.
+- **the converted GoldenEye arenas**, which the port writes into
+  `mods/GoldenEye Arenas/` at startup from a GoldenEye 007 (US) ROM in
+  `added-content/` (`gexplusrom.c`, ge-bean.md). No ROM, no Complex; so
+  `netmigratetest`'s `served`, `midfetch`, `fetchend` and `gesecond` cases, and
+  `netcontenttest`'s `ge*` cases, have no arena to migrate or fetch on. The log
+  says `gexplus: no GoldenEye 007 (US) ROM in added-content/; GoldenEye has no
+  arenas` on the way.
+
+Such a case prints `skip <case>: <reason>` and the gate still exits 0, because a
+box without a download is not a broken build; `netallgates.sh` prints every skip
+under its summary and counts them, so a case that never ran cannot be read as one
+that passed. Neither class is checked in CI, which runs no
 `tools/ci/` gate at all, so a clean push says nothing about them either way - they
-are local-only, and a failure **outside** these two classes is a different matter
+are local-only, and a failure **outside** these classes is a different matter
 and needs a cause.
 
 | Gate | Time (2026-10-06 run) | What it proves |

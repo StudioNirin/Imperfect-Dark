@@ -81,6 +81,16 @@ export SDL_VIDEODRIVER=${SDL_VIDEODRIVER:-offscreen} SDL_GAMECONTROLLER_IGNORE_D
 status=0
 fail() { echo "FAIL $*"; status=1; }
 pass() { echo "ok   $*"; }
+# A case that cannot be set up because a fixture this box does not have is
+# absent says nothing about migration, so it is reported as what it is rather
+# than as a failure - the idiom netcontenttest.sh already uses. The sweep prints
+# these lines and counts them, so a skip cannot be mistaken for a pass.
+skip() { echo "skip $*"; }
+# The four GoldenEye cases migrate a match on Complex, which is not in the ROM:
+# the port converts the arenas out of the player's GoldenEye 007 (US) ROM at
+# startup, into mods/GoldenEye Arenas (gexplusrom.c, ge-bean.md). No ROM, no
+# arena, so no GoldenEye case - see CLAUDE-notes/netplay.md's gate table.
+ge_ready() { [ -d "$BUILD/mods/GoldenEye Arenas" ] || [ -d "${ROOT:-}/run/mods/GoldenEye Arenas" ]; }
 
 waitfor() {
 	local log=$1 pattern=$2 n=$3
@@ -240,6 +250,13 @@ carried() {
 
 port=$GPORT
 for c in $CASES; do
+	case $c in
+	served|midfetch|fetchend|gesecond)
+		if ! ge_ready; then
+			skip "$c: no converted GoldenEye arenas to migrate a match on (a GoldenEye 007 (US) ROM in added-content/ makes them at startup)"
+			continue
+		fi ;;
+	esac
 	case $c in
 	quit)
 		run quit $port --net-test-stage 0x32 --net-test-sims 2 --rng-seed 21 --net-test-givekills 1,300,3 --net-lobby-quit-frame 900 \

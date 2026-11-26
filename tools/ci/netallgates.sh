@@ -92,7 +92,23 @@ python3 tools/pdlobbyd/test_pdlobbyd.py 2>&1 | tail -2
 ./build/pd-nettest 2>&1 | tail -1
 [ "${PIPESTATUS[0]}" = 0 ] || { nfail=$((nfail + 1)); notes="$notes\nFAIL   pd-nettest: build/pd-nettest"; }
 echo "== summary"
-echo "gates: pass $npass, flaky $nflaky, FAIL $nfail (FAIL counts replay, pdlobbyd and pd-nettest too)"
+# Cases a gate could not set up because a fixture this box does not have is
+# absent. They are not evidence either way, so they are listed here rather than
+# left in a per-gate log where a green summary would hide them: a skip must never
+# read as a pass. A gate's own exit status stays 0 for a skip, so that a box
+# without a download is not red; the count is what makes the gap visible. The
+# try1 logs are a rerun's first attempt, so they would count twice.
+nskip=0; skiplines=""
+for f in build/gate-*.log; do
+	[ -e "$f" ] || continue
+	case $f in *.try1.log) continue ;; esac
+	while IFS= read -r l; do
+		nskip=$((nskip + 1))
+		skiplines="$skiplines\n     $(basename "$f" .log | sed 's/^gate-//'): ${l#skip }"
+	done < <(grep -h "^skip " "$f" 2>/dev/null)
+done
+echo "gates: pass $npass, flaky $nflaky, FAIL $nfail (FAIL counts replay, pdlobbyd and pd-nettest too), cases skipped for a fixture this box does not have $nskip"
+[ "$nskip" = 0 ] || { echo "     skipped, so not evidence either way:"; printf "%b\n" "${skiplines#\\n}"; }
 [ -z "$notes" ] || printf "%b\n" "${notes#\\n}"
 } > "$LOG" 2>&1
 [ "$nfail" = 0 ]
