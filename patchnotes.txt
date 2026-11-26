@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 108 2026-11-26
+Shock Rifle: orbs are now the blue glow itself and are much easier to hit with the beam.
+
 notes 107 2026-11-26
 Shock Rifle: the beam is thicker and brighter, and fires with the Farsight's sound.
 Shock Rifle: orbs launch from the gun, glow blue, and explode when shot.
