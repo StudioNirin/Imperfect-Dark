@@ -40,6 +40,10 @@
 #
 # mod-base 69
 
+notes 107 2026-11-26
+Shock Rifle: the beam is thicker and brighter, and fires with the Farsight's sound.
+Shock Rifle: orbs launch from the gun, glow blue, and explode when shot.
+
 notes 106 2026-11-25
 Shock Rifle: the orb has its own ammo pool, so the gun is one weapon with two firing modes.
 Shock Rifle: no second weapon-wheel entry or Orb-only version after picking one up.
