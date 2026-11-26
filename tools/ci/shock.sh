@@ -290,14 +290,14 @@ grep -qF 'dist2 <= 45.0f * 45.0f' "$ROOT/src/game/propobj.c" \
 	|| fail "a beam can no longer hit the orb's light reliably"
 grep -qF 'static Gfx *orbRender' "$ROOT/src/game/gunfx.c" \
 	|| fail "the orb is still a flat beam ribbon rather than a round sprite"
-grep -qF 'g_TexLightGlareConfigs[0], 4, 0, 2, true, NULL' "$ROOT/src/game/gunfx.c" \
-	|| fail "the orb uses the shield's cube texture instead of a round glare"
+grep -qF 'g_TexShadowConfigs[0], 4, 0, 2, true, NULL' "$ROOT/src/game/gunfx.c" \
+	|| fail "the orb does not use the round soft shadow texture"
 awk '/^static Gfx \*orbRender/,/^}/' "$ROOT/src/game/gunfx.c" | grep -qF 'G_RM_AA_ZB_XLU_SURF' \
 	|| fail "the orb's glow does not depth-test against scenery"
-awk '/exp->type == EXPLOSIONTYPE_SHOCKFLASH/,/return gdl;/' "$ROOT/src/game/explosions.c" | grep -qF 'g_TexLightGlareConfigs[0]' \
-	|| fail "the flash still uses a cube texture"
-grep -qF '/*26*/ { 110, 110, 0,   0,    110,   90,   140,  6' "$ROOT/src/game/explosions.c" \
-	|| fail "the flash does no damage or has no blast radius"
+awk '/exp->type == EXPLOSIONTYPE_SHOCKFLASH/,/return gdl;/' "$ROOT/src/game/explosions.c" | grep -qF 'g_TexShadowConfigs[0]' \
+	|| fail "the flash still uses a square glare texture"
+grep -qF '/*26*/ { 180, 140, 0,   0,    180,   200,  400,  8' "$ROOT/src/game/explosions.c" \
+	|| fail "the flash is smaller than a Devastator or rocket blast"
 grep -qF 'g_BoltBeams[i].unk04 == 2' "$ROOT/src/game/gunfx.c" \
 	|| fail "the blue orb is not routed to its round renderer"
 grep -qF 'propExplode(prop, EXPLOSIONTYPE_SHOCKFLASH)' "$ROOT/src/game/propobj.c" \

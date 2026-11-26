@@ -1086,22 +1086,22 @@ static Gfx *orbRender(Gfx *gdl, struct coord *pos)
 	vertices[1].x = right.x - up.x;
 	vertices[1].y = right.y - up.y;
 	vertices[1].z = right.z - up.z;
-	vertices[1].s = g_TexLightGlareConfigs[0].width * 32;
+	vertices[1].s = g_TexShadowConfigs[0].width * 32;
 	vertices[1].t = 0;
 	vertices[1].colour = 0;
 
 	vertices[2].x = right.x + up.x;
 	vertices[2].y = right.y + up.y;
 	vertices[2].z = right.z + up.z;
-	vertices[2].s = g_TexLightGlareConfigs[0].width * 32;
-	vertices[2].t = g_TexLightGlareConfigs[0].height * 32;
+	vertices[2].s = g_TexShadowConfigs[0].width * 32;
+	vertices[2].t = g_TexShadowConfigs[0].height * 32;
 	vertices[2].colour = 0;
 
 	vertices[3].x = -right.x + up.x;
 	vertices[3].y = -right.y + up.y;
 	vertices[3].z = -right.z + up.z;
 	vertices[3].s = 0;
-	vertices[3].t = g_TexLightGlareConfigs[0].height * 32;
+	vertices[3].t = g_TexShadowConfigs[0].height * 32;
 	vertices[3].colour = 0;
 
 	mtx4LoadTranslation(pos, &mtx);
@@ -1112,7 +1112,7 @@ static Gfx *orbRender(Gfx *gdl, struct coord *pos)
 	gSPMatrix(gdl++, osVirtualToPhysical(spc8), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
 	// A soft round glare, not the shield's cubed pattern; keep the depth
 	// test so the orb is hidden behind columns and walls.
-	texSelect(&gdl, &g_TexLightGlareConfigs[0], 4, 0, 2, true, NULL);
+	texSelect(&gdl, &g_TexShadowConfigs[0], 4, 0, 2, true, NULL);
 	gDPSetCycleType(gdl++, G_CYC_2CYCLE);
 	gDPSetRenderMode(gdl++, G_RM_AA_ZB_XLU_SURF, G_RM_AA_ZB_XLU_SURF2);
 	gDPSetEnvColor(gdl++, 80, 160, 255, 220);

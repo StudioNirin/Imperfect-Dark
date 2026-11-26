@@ -868,11 +868,17 @@ orb flashes deterministically.
 
 The first sprite choice was wrong: `g_TexShieldConfigs[0]` is a cubed
 shield pattern and the render mode had no depth test, so players saw a blue
-cube floating in front of scenery. Both the orb and its flash now use the
-round `g_TexLightGlareConfigs[0]` and `G_RM_AA_ZB_XLU_SURF`, which restores
-depth sorting. The flash type's radii and damage are non-zero: it is a real
-blast with a six-frame burst rather than a cosmetic puff, which is what the
-detonation was missing when the type had zeroes in those fields.
+cube floating in front of scenery. `g_TexLightGlareConfigs[0]` was also
+wrong: asset `0c92` is a white square with a circle drawn inside, so the
+square edge remained visible. Both the orb and its flash now use
+`g_TexShadowConfigs[0]` (asset `000c`), a genuinely soft round IA blob,
+with `G_RM_AA_ZB_XLU_SURF` so the depth test works.
+
+The flash type's radii and damage were non-zero but far too small: 90/140
+units for a blast where the Devastator has 140/280 and a rocket 200/400.
+It is now 200/400 with 4 damage over 8 frames, and its single expanding
+sprite grows from 60 to 220 units. It is a real, fast blast rather than a
+cosmetic puff, and no slower than the explosions it sits beside.
 
 A third symptom showed up on G5: over a bridge whose room has no floor, the
 bolt turned up or down at the edge. It is not the camera fix and not a portal

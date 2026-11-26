@@ -118,7 +118,7 @@ struct explosiontype g_ExplosionTypes[] = {
 	// 26 is the orb's flash: a six-frame expansion with no fire or smoke,
 	// but a real blast so a hit does damage. The short duration and high
 	// propagation rate make it an instant burst, not a lingering flame.
-	/*26*/ { 110, 110, 0,   0,    110,   90,   140,  6,   4, 1, SMOKETYPE_NONE,         0x809f, 2     },
+	/*26*/ { 180, 140, 0,   0,    180,   200,  400,  8,   4, 1, SMOKETYPE_NONE,         0x809f, 4     },
 };
 
 bool explosionCreateSimple(struct prop *prop, struct coord *pos, RoomNum *rooms, s16 type, s32 playernum)
@@ -1563,8 +1563,8 @@ Gfx *explosionRender(struct prop *prop, Gfx *gdl, bool xlupass)
 			struct coord centre;
 			Vtx *vertices = gfxAllocateVertices(4);
 			Mtxf *cameramtx = camGetProjectionMtxF();
-			f32 size = 45.0f + 65.0f * ((f32) exp->age / 6.0f);
-			f32 alpha = 255.0f * (1.0f - (f32) exp->age / 6.0f);
+			f32 size = 60.0f + 160.0f * ((f32) exp->age / 8.0f);
+			f32 alpha = 255.0f * (1.0f - (f32) exp->age / 8.0f);
 
 			if (alpha < 0.0f) {
 				alpha = 0.0f;
@@ -1596,18 +1596,18 @@ Gfx *explosionRender(struct prop *prop, Gfx *gdl, bool xlupass)
 
 			vertices[0].s = 0;
 			vertices[0].t = 0;
-			vertices[1].s = g_TexLightGlareConfigs[0].width * 32;
+			vertices[1].s = g_TexShadowConfigs[0].width * 32;
 			vertices[1].t = 0;
-			vertices[2].s = g_TexLightGlareConfigs[0].width * 32;
-			vertices[2].t = g_TexLightGlareConfigs[0].height * 32;
+			vertices[2].s = g_TexShadowConfigs[0].width * 32;
+			vertices[2].t = g_TexShadowConfigs[0].height * 32;
 			vertices[3].s = 0;
-			vertices[3].t = g_TexLightGlareConfigs[0].height * 32;
+			vertices[3].t = g_TexShadowConfigs[0].height * 32;
 
 			for (j = 0; j < 4; j++) {
 				vertices[j].colour = 0;
 			}
 
-			texSelect(&gdl, &g_TexLightGlareConfigs[0], 4, 0, 2, true, NULL);
+			texSelect(&gdl, &g_TexShadowConfigs[0], 4, 0, 2, true, NULL);
 			gDPSetCycleType(gdl++, G_CYC_2CYCLE);
 			gDPSetRenderMode(gdl++, G_RM_AA_ZB_XLU_SURF, G_RM_AA_ZB_XLU_SURF2);
 			gDPSetEnvColor(gdl++, 100, 180, 255, (s32) alpha);
