@@ -43,3 +43,4 @@ lang/_source/
 
 # local compose config, per machine
 .env
+.directory
