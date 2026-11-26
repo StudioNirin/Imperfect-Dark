@@ -4784,8 +4784,10 @@ struct weaponfunc_shootprojectile invfunc_shockrifle_ball = {
 		// here it is the visible shot, loaded from this row as a placed gun's
 		// projectile is.
 	0, // unused
-	1.8, // scale: large and easy to hit. The boltbeam's glow is the orb's light;
-		// this box is what objTestHit() hit-tests on the way to a detonation.
+	0.01, // scale: hide the held-item mesh. Its POSITION rest offset drew the
+		// ball away from the blue glow; the glow is the orb, and objTestHit()
+		// hit-tests a sphere at the projectile's own position instead of this
+		// model's triangles.
 	0, // speed: no continuous acceleration, a steady flight
 	0, // unk50
 	8, // traveldist: slow against the Bolt's 20 (about 130 units a second), so the

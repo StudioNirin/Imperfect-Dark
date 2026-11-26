@@ -1436,7 +1436,7 @@ static void netPupObj(struct netpup *u, struct prop *prop, const struct netentst
 				if (beamnum >= 0) {
 					s_BoltBeams++;
 
-					const f32 trail = prop->weapon->weaponnum == WEAPON_SHOCKORB ? 120.0f : 180.0f;
+					const f32 trail = prop->weapon->weaponnum == WEAPON_SHOCKORB ? 10.0f : 180.0f;
 					const f32 scale = trail / sqrtf(blen2);
 					struct coord head;
 

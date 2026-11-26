@@ -281,5 +281,14 @@ grep -qF 'boltbeamSetBlue(beamnum)' "$ROOT/src/game/bondgun.c" \
 	|| fail "the orb's glow is not tinted blue"
 grep -qF 'boltbeamSetBlue(beamnum)' "$ROOT/port/src/net/netpuppets.c" \
 	|| fail "a client's orb glow is not tinted blue"
+# The glow and the hit target are both at the projectile's own position: the
+# borrowed held-item model is hidden (its rest offset put the ball beside the
+# light) and objTestHit() uses a sphere rather than the tiny borrowed mesh.
+grep -qF 'const f32 trail = 10.f / speed;' "$ROOT/src/game/propobj.c" \
+	|| fail "the orb's glow is still a long streak, not a ball"
+grep -qF 'dist2 <= 45.0f * 45.0f' "$ROOT/src/game/propobj.c" \
+	|| fail "a beam can no longer hit the orb's light reliably"
+grep -qF 'blue ? 18 : 7' "$ROOT/src/game/gunfx.c" \
+	|| fail "the orb's blue glow is not drawn wide enough to read as a ball"
 
 echo "shock: as expected"

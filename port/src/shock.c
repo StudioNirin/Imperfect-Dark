@@ -123,8 +123,8 @@ void shockSelfTest(void)
 	SHOCK_CHECK(ball->base.damage == 2.5f, "and the orb 2.5 on a direct hit");
 	SHOCK_CHECK(beam->base.shootsound == SFX_813E,
 			"the lance fires with the Farsight's brighter discharge");
-	SHOCK_CHECK(ball->projectilemodelnum == MODEL_CHRFLASHBANG && ball->scale >= 1.5f,
-			"the orb is a large round ball, not a grenade");
+	SHOCK_CHECK(ball->projectilemodelnum == MODEL_CHRFLASHBANG && ball->scale < 0.05f,
+			"the held-item mesh is hidden; the blue glow is the orb");
 
 	// Five cells for an orb, one for everything else. The figure is read by the
 	// player's ammunition and by a simulant's, so a wrong answer is either a gun
@@ -194,7 +194,8 @@ void shockSelfTest(void)
 	SHOCK_CHECK(ball->timer60 >= 240, "and it lives long enough to be shot at");
 	SHOCK_CHECK(ball->projectilemodelnum == MODEL_CHRFLASHBANG,
 			"its shot is a round ball loaded from this row, not a grenade");
-	SHOCK_CHECK(ball->scale >= 1.0f, "at a scale big enough for a beam to hit it");
+	SHOCK_CHECK(ball->scale < 0.05f,
+			"the borrowed mesh is hidden; the glow and its sphere are the target");
 
 	// The beam's picture. The tracer itself is drawn from a whitelist in
 	// bondgun.c and another in chraction.c - neither visible from here, so

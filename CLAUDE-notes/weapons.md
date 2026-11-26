@@ -838,9 +838,16 @@ alongside source pins for the camera threading and launch grace.
 - A player-fired orb now starts at `hand->muzzlepos` rather than the player's
   body root (`bgun0f09ed2c()`). Fast grenades hid the same difference; the
   slow orb did not. A simulant's orb was already correct.
-- The projectile mesh is `MODEL_CHRFLASHBANG` at 1.8 scale, a round ball
-  instead of a grenade, with a blue boltbeam glow driven each tick and
-  replicated for clients (`boltbeamSetBlue()`, `netpuppets.c`).
+- The projectile first used `MODEL_CHRFLASHBANG` at 1.8 scale, but that model
+  is a held item: its POSITION rest offset is applied only to the mesh, so the
+  ball drew beside the blue glow and seemed to arrive later. The mesh is now
+  hidden at 0.01 scale (the trick the Bowcaster bolt already uses) and the
+  blue glow is the visible orb: a 10-unit blob, drawn wide by
+  `boltbeamSetBlue()`, driven each tick and replicated for clients.
+  `objTestHit()` special-cases `WEAPON_SHOCKORB` with a 45-unit sphere at the
+  projectile's own position, so a beam aimed at the light lands reliably.
+  This is deliberately not a bbox change: the old hit test was triangle-based
+  on the tiny borrowed mesh, which a larger bbox would not have fixed.
 - A beam hit reaches `objDamage()` with the rifle's weapon number, which now
   zeroes a `WEAPON_SHOCKORB`'s timer. `weaponTick()` turns that into
   `propExplode(EXPLOSIONTYPE_PHOENIX)`; the row still has no

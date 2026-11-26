@@ -5534,7 +5534,10 @@ void weaponTick(struct prop *prop)
 				f32 speed = sqrtf(sx * sx + sy * sy + sz * sz);
 
 				if (speed > 0.01f) {
-					const f32 trail = 120.f / speed;
+					// A compact bright blob at the orb, not a long streak:
+					// the glow is the visible ball now that the held-item
+					// mesh is hidden.
+					const f32 trail = 10.f / speed;
 					struct coord head;
 
 					head.x = prop->pos.x - sx * trail;
@@ -18191,6 +18194,47 @@ void func0f0859a0(struct prop *prop, struct shotdata *shotdata)
 	}
 
 	if ((prop->flags & PROPFLAG_ONTHISSCREENTHISTICK) == 0) {
+		return;
+	}
+
+	// A plasma orb is a ball of light, not a mesh: the held-item model it
+	// borrows is hidden because its POSITION rest offset put the drawn ball
+	// away from the glow. Hit-test a sphere at the projectile's own position
+	// instead of the invisible triangles - otherwise a beam that looks right
+	// through the glow sails past a target a few units across.
+	if (obj->type == OBJTYPE_WEAPON
+			&& ((struct weaponobj *) obj)->weaponnum == WEAPON_SHOCKORB) {
+		struct coord centre;
+		struct coord oc;
+		struct coord hitpos;
+		struct coord normal;
+		f32 along;
+		f32 dist2;
+
+		mtx4TransformVec(camGetProjectionMtxF(), &prop->pos, &centre);
+		oc.x = centre.x - shotdata->gunpos2d.x;
+		oc.y = centre.y - shotdata->gunpos2d.y;
+		oc.z = centre.z - shotdata->gunpos2d.z;
+		along = oc.x * shotdata->gundir2d.x + oc.y * shotdata->gundir2d.y + oc.z * shotdata->gundir2d.z;
+
+		if (along >= 0.0f && along <= shotdata->distance) {
+			dist2 = oc.x * oc.x + oc.y * oc.y + oc.z * oc.z - along * along;
+
+			if (dist2 <= 45.0f * 45.0f) {
+				struct hitthing thing;
+
+				memset(&thing, 0, sizeof(thing));
+				thing.pos = prop->pos;
+				hitpos = centre;
+				normal.x = -shotdata->gundir2d.x;
+				normal.y = -shotdata->gundir2d.y;
+				normal.z = -shotdata->gundir2d.z;
+
+				hitCreate(shotdata, prop, along, HITPART_GENERAL, NULL, &thing, 0, NULL,
+						obj->model, false, false, &hitpos, &normal);
+			}
+		}
+
 		return;
 	}
 

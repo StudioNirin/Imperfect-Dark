@@ -1069,10 +1069,13 @@ Gfx *boltbeamsRender(Gfx *gdl)
 				// solid - the alpha gradient fades the trailing end into a
 				// bright point rather than a solid line. The orb keeps the
 				// Shock Rifle's blue; the Bowcaster's bolt is white.
-				const u32 head = g_BoltBeams[i].unk04 == 2 ? 0x5080ff00 : 0xffffff00;
-				const u32 tail = g_BoltBeams[i].unk04 == 2 ? 0x90c0ffff : 0xffffffff;
+				const bool blue = g_BoltBeams[i].unk04 == 2;
+				const u32 head = blue ? 0x2060ff00 : 0xffffff00;
+				const u32 tail = blue ? 0xa0d0ffff : 0xffffffff;
 
-				gdl = beamRenderGeneric(gdl, g_TexLaserConfigs, 1, &g_BoltBeams[i].headpos, head, 7, &g_BoltBeams[i].tailpos, tail);
+				// The orb's blob is drawn much wider than the bolt's streak.
+				gdl = beamRenderGeneric(gdl, g_TexLaserConfigs, 1, &g_BoltBeams[i].headpos,
+						head, blue ? 18 : 7, &g_BoltBeams[i].tailpos, tail);
 			} else {
 				gdl = beamRenderGeneric(gdl, g_TexLaserConfigs, 1, &g_BoltBeams[i].headpos, 0xafafff00, 2, &g_BoltBeams[i].tailpos, 0xafafff7f);
 			}
