@@ -850,9 +850,21 @@ alongside source pins for the camera threading and launch grace.
   on the tiny borrowed mesh, which a larger bbox would not have fixed.
 - A beam hit reaches `objDamage()` with the rifle's weapon number, which now
   zeroes a `WEAPON_SHOCKORB`'s timer. `weaponTick()` turns that into
-  `propExplode(EXPLOSIONTYPE_PHOENIX)`; the row still has no
+  `propExplode(EXPLOSIONTYPE_SHOCKFLASH)`; the row still has no
   `EXPLODESWHENSHOT`, so only this gun's beam and blasts can pop an orb. All
-  of it is host-authoritative.
+  of it is host-authoritative. The flash is type 26: a six-frame blue-white
+  round sprite that expands from 45 to 110 units and fades, with no flame
+  frames, smoke, scorch or damage of its own.
+
+A follow-up fixed the two reasons the orb was hard to read and nearly
+impossible to hit. `objTestHit()`'s sphere test was transforming the orb's
+world position by `camGetProjectionMtxF()`, which is view-to-world, instead
+of `camGetWorldToScreenMtxf()` (world-to-view); the sphere was somewhere
+else entirely. And `beamRenderGeneric()` is one flat ribbon, so the blue
+glow was a small 2D streak: `orbRender()` in `gunfx.c` now draws a single
+camera-facing round shield-textured sprite at the projectile's position,
+45 units in radius, matching the hit sphere. The timeout now always lands
+on zero so a spent orb flashes deterministically.
 
 A third symptom showed up on G5: over a bridge whose room has no floor, the
 bolt turned up or down at the edge. It is not the camera fix and not a portal

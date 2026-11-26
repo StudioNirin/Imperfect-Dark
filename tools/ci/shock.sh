@@ -273,7 +273,7 @@ grep -qF 'weaponnum == WEAPON_SHOCKORB' "$ROOT/src/game/bondgun.c" \
 	|| fail "the orb has no glow beam at launch"
 grep -qF 'weapon->timer240 == 0' "$ROOT/src/game/propobj.c" \
 	|| fail "nothing detonates an orb when the beam hits it"
-grep -qF 'propExplode(prop, EXPLOSIONTYPE_PHOENIX)' "$ROOT/src/game/propobj.c" \
+grep -qF 'propExplode(prop, EXPLOSIONTYPE_SHOCKFLASH)' "$ROOT/src/game/propobj.c" \
 	|| fail "a detonating orb makes no burst"
 grep -qF 'weaponnum == WEAPON_SHOCKORB' "$ROOT/port/src/net/netpuppets.c" \
 	|| fail "a client's orb has no glow trail"
@@ -284,11 +284,17 @@ grep -qF 'boltbeamSetBlue(beamnum)' "$ROOT/port/src/net/netpuppets.c" \
 # The glow and the hit target are both at the projectile's own position: the
 # borrowed held-item model is hidden (its rest offset put the ball beside the
 # light) and objTestHit() uses a sphere rather than the tiny borrowed mesh.
-grep -qF 'const f32 trail = 10.f / speed;' "$ROOT/src/game/propobj.c" \
-	|| fail "the orb's glow is still a long streak, not a ball"
+grep -qF 'mtx4TransformVec(camGetWorldToScreenMtxf(), &prop->pos, &centre);' "$ROOT/src/game/propobj.c" \
+	|| fail "the orb's hit sphere is still placed by the camera-to-world matrix"
 grep -qF 'dist2 <= 45.0f * 45.0f' "$ROOT/src/game/propobj.c" \
 	|| fail "a beam can no longer hit the orb's light reliably"
-grep -qF 'blue ? 18 : 7' "$ROOT/src/game/gunfx.c" \
-	|| fail "the orb's blue glow is not drawn wide enough to read as a ball"
+grep -qF 'static Gfx *orbRender' "$ROOT/src/game/gunfx.c" \
+	|| fail "the orb is still a flat beam ribbon rather than a round sprite"
+grep -qF 'g_BoltBeams[i].unk04 == 2' "$ROOT/src/game/gunfx.c" \
+	|| fail "the blue orb is not routed to its round renderer"
+grep -qF 'propExplode(prop, EXPLOSIONTYPE_SHOCKFLASH)' "$ROOT/src/game/propobj.c" \
+	|| fail "an orb still detonates as a flame explosion"
+grep -qF 'EXPLOSIONTYPE_SHOCKFLASH    26' "$ROOT/src/include/constants.h" \
+	|| fail "the flash explosion type is missing"
 
 echo "shock: as expected"

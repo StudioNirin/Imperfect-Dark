@@ -1113,6 +1113,10 @@ s32 langpackIsCjk(void);
 #define EXPLOSIONTYPE_DRAGONBOMBSPY 23 // Used by both Dragon and bombspy
 #define EXPLOSIONTYPE_24            24
 #define EXPLOSIONTYPE_HUGE25        25
+// The Shock Rifle's orb: a brief blue-white flash that expands and fades,
+// with no flame frames, smoke or scorch. Cosmetic only - the orb's own
+// damage is applied by the direct hit and by the blast radius below.
+#define EXPLOSIONTYPE_SHOCKFLASH    26
 
 #define EYESPYHIT_NONE   0
 #define EYESPYHIT_BG     1

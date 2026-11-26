@@ -5533,26 +5533,22 @@ void weaponTick(struct prop *prop)
 				f32 sz = projectile->speed.z;
 				f32 speed = sqrtf(sx * sx + sy * sy + sz * sz);
 
-				if (speed > 0.01f) {
-					// A compact bright blob at the orb, not a long streak:
-					// the glow is the visible ball now that the held-item
-					// mesh is hidden.
-					const f32 trail = 10.f / speed;
-					struct coord head;
-
-					head.x = prop->pos.x - sx * trail;
-					head.y = prop->pos.y - sy * trail;
-					head.z = prop->pos.z - sz * trail;
-					boltbeamSetHeadPos(beamnum, &head);
-					boltbeamSetTailPos(beamnum, &prop->pos);
-				}
+				// Both ends sit at the orb: the renderer draws a round
+				// sprite at the tail, so there is no trailing line to skew
+				// the ball away from the projectile's position.
+				(void) sx;
+				(void) sy;
+				(void) sz;
+				(void) speed;
+				boltbeamSetHeadPos(beamnum, &prop->pos);
+				boltbeamSetTailPos(beamnum, &prop->pos);
 			}
 		}
 
 		// Only the Shock Rifle's beam (or a blast) sets this to zero through
 		// objDamage(): a stray bullet must not pop every orb in the arena.
 		if (weapon->timer240 == 0) {
-			if (propExplode(prop, EXPLOSIONTYPE_PHOENIX)) {
+			if (propExplode(prop, EXPLOSIONTYPE_SHOCKFLASH)) {
 				weapon->timer240 = -1;
 
 				if (!(obj->hidden & OBJHFLAG_DELETING)) {
@@ -5564,8 +5560,12 @@ void weaponTick(struct prop *prop)
 		} else if (weapon->timer240 > 0) {
 			weapon->timer240 -= g_Vars.lvupdate240;
 
+			// Land on zero whatever the frame chunking did, so a spent orb
+			// always takes the flash branch on the next tick instead of
+			// depending on the subtraction hitting exactly zero or going
+			// negative.
 			if (weapon->timer240 < 0) {
-				obj->hidden |= OBJHFLAG_DELETING;
+				weapon->timer240 = 0;
 			}
 		}
 	} else if (weaponHost(weapon->weaponnum) == WEAPON_BOLT) {
@@ -18211,7 +18211,10 @@ void func0f0859a0(struct prop *prop, struct shotdata *shotdata)
 		f32 along;
 		f32 dist2;
 
-		mtx4TransformVec(camGetProjectionMtxF(), &prop->pos, &centre);
+		// gunpos2d/gundir2d are in view space, so the orb's world position
+		// must go through world-to-view. camGetProjectionMtxF() is the
+		// inverse (view-to-world) and put the sphere somewhere else entirely.
+		mtx4TransformVec(camGetWorldToScreenMtxf(), &prop->pos, &centre);
 		oc.x = centre.x - shotdata->gunpos2d.x;
 		oc.y = centre.y - shotdata->gunpos2d.y;
 		oc.z = centre.z - shotdata->gunpos2d.z;

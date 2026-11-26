@@ -115,6 +115,8 @@ struct explosiontype g_ExplosionTypes[] = {
 	/*23*/ { 100, 80,  4,   1.4,  210,  220,  500,  90,  2, 5, SMOKETYPE_LARGE,        0x809f, 4     },
 	/*24*/ { 80,  60,  4,   1.4,  500,  200,  400,  90,  2, 5, SMOKETYPE_LARGE,        0x809f, 4     },
 	/*25*/ { 640, 480, 32,  11.2, 1600, 1000, 1000, 180, 2, 5, SMOKETYPE_NONE,         0x80a4, 4     },
+	// 26 is the orb's flash: a six-frame expansion with no fire or smoke.
+	/*26*/ { 110, 110, 0,   0,    110,   0,    0,    6,   1, 1, SMOKETYPE_NONE,         0x0000, 0     },
 };
 
 bool explosionCreateSimple(struct prop *prop, struct coord *pos, RoomNum *rooms, s16 type, s32 playernum)
@@ -405,7 +407,8 @@ bool explosionCreate(struct prop *sourceprop, struct coord *exppos, RoomNum *exp
 			if (g_NetMode == NETMODE_SERVER) netLagCompBlastNote(exp - g_Explosions, type, playernum, exppos); // netplay: a guest's blast, where it saw the chrs
 #endif
 
-			if (type != EXPLOSIONTYPE_BULLETHOLE && type != EXPLOSIONTYPE_PHOENIX) {
+			if (type != EXPLOSIONTYPE_BULLETHOLE && type != EXPLOSIONTYPE_PHOENIX
+					&& type != EXPLOSIONTYPE_SHOCKFLASH) {
 				propSetDangerous(expprop);
 			}
 
@@ -1548,6 +1551,71 @@ Gfx *explosionRender(struct prop *prop, Gfx *gdl, bool xlupass)
 		gdl = roomApplyMtx(gdl, roomnum);
 
 		gSPDisplayList(gdl++, g_TexGdl2);
+
+		// The orb's detonation is a brief blue-white flash that expands and
+		// fades, not a flame sequence. One round sprite, no smoke or scorch;
+		// the damage was decided by the hit and by the type's zeroed radii.
+		if (exp->type == EXPLOSIONTYPE_SHOCKFLASH) {
+			struct coord right;
+			struct coord up;
+			struct coord centre;
+			Vtx *vertices = gfxAllocateVertices(4);
+			Mtxf *cameramtx = camGetProjectionMtxF();
+			f32 size = 45.0f + 65.0f * ((f32) exp->age / 6.0f);
+			f32 alpha = 255.0f * (1.0f - (f32) exp->age / 6.0f);
+
+			if (alpha < 0.0f) {
+				alpha = 0.0f;
+			}
+
+			centre.x = prop->pos.x - coord->x;
+			centre.y = prop->pos.y - coord->y;
+			centre.z = prop->pos.z - coord->z;
+
+			right.x = cameramtx->m[0][0] * size;
+			right.y = cameramtx->m[0][1] * size;
+			right.z = cameramtx->m[0][2] * size;
+			up.x = cameramtx->m[1][0] * size;
+			up.y = cameramtx->m[1][1] * size;
+			up.z = cameramtx->m[1][2] * size;
+
+			vertices[0].x = centre.x - right.x - up.x;
+			vertices[0].y = centre.y - right.y - up.y;
+			vertices[0].z = centre.z - right.z - up.z;
+			vertices[1].x = centre.x + right.x - up.x;
+			vertices[1].y = centre.y + right.y - up.y;
+			vertices[1].z = centre.z + right.z - up.z;
+			vertices[2].x = centre.x + right.x + up.x;
+			vertices[2].y = centre.y + right.y + up.y;
+			vertices[2].z = centre.z + right.z + up.z;
+			vertices[3].x = centre.x - right.x + up.x;
+			vertices[3].y = centre.y - right.y + up.y;
+			vertices[3].z = centre.z - right.z + up.z;
+
+			vertices[0].s = 0;
+			vertices[0].t = 0;
+			vertices[1].s = g_TexShieldConfigs[0].width * 32;
+			vertices[1].t = 0;
+			vertices[2].s = g_TexShieldConfigs[0].width * 32;
+			vertices[2].t = g_TexShieldConfigs[0].height * 32;
+			vertices[3].s = 0;
+			vertices[3].t = g_TexShieldConfigs[0].height * 32;
+
+			for (j = 0; j < 4; j++) {
+				vertices[j].colour = 0;
+			}
+
+			texSelect(&gdl, &g_TexShieldConfigs[0], 4, 0, 2, true, NULL);
+			gDPSetCycleType(gdl++, G_CYC_2CYCLE);
+			gDPSetRenderMode(gdl++, G_RM_PASS, G_RM_CLD_SURF2);
+			gDPSetEnvColor(gdl++, 100, 180, 255, (s32) alpha);
+			gDPSetPrimColor(gdl++, 0, 0, 255, 255, 255, (s32) alpha);
+			gDPSetCombineMode(gdl++, G_CC_CUSTOM_00, G_CC_CUSTOM_01);
+			gSPVertex(gdl++, osVirtualToPhysical(vertices), 4, 0);
+			gSPTri2(gdl++, 0, 1, 2, 0, 2, 3);
+
+			return gdl;
+		}
 
 		colours = gfxAllocateColours(1);
 
