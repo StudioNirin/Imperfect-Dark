@@ -2301,8 +2301,19 @@ static void netEvApply(struct netevc *e, f64 rt)
 
 		{
 			const f64 late = rt >= 0 ? rt - e->tick : 0;
-			const struct explosiontype *et = &g_ExplosionTypes[e->s0];
-			const s32 life = et->duration + (s32)(7.0f * et->flarespeed);
+			const struct explosiontype *et;
+			s32 life;
+
+			// A type number this machine has no row for. It indexes a table
+			// plain, so it is checked before it is read: a host a protocol
+			// version ahead would otherwise be read out of bounds here.
+			if (e->s0 < 0 || e->s0 >= NUM_EXPLOSIONTYPES) {
+				snprintf(extra, sizeof(extra), "explosion type %d this build has no row for", e->s0);
+				break;
+			}
+
+			et = &g_ExplosionTypes[e->s0];
+			life = et->duration + (s32)(7.0f * et->flarespeed);
 
 			// (protocol 29) one burning since before this machine came
 			// (a joiner's catch-up), or come this late: put in at the

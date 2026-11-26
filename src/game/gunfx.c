@@ -1040,88 +1040,42 @@ void boltbeamSetAutomatic(s32 beamnum, f32 speed)
 }
 
 /**
- * Mark a boltbeam as a plasma bolt's trail. The glow flag makes it draw wide
- * and near-opaque instead of the thin, faint crossbow-bolt line.
+ * The Shock Rifle's orb: a ball of light, drawn as the engine's own round glow
+ * sprite (asset 0x000a, the Laser's halo: a white core with a soft blue rim and
+ * a round alpha mask) on one camera-facing quad centred on the shot.
+ *
+ * It goes through beamRenderGeneric() rather than a display list of its own.
+ * That function's state is what every tracer in the game uses, so the depth
+ * test against scenery is inherited, and its half-width is arg5 in world units
+ * whatever arg2 is. Ask for a segment along the camera's right axis whose
+ * length (2 * radius) equals its width (2 * radius) and the quad is a square
+ * carrying the texture's round mask undistorted, which is a glow sprite. The
+ * square has no visible corners because the mask, not a combiner, decides the
+ * shape: the first attempt here wrote its own G_CC_CUSTOM_00/01 pair, whose
+ * second cycle floors alpha at the primitive alpha, so it drew the whole quad
+ * opaque and read as a cube whichever texture it was given.
+ *
+ * The radius is the same 45 units objTestHit() spheres, so the ball aimed at
+ * and the ball the beam detonates are one and the same object.
  */
-/**
- * A plasma orb is a ball of light, not a streak: one camera-facing round
- * sprite at the shot's position, sized to the same 45-unit radius the hit
- * test uses. A beamRenderGeneric quad is a flat ribbon whose bright end is a
- * line, which is why the first version looked two-dimensional and small.
- */
-static Gfx *orbRender(Gfx *gdl, struct coord *pos)
+static Gfx *orbGlowRender(Gfx *gdl, struct coord *pos)
 {
-	struct coord right;
-	struct coord up;
-	struct coord viewpos;
-	Vtx *vertices = gfxAllocateVertices(4);
-	Mtxf *worldtoscreen = camGetWorldToScreenMtxf();
 	Mtxf *cameramtx = camGetProjectionMtxF();
-	Mtxf mtx;
-	Mtxf *spc8 = gfxAllocateMatrix();
-	const f32 size = 45.0f;
+	struct coord rim[2];
+	const f32 radius = 45.0f;
+	const u32 colour = 0xb0e0ffff;
+	s32 i;
 
-	right.x = cameramtx->m[0][0] * size;
-	right.y = cameramtx->m[0][1] * size;
-	right.z = cameramtx->m[0][2] * size;
-	up.x = cameramtx->m[1][0] * size;
-	up.y = cameramtx->m[1][1] * size;
-	up.z = cameramtx->m[1][2] * size;
+	for (i = 0; i < 2; i++) {
+		const f32 sign = i ? 1.0f : -1.0f;
 
-	mtx4TransformVec(worldtoscreen, pos, &viewpos);
-
-	if (viewpos.f[0] < -10000.0f || viewpos.f[0] > 10000.0f
-			|| viewpos.f[1] < -10000.0f || viewpos.f[1] > 10000.0f
-			|| viewpos.f[2] < -10000.0f || viewpos.f[2] > 10000.0f) {
-		return gdl;
+		rim[i].x = pos->x + cameramtx->m[0][0] * radius * sign;
+		rim[i].y = pos->y + cameramtx->m[0][1] * radius * sign;
+		rim[i].z = pos->z + cameramtx->m[0][2] * radius * sign;
 	}
 
-	vertices[0].x = -right.x - up.x;
-	vertices[0].y = -right.y - up.y;
-	vertices[0].z = -right.z - up.z;
-	vertices[0].s = 0;
-	vertices[0].t = 0;
-	vertices[0].colour = 0;
-
-	vertices[1].x = right.x - up.x;
-	vertices[1].y = right.y - up.y;
-	vertices[1].z = right.z - up.z;
-	vertices[1].s = g_TexShadowConfigs[0].width * 32;
-	vertices[1].t = 0;
-	vertices[1].colour = 0;
-
-	vertices[2].x = right.x + up.x;
-	vertices[2].y = right.y + up.y;
-	vertices[2].z = right.z + up.z;
-	vertices[2].s = g_TexShadowConfigs[0].width * 32;
-	vertices[2].t = g_TexShadowConfigs[0].height * 32;
-	vertices[2].colour = 0;
-
-	vertices[3].x = -right.x + up.x;
-	vertices[3].y = -right.y + up.y;
-	vertices[3].z = -right.z + up.z;
-	vertices[3].s = 0;
-	vertices[3].t = g_TexShadowConfigs[0].height * 32;
-	vertices[3].colour = 0;
-
-	mtx4LoadTranslation(pos, &mtx);
-	mtx00015be0(worldtoscreen, &mtx);
-	mtxF2L(&mtx, spc8);
-
-	gSPClearGeometryMode(gdl++, G_CULL_BACK);
-	gSPMatrix(gdl++, osVirtualToPhysical(spc8), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-	// A soft round glare, not the shield's cubed pattern; keep the depth
-	// test so the orb is hidden behind columns and walls.
-	texSelect(&gdl, &g_TexShadowConfigs[0], 4, 0, 2, true, NULL);
-	gDPSetCycleType(gdl++, G_CYC_2CYCLE);
-	gDPSetRenderMode(gdl++, G_RM_AA_ZB_XLU_SURF, G_RM_AA_ZB_XLU_SURF2);
-	gDPSetEnvColor(gdl++, 80, 160, 255, 220);
-	gDPSetPrimColor(gdl++, 0, 0, 255, 255, 255, 200);
-	gDPSetCombineMode(gdl++, G_CC_CUSTOM_00, G_CC_CUSTOM_01);
-	gSPVertex(gdl++, osVirtualToPhysical(vertices), 4, 0);
-	gSPTri2(gdl++, 0, 1, 2, 0, 2, 3);
-
-	return gdl;
+	return beamRenderGeneric(gdl, g_TexGroup03Configs, 1, &rim[0], colour, radius,
+			&rim[1], colour);
 }
 
 void boltbeamSetGlow(s32 beamnum)
@@ -1146,21 +1100,16 @@ Gfx *boltbeamsRender(Gfx *gdl)
 	for (i = 0; i < ARRAYCOUNT(g_BoltBeams); i++) {
 		if (g_BoltBeams[i].unk00 != -1) {
 			if (g_BoltBeams[i].unk04 == 2) {
-				// The Shock Rifle's orb is the round sprite itself. Its head
-				// and tail are both kept at the projectile position.
-				gdl = orbRender(gdl, &g_BoltBeams[i].tailpos);
+				// The Shock Rifle's orb is the round sprite itself, not a
+				// streak along the shot's path. Both ends of its beam are kept
+				// at the projectile's position, which is the sprite's centre.
+				gdl = orbGlowRender(gdl, &g_BoltBeams[i].tailpos);
 			} else if (g_BoltBeams[i].unk04) {
-				// Head (behind) is fully transparent, tail (at the shot) is
-				// solid - the alpha gradient fades the trailing end into a
-				// bright point rather than a solid line. The orb keeps the
-				// Shock Rifle's blue; the Bowcaster's bolt is white.
-				const bool blue = g_BoltBeams[i].unk04 == 2;
-				const u32 head = blue ? 0x2060ff00 : 0xffffff00;
-				const u32 tail = blue ? 0xa0d0ffff : 0xffffffff;
-
-				// The orb's blob is drawn much wider than the bolt's streak.
+				// The Bowcaster's plasma bolt: head (behind) fully transparent,
+				// tail (at the shot) solid, so the alpha gradient fades the
+				// trailing end into a bright point rather than a solid line.
 				gdl = beamRenderGeneric(gdl, g_TexLaserConfigs, 1, &g_BoltBeams[i].headpos,
-						head, blue ? 18 : 7, &g_BoltBeams[i].tailpos, tail);
+						0xffffff00, 7, &g_BoltBeams[i].tailpos, 0xffffffff);
 			} else {
 				gdl = beamRenderGeneric(gdl, g_TexLaserConfigs, 1, &g_BoltBeams[i].headpos, 0xafafff00, 2, &g_BoltBeams[i].tailpos, 0xafafff7f);
 			}

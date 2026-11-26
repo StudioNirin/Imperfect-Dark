@@ -1113,10 +1113,15 @@ s32 langpackIsCjk(void);
 #define EXPLOSIONTYPE_DRAGONBOMBSPY 23 // Used by both Dragon and bombspy
 #define EXPLOSIONTYPE_24            24
 #define EXPLOSIONTYPE_HUGE25        25
-// The Shock Rifle's orb: a brief blue-white flash that expands and fades,
-// with no flame frames, smoke or scorch. Cosmetic only - the orb's own
-// damage is applied by the direct hit and by the blast radius below.
+// The Shock Rifle's orb detonation: a rocket's blast and damage (explosions.c's
+// row 26) played in half the time, so it reads as an instant burst. No scorch;
+// the orb's own 2.5 direct-hit damage is separate and applied by its hit.
 #define EXPLOSIONTYPE_SHOCKFLASH    26
+// One past the last row of g_ExplosionTypes. The net event carries the type as a
+// number, and the receiver has to index the table with it, so the bound has to
+// be readable from outside explosions.c (netevents.c declares the table as an
+// incomplete array and so cannot count it itself).
+#define NUM_EXPLOSIONTYPES          27
 
 #define EYESPYHIT_NONE   0
 #define EYESPYHIT_BG     1

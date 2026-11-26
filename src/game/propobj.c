@@ -5528,18 +5528,10 @@ void weaponTick(struct prop *prop)
 			s32 beamnum = boltbeamFindByProp(prop);
 
 			if (beamnum != -1) {
-				f32 sx = projectile->speed.x;
-				f32 sy = projectile->speed.y;
-				f32 sz = projectile->speed.z;
-				f32 speed = sqrtf(sx * sx + sy * sy + sz * sz);
-
-				// Both ends sit at the orb: the renderer draws a round
-				// sprite at the tail, so there is no trailing line to skew
-				// the ball away from the projectile's position.
-				(void) sx;
-				(void) sy;
-				(void) sz;
-				(void) speed;
+				// Both ends sit at the orb. The glow sprite is built from the
+				// camera basis at the tail, so a trailing line would only skew
+				// the ball away from where the shot really is and where the
+				// beam's sphere test looks.
 				boltbeamSetHeadPos(beamnum, &prop->pos);
 				boltbeamSetTailPos(beamnum, &prop->pos);
 			}

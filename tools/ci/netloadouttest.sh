@@ -90,6 +90,43 @@ cpair=$(echo "$clientline" | sed -n 's/.* guns \([0-9]* [0-9]*\).*/\1/p')
 [ "$cpair" = "8 5" ] || fail "client's pair is $cpair, want 8 5 (Magnum, Magsec)"
 pass 'both machines hand out the same two Loadout guns (Magnum, Magsec)'
 
+# --- A two-pool gun as the Loadout kit ---
+# The bug this catches is the one a selftest could not see: a Shock Rifle given
+# at spawn came with its beam cells and no orbs, because the spawn hand-out read
+# only the gun's first ammo pool. The arena's own row has named the orb pool for
+# as long as the gun existed; nothing at spawn looked at it. Row 83 is
+# MPWEAPON_SHOCKRIFLE (mplayer.c's /*0x53*/ row), and the spawn line reports the
+# two reserves, so the assertion is on the numbers the player actually holds.
+SH=$OUT/shock-host.log; SC=$OUT/shock-client.log
+game shock-host 200 --host "$((PORT + 2))" --net-test-host 1 --net-test-end-frame 720 --rng-seed 7 \
+	--mp-weapons 83,9,9,9,9,9 &
+shockhost=$!
+waitfor "$SH" "net: hosting on UDP port" 90 || { fail "Shock Rifle host did not start"; kill -TERM "$shockhost"; wait "$shockhost" 2>/dev/null; exit 2; }
+game shock-client 190 --connect "127.0.0.1:$((PORT + 2))" --net-test-join &
+shockclient=$!
+waitfor "$SH" "net: loadout spawn seat" 150 || fail "no Shock Rifle loadout spawn on the host"
+waitfor "$SC" "net: loadout spawn seat" 150 || fail "no Shock Rifle loadout spawn on the client"
+waitfor "$SH" "net: match 1 ended; scores and awards sent" 120 || fail "Shock Rifle match never ended"
+sleep 2
+
+for p in $(pgrep -x "$(basename "$BIN" | cut -c1-15)" 2>/dev/null); do
+	tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q -- "--savedir $OUT/save-" && kill -TERM "$p" 2>/dev/null
+done
+wait "$shockhost" 2>/dev/null
+wait "$shockclient" 2>/dev/null
+
+grep -qF '/*0x53*/ { WEAPON_SHOCKRIFLE' "$ROOT/src/game/mplayer/mplayer.c" \
+	|| fail "row 0x53 is no longer the Shock Rifle's, so this gate's --mp-weapons 83 names another gun"
+
+for log in "$SH" "$SC"; do
+	line=$(grep 'net: loadout spawn seat' "$log" | head -1)
+	ammo=$(echo "$line" | sed -n 's/.* ammo \([0-9]* [0-9]*\).*/\1/p')
+	# 100 cells, 20 orbs: both pools at their carrying capacity, which is what
+	# a Loadout kit means (invitems.c's invammo_shockrifle and invammo_shockorb).
+	[ "$ammo" = "100 20" ] || fail "a Shock Rifle loadout spawn holds ammo '${ammo:-none}', want 100 cells and 20 orbs in $(basename "$log"): $line"
+done
+pass 'a Shock Rifle given at spawn arrives with orbs as well as cells, on both machines'
+
 # --- Zombies online: survivors get the configured pair, infected get fists ---
 # The role is rolled by the host; both machines must hand a survivor the same
 # two guns, and an infected seat must never get the loadout (fists only).

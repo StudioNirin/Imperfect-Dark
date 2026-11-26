@@ -852,33 +852,79 @@ alongside source pins for the camera threading and launch grace.
   zeroes a `WEAPON_SHOCKORB`'s timer. `weaponTick()` turns that into
   `propExplode(EXPLOSIONTYPE_SHOCKFLASH)`; the row still has no
   `EXPLODESWHENSHOT`, so only this gun's beam and blasts can pop an orb. All
-  of it is host-authoritative. The flash is type 26: a six-frame blue-white
-  round sprite that expands from 45 to 110 units and fades, with no flame
-  frames, smoke, scorch or damage of its own.
+  of it is host-authoritative. The blast it
+  sets off is type 26, described below.
 
-A follow-up fixed the two reasons the orb was hard to read and nearly
-impossible to hit. `objTestHit()`'s sphere test was transforming the orb's
-world position by `camGetProjectionMtxF()`, which is view-to-world, instead
-of `camGetWorldToScreenMtxf()` (world-to-view); the sphere was somewhere
-else entirely. And `beamRenderGeneric()` is one flat ribbon, so the blue
-glow was a small 2D streak: `orbRender()` in `gunfx.c` now draws a single
-camera-facing sprite at the projectile's position, 45 units in radius,
-matching the hit sphere. The timeout now always lands on zero so a spent
-orb flashes deterministically.
+Two things made the orb hard to read and nearly impossible to hit, and the
+visual half was misdiagnosed twice on the way, so it is all written down.
 
-The first sprite choice was wrong: `g_TexShieldConfigs[0]` is a cubed
-shield pattern and the render mode had no depth test, so players saw a blue
-cube floating in front of scenery. `g_TexLightGlareConfigs[0]` was also
-wrong: asset `0c92` is a white square with a circle drawn inside, so the
-square edge remained visible. Both the orb and its flash now use
-`g_TexShadowConfigs[0]` (asset `000c`), a genuinely soft round IA blob,
-with `G_RM_AA_ZB_XLU_SURF` so the depth test works.
+The hit test was the real bug, and the fix is one line: `objTestHit()`'s sphere
+test transformed the orb's *world* position with `camGetProjectionMtxF()`, which
+is view-to-world, while `shotdata->gunpos2d`/`gundir2d` are view space. It needs
+`camGetWorldToScreenMtxf()`. The sphere was therefore somewhere else entirely and
+a beam aimed at the light missed. Which matrix is which is settled by two existing
+call sites rather than by the name: `beamRenderGeneric()` transforms its world
+head and tail with `camGetWorldToScreenMtxf()`, and `objHit()` turns a camera-space
+hit point back into world with `camGetProjectionMtxF()`.
 
-The flash type's radii and damage were non-zero but far too small: 90/140
-units for a blast where the Devastator has 140/280 and a rocket 200/400.
-It is now 200/400 with 4 damage over 8 frames, and its single expanding
-sprite grows from 60 to 220 units. It is a real, fast blast rather than a
-cosmetic puff, and no slower than the explosions it sits beside.
+The visual was never a texture problem, although it looked like one three times.
+The first glow sprite wrote its own combine:
+
+    #define G_CC_CUSTOM_00  TEXEL0, 0, ENVIRONMENT, 0,  TEXEL0, 0, ENVIRONMENT, 0
+    #define G_CC_CUSTOM_01  0, 0, 0, COMBINED,  1, COMBINED, PRIMITIVE, COMBINED
+
+Cycle 1's alpha is `(1 - COMBINED) * PRIMITIVE + COMBINED`, which floors every
+pixel at the primitive alpha. The quad drew about 78% opaque whatever the texture
+held, tinted by `texture_intensity * env_colour`, with `G_RM_PASS` and so no depth
+test - which is the "rendered in front of all scenery". That one line produced
+three different-looking bugs: `000d`, the shield's cubed pattern, gave a blue
+cube; `0c92`, a white square with a circle drawn inside it, a blue square with a
+round inside; and `000c`, the drop shadow, dark where its blob is, a black cube.
+Swapping the texture could not have worked, and two commits did exactly that.
+
+What the orb uses now is `orbGlowRender()` in `gunfx.c`, which calls
+`beamRenderGeneric()` with `g_TexGroup03Configs[0]` - asset `000a`, the Laser's
+halo, already a soft round blue-white glow with a round alpha mask - for a segment
+along the camera's right axis whose length equals its width, so that mask lands
+undistorted on a square quad. Every tracer in the game goes through
+`beamRenderGeneric()`, so the blend and the depth test come from
+`texSelect(&gdl, texconfig, 4, 1, 2, ...)` and nothing new: `texSelect`'s fourth
+argument is the depth flag, and 1 selects `G_RM_ZB_CLD_SURF`. The rule the gate
+holds is that the orb's renderer sets no `gDPSet*` state of its own at all. Its
+radius is the same 45 units the hit sphere uses, and `tools/ci/shock.sh` reads
+both numbers out of the source and fails if they part company: players shoot at
+the light, so the light and the target are one figure and not two to keep in step.
+
+The detonation, `EXPLOSIONTYPE_SHOCKFLASH` (26), is row 13's - a rocket's radii,
+damage, smoke and sound - with the duration cut from 90 to 30. The flame frame
+shown is `(part->frame - 1) / flarespeed` and `frame` advances once per step, so
+the 15 frames take `15 * flarespeed` steps and the animation wraps exactly there;
+a duration equal to it finishes the fire as the explosion ends instead of
+restarting it on screen. It has no renderer of its own: `explosionRenderPart()`
+draws it, which is the whole reason it is guaranteed visible. An unshot orb's
+expiry now always lands on zero, so it detonates deterministically rather than
+depending on where frame chunking left the counter.
+
+Two side effects worth knowing. `g_GeExplosionReach[]` ends at row 20, so type 26
+falls through `explosionGeHurtsWeapon()`'s bounds guard - which is how types 21 to
+25 already behaved. And because the explosion net event carries the type as a
+number the receiver uses to index `g_ExplosionTypes` directly, that index is now
+bounded (`NUM_EXPLOSIONTYPES`, checked in `explosionCreate()` and in netevents.c);
+before this, a peer on another build could read past the end of the table.
+
+Both ammo pools are filled when the gun is handed out. `playerSpawnWeapons()`
+gave a spawn gun only `ammos[0]`, so a Shock Rifle came into a match with cells
+and no orbs and a SuperDragon with no grenade rounds, even though the weapon rows
+name the second pool and the arena's row carries a quantity for it
+(`g_MpWeapons`'s `secammotype` and `secammoqty`). `playerSpawnGiveGunAmmo()`
+loops `ammos[]` for the Loadout and Zombies-survivor hand-outs, and the Start
+Armed path fills `secammotype` with the same `bgunGetSpawnAmmoQuantity()` it
+already used for the primary - that helper has handled a secondary correctly the
+whole time (`bondgun.c`), it was just never asked. `netloadouttest.sh` plays a
+real match with the Shock Rifle as the Loadout kit and asserts the reserves the
+spawn actually left behind, 100 cells and 20 orbs, on host and client. Cutting
+the loop back to pool 0 makes that gate read `ammo 100 0` and fail, which is the
+exact shape of the bug as reported.
 
 A third symptom showed up on G5: over a bridge whose room has no floor, the
 bolt turned up or down at the edge. It is not the camera fix and not a portal

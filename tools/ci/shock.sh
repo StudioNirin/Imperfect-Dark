@@ -288,21 +288,60 @@ grep -qF 'mtx4TransformVec(camGetWorldToScreenMtxf(), &prop->pos, &centre);' "$R
 	|| fail "the orb's hit sphere is still placed by the camera-to-world matrix"
 grep -qF 'dist2 <= 45.0f * 45.0f' "$ROOT/src/game/propobj.c" \
 	|| fail "a beam can no longer hit the orb's light reliably"
-grep -qF 'static Gfx *orbRender' "$ROOT/src/game/gunfx.c" \
-	|| fail "the orb is still a flat beam ribbon rather than a round sprite"
-grep -qF 'g_TexShadowConfigs[0], 4, 0, 2, true, NULL' "$ROOT/src/game/gunfx.c" \
-	|| fail "the orb does not use the round soft shadow texture"
-awk '/^static Gfx \*orbRender/,/^}/' "$ROOT/src/game/gunfx.c" | grep -qF 'G_RM_AA_ZB_XLU_SURF' \
-	|| fail "the orb's glow does not depth-test against scenery"
-awk '/exp->type == EXPLOSIONTYPE_SHOCKFLASH/,/return gdl;/' "$ROOT/src/game/explosions.c" | grep -qF 'g_TexShadowConfigs[0]' \
-	|| fail "the flash still uses a square glare texture"
-grep -qF '/*26*/ { 180, 140, 0,   0,    180,   200,  400,  8' "$ROOT/src/game/explosions.c" \
-	|| fail "the flash is smaller than a Devastator or rocket blast"
+grep -qF 'static Gfx *orbGlowRender' "$ROOT/src/game/gunfx.c" \
+	|| fail "the orb has no glow sprite of its own"
+grep -qF 'beamRenderGeneric(gdl, g_TexGroup03Configs' "$ROOT/src/game/gunfx.c" \
+	|| fail "the orb is not drawn as the engine's round glow sprite through the tracer renderer"
+# The lesson of the first two attempts, in a gate. Both hand-wrote a
+# G_CC_CUSTOM_00/01 pair: that second cycle's alpha is
+# (1 - COMBINED) * PRIMITIVE + COMBINED, which floors every pixel at the
+# primitive alpha, so the whole quad drew solid and read as a cube in whichever
+# texture it was given. So the orb's renderer must set no display processor
+# state of its own at all - no combiner, no blend, no cycle type. Asking for
+# gDPSet rather than the macro names also keeps this gate from reading the
+# explanation above it, which is what undid the first version of this gate.
+awk '/^static Gfx \*orbGlowRender/,/^}/' "$ROOT/src/game/gunfx.c" | grep -q 'gDPSet' \
+	&& fail "the orb sets display processor state of its own, so its alpha is floored and it reads as a cube in any texture"
+# And it must keep the blend every tracer uses: texSelect's fourth argument is
+# the depth flag, so a 0 here would draw the orb in front of the room.
+grep -qF 'texSelect(&gdl, texconfig, 4, 1, 2, true, NULL)' "$ROOT/src/game/gunfx.c" \
+	|| fail "beamRenderGeneric lost its depth-tested glow blend, so the orb would draw over scenery"
+# What you aim at is what the beam detonates: one radius, two users.
+ORBGLOW=$(awk '/^static Gfx \*orbGlowRender/,/^}/' "$ROOT/src/game/gunfx.c" \
+		| sed -n 's/.*const f32 radius = \([0-9.]*\)f;.*/\1/p')
+ORBSPHERE=$(sed -n 's/.*dist2 <= \([0-9.]*\)f \* \([0-9.]*\)f.*/\1/p' "$ROOT/src/game/propobj.c" | head -1)
+[ -n "$ORBGLOW" ] && [ "$ORBGLOW" = "$ORBSPHERE" ] \
+	|| fail "the orb's glow is $ORBGLOW units but its hit sphere is $ORBSPHERE - players shoot at the light"
+grep -qF 'if (orbglow && beamnum >= 0) {' "$ROOT/port/src/net/netpuppets.c" \
+	|| fail "a client's orb is not centred on its puppet every frame, so its glow can sit where the last beam was"
 grep -qF 'g_BoltBeams[i].unk04 == 2' "$ROOT/src/game/gunfx.c" \
 	|| fail "the blue orb is not routed to its round renderer"
+# The blast: a rocket's, played fast. Same radii and damage as row 13, with the
+# flame animation finished as the explosion ends - the frame shown is
+# (frame - 1) / flarespeed and frame advances once per step, so 15 frames need
+# duration = 15 * flarespeed, or it restarts on screen.
+grep -qF '/*26*/ { 80, 60, 4,   1.4,  200,   200,  400,  30,  2, 2, SMOKETYPE_LARGE' \
+	"$ROOT/src/game/explosions.c" \
+	|| fail "the orb's blast is not a rocket's blast (200/400 radii, 4 damage) cut short"
+FLASHDUR=$(awk -F',' '/^[[:space:]]*\/\*26\*\// { v = $8; gsub(/[^0-9.]/, "", v); print v }' \
+	"$ROOT/src/game/explosions.c")
+FLASHSPEED=$(awk -F',' '/^[[:space:]]*\/\*26\*\// { v = $10; gsub(/[^0-9.]/, "", v); print v }' \
+	"$ROOT/src/game/explosions.c")
+[ "${FLASHDUR:-none}" = "$((15 * ${FLASHSPEED:-0}))" ] \
+	|| fail "the blast lasts ${FLASHDUR:-no} steps at flarespeed ${FLASHSPEED:-no}: 15 flame frames need duration = 15 * flarespeed"
+grep -q 'exp->type == EXPLOSIONTYPE_SHOCKFLASH' "$ROOT/src/game/explosions.c" \
+	&& fail "the orb's blast has a renderer of its own again, which is how it came to draw invisible"
 grep -qF 'propExplode(prop, EXPLOSIONTYPE_SHOCKFLASH)' "$ROOT/src/game/propobj.c" \
-	|| fail "an orb still detonates as a flame explosion"
+	|| fail "a detonating orb makes no burst"
 grep -qF 'EXPLOSIONTYPE_SHOCKFLASH    26' "$ROOT/src/include/constants.h" \
-	|| fail "the flash explosion type is missing"
+	|| fail "the blast type is missing"
+# The second magazine, filled where the gun is handed out (player.c). Both the
+# arena row and the weapon row have named the orbs for ages; nothing read them.
+grep -qF 'if (mpweapon->secammotype > 0) {' "$ROOT/src/game/player.c" \
+	|| fail "a Start Armed Shock Rifle still spawns with cells and no orbs"
+grep -qF 'playerSpawnGiveGunAmmo(weapon1, 1.0f)' "$ROOT/src/game/player.c" \
+	|| fail "a Loadout Shock Rifle still spawns with cells and no orbs"
+grep -qF 'playerSpawnGiveGunAmmo(weapon1, 0.5f)' "$ROOT/src/game/player.c" \
+	|| fail "a zombies survivor's second magazine is left empty"
 
 echo "shock: as expected"

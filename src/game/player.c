@@ -1233,6 +1233,30 @@ bool playerSpawnAnti(struct chrdata *hostchr, bool force)
 
 #ifndef PLATFORM_N64
 /**
+ * Fill every ammo pool a gun has when it is given at spawn. The second pool is
+ * the SuperDragon's grenade rounds and the Shock Rifle's orbs: the weapon row
+ * names it and the arena's mpweapon row even carries a quantity for it, but the
+ * spawn sites here only ever read ammos[0], so both guns started holding an
+ * empty second magazine.
+ */
+static void playerSpawnGiveGunAmmo(s32 weaponnum, f32 scale)
+{
+	struct weapon *weapondef = weaponFindById(weaponnum);
+	s32 pool;
+
+	if (weapondef == NULL) {
+		return;
+	}
+
+	for (pool = 0; pool < ARRAYCOUNT(weapondef->ammos); pool++) {
+		if (weapondef->ammos[pool] != NULL) {
+			bgunSetAmmoQuantity(weapondef->ammos[pool]->type,
+					(s32) (bgunGetAmmoCapacityForWeapon(weaponnum, pool) * scale));
+		}
+	}
+}
+
+/**
  * Put Start Armed's gun in the hands, or the defaults.
  *
  * In a match the defaults are unarmed. In a mission playerReset() has
@@ -1297,16 +1321,13 @@ static void playerSpawnWeapons(void)
 			if (weapon2 != WEAPON_NONE) {
 				invGiveSingleWeapon(weapon2);
 			}
-			{
-				const s32 ammotype1 = weaponFindById(weapon1) ? weaponFindById(weapon1)->ammos[0]->type : 0;
-				const s32 ammotype2 = weaponFindById(weapon2) ? weaponFindById(weapon2)->ammos[0]->type : 0;
-
-				if (ammotype1) {
-					bgunSetAmmoQuantity(ammotype1, bgunGetAmmoCapacityForWeapon(weapon1, FUNC_PRIMARY) / 2);
-				}
-				if (ammotype2) {
-					bgunSetAmmoQuantity(ammotype2, bgunGetAmmoCapacityForWeapon(weapon2, FUNC_PRIMARY) / 2);
-				}
+			// Half of each pool, as before, but both pools: a survivor holding
+			// a Shock Rifle needs orbs to throw, not only beam cells.
+			if (weapon1 != WEAPON_NONE) {
+				playerSpawnGiveGunAmmo(weapon1, 0.5f);
+			}
+			if (weapon2 != WEAPON_NONE) {
+				playerSpawnGiveGunAmmo(weapon2, 0.5f);
 			}
 
 			g_Vars.currentplayer->spawnweaponnums[HAND_LEFT] = WEAPON_NONE;
@@ -1333,25 +1354,11 @@ static void playerSpawnWeapons(void)
 
 		if (weapon1 != WEAPON_NONE) {
 			invGiveSingleWeapon(weapon1);
-			{
-				struct weapon *weapondef = weaponFindById(weapon1);
-
-				if (weapondef && weapondef->ammos[0]) {
-					bgunSetAmmoQuantity(weapondef->ammos[0]->type,
-							bgunGetAmmoCapacityForWeapon(weapon1, FUNC_PRIMARY));
-				}
-			}
+			playerSpawnGiveGunAmmo(weapon1, 1.0f);
 		}
 		if (weapon2 != WEAPON_NONE) {
 			invGiveSingleWeapon(weapon2);
-			{
-				struct weapon *weapondef = weaponFindById(weapon2);
-
-				if (weapondef && weapondef->ammos[0]) {
-					bgunSetAmmoQuantity(weapondef->ammos[0]->type,
-							bgunGetAmmoCapacityForWeapon(weapon2, FUNC_PRIMARY));
-				}
-			}
+			playerSpawnGiveGunAmmo(weapon2, 1.0f);
 		}
 
 		g_Vars.currentplayer->spawnweaponnums[HAND_LEFT] = WEAPON_NONE;
@@ -1359,8 +1366,14 @@ static void playerSpawnWeapons(void)
 		bgunEquipWeapon2(HAND_LEFT, WEAPON_NONE);
 		bgunEquipWeapon2(HAND_RIGHT, weapon1);
 		if (g_NetMode != NETMODE_NONE) {
-			sysLogPrintf(LOG_NOTE, "net: loadout spawn seat %d guns %d %d scenario %d",
-					g_Vars.currentplayernum, weapon1, weapon2, g_MpSetup.scenario);
+			// Both pools, not just the first: an arena's own spawn hands a
+			// two-pool gun its second magazine, and a loadout that forgot to
+			// did it with cells and no orbs (netloadouttest.sh asserts this
+			// line's two quantities for a Shock Rifle loadout).
+			sysLogPrintf(LOG_NOTE, "net: loadout spawn seat %d guns %d %d scenario %d ammo %d %d",
+					g_Vars.currentplayernum, weapon1, weapon2, g_MpSetup.scenario,
+					bgunGetReservedAmmoCount(bgunGetAmmoTypeForWeapon(weapon1, FUNC_PRIMARY)),
+					bgunGetReservedAmmoCount(bgunGetAmmoTypeForWeapon(weapon1, FUNC_SECONDARY)));
 		}
 		return;
 	}
@@ -1426,6 +1439,14 @@ static void playerSpawnWeapons(void)
 		if (ammotype) {
 			bgunSetAmmoQuantity(ammotype, bgunGetSpawnAmmoQuantity(mpweapon, ammotype, spawnmaxed));
 		}
+		// The row's second pool, which no spawn site read until now: the Shock
+		// Rifle's orbs (invammo_shockorb) and the SuperDragon's grenade rounds.
+		// bgunGetSpawnAmmoQuantity() already scales secammoqty the same way it
+		// scales the primary's.
+		if (mpweapon->secammotype > 0) {
+			bgunSetAmmoQuantity(mpweapon->secammotype,
+					bgunGetSpawnAmmoQuantity(mpweapon, mpweapon->secammotype, spawnmaxed));
+		}
 		{
 			s32 leftweaponnum = akimbo ? mpweapon->weaponnum : WEAPON_NONE;
 
@@ -1449,6 +1470,11 @@ static void playerSpawnWeapons(void)
 						if (ammotype2) {
 							bgunSetAmmoQuantity(ammotype2,
 									bgunGetSpawnAmmoQuantity(mpweapon2, ammotype2, spawnmaxed));
+						}
+						if (mpweapon2->secammotype > 0) {
+							bgunSetAmmoQuantity(mpweapon2->secammotype,
+									bgunGetSpawnAmmoQuantity(mpweapon2, mpweapon2->secammotype,
+											spawnmaxed));
 						}
 
 						leftweaponnum = mpweapon2->weaponnum;

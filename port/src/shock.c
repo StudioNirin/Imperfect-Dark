@@ -155,6 +155,23 @@ void shockSelfTest(void)
 			&& gun->ammos[1]->clipsize == 10,
 			"twenty orbs carried, ten to the magazine");
 
+	// A declared second pool is only worth having if something fills it when
+	// the gun is handed out. Both rows declared one and both spawn sites read
+	// only ammos[0], so a Shock Rifle came into a match with cells and no orbs,
+	// and a SuperDragon with no grenade rounds (player.c).
+	SHOCK_CHECK(bgunGetAmmoTypeForWeapon(WEAPON_SUPERDRAGON, FUNC_SECONDARY)
+			== AMMOTYPE_DEVASTATOR
+			&& bgunGetCapacityByAmmotype(AMMOTYPE_DEVASTATOR) > 0,
+			"the other two-pool gun has a second magazine a spawn can fill");
+	SHOCK_CHECK(g_MpWeapons[MPWEAPON_SHOCKRIFLE].secammoqty > 0,
+			"the arena row names the orbs it hands out, rather than the code inventing a number");
+	SHOCK_CHECK(bgunGetSpawnAmmoQuantity(&g_MpWeapons[MPWEAPON_SHOCKRIFLE], AMMOTYPE_SHOCKORB,
+			false) > 0,
+			"and the spawn helper reads the secondary the same way it reads the primary");
+	SHOCK_CHECK(bgunGetSpawnAmmoQuantity(&g_MpWeapons[MPWEAPON_SHOCKRIFLE], AMMOTYPE_SHOCKORB,
+			false) == bgunGetCapacityByAmmotype(AMMOTYPE_SHOCKORB),
+			"and the orbs it asks for are capped by the carrying capacity, not past it");
+
 	// The number, and the tables keyed by it. WEAPON_IS_FORK is deliberately
 	// anchored on the end of the enum rather than on the first fork gun, so the
 	// third fork gun is in it without anything being widened (data.h).

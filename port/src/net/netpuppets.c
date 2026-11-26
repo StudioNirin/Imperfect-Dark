@@ -1429,15 +1429,24 @@ static void netPupObj(struct netpup *u, struct prop *prop, const struct netentst
 			const f32 by = s->pos[1] - u->beampose[1];
 			const f32 bz = s->pos[2] - u->beampose[2];
 			const f32 blen2 = bx * bx + by * by + bz * bz;
+			const bool orbglow = prop->weapon->weaponnum == WEAPON_SHOCKORB;
+			const s32 beamnum = boltbeamFindByProp(prop);
+
+			if (orbglow && beamnum >= 0) {
+				// The orb is a round glow sprite centred on the shot, not a
+				// streak along its path, so both ends go wherever the puppet
+				// is whether or not it moved this frame - as on the host.
+				// boltbeamCreate() leaves the ends holding the previous beam's
+				// positions, so this cannot wait on the movement gate below.
+				boltbeamSetHeadPos(beamnum, &prop->pos);
+				boltbeamSetTailPos(beamnum, &prop->pos);
+			}
 
 			if (blen2 > 0.01f) {
-				const s32 beamnum = boltbeamFindByProp(prop);
-
-				if (beamnum >= 0) {
+				if (!orbglow && beamnum >= 0) {
 					s_BoltBeams++;
 
-					const f32 trail = prop->weapon->weaponnum == WEAPON_SHOCKORB ? 10.0f : 180.0f;
-					const f32 scale = trail / sqrtf(blen2);
+					const f32 scale = 180.0f / sqrtf(blen2);
 					struct coord head;
 
 					head.x = prop->pos.x - bx * scale;

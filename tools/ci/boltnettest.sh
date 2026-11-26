@@ -92,7 +92,9 @@ grep -qF 'cam0f0b5050((u8 *) model->matrices)' "$ROOT/src/game/propobj.c" \
 	|| fail 'the helper does not recover the camera that posed the model'
 grep -qF '(g_Vars.lvframenum - obj->projectile->unk0d8) > 0' "$ROOT/src/game/propobj.c" \
 	|| fail 'a bolt can bounce off a passage frame on its first tick'
-grep -qF 'const f32 trail = prop->weapon->weaponnum == WEAPON_SHOCKORB ? 10.0f : 180.0f;' "$ROOT/port/src/net/netpuppets.c" \
-	|| fail 'the client beam no longer matches the host trail'
+grep -qF 'const f32 scale = 180.0f / sqrtf(blen2);' "$ROOT/port/src/net/netpuppets.c" \
+	|| fail 'the client bolt no longer matches the host trail'
+grep -qF 'if (orbglow && beamnum >= 0) {' "$ROOT/port/src/net/netpuppets.c" \
+	|| fail 'a client orb no longer sits centred on its puppet every frame'
 
 exit $status

@@ -115,11 +115,22 @@ struct explosiontype g_ExplosionTypes[] = {
 	/*23*/ { 100, 80,  4,   1.4,  210,  220,  500,  90,  2, 5, SMOKETYPE_LARGE,        0x809f, 4     },
 	/*24*/ { 80,  60,  4,   1.4,  500,  200,  400,  90,  2, 5, SMOKETYPE_LARGE,        0x809f, 4     },
 	/*25*/ { 640, 480, 32,  11.2, 1600, 1000, 1000, 180, 2, 5, SMOKETYPE_NONE,         0x80a4, 4     },
-	// 26 is the orb's flash: a six-frame expansion with no fire or smoke,
-	// but a real blast so a hit does damage. The short duration and high
-	// propagation rate make it an instant burst, not a lingering flame.
-	/*26*/ { 180, 140, 0,   0,    180,   200,  400,  8,   4, 1, SMOKETYPE_NONE,         0x809f, 4     },
+	// 26 is the Shock Rifle orb's detonation: row 13's blast, damage, smoke and
+	// sound (a rocket's), with the run cut in half. The flame frame shown is
+	// (part->frame - 1) / flarespeed and frame advances once per step, so the
+	// 15 frames need 15 * flarespeed steps: 30 here, and the duration equals
+	// that, so the animation ends as the explosion does instead of restarting.
+	// That arithmetic is NTSC's: the #if PAL branch in explosionRender() scales
+	// the wrap point by 0.8333, so a PAL fire cycles in 25 and shows the last
+	// five frames again. Deliberate - duration is one shared figure, and it is
+	// the NTSC one that matches; the alternative is a duration that truncates
+	// the fire on both. The rocket takes 90. Same size, a third of the time,
+	// which is what an orb's detonation should look like next to one.
+	/*26*/ { 80, 60, 4,   1.4,  200,   200,  400,  30,  2, 2, SMOKETYPE_LARGE,        0x809f, 4     },
 };
+
+_Static_assert(ARRAYCOUNT(g_ExplosionTypes) == NUM_EXPLOSIONTYPES,
+		"g_ExplosionTypes is indexed by EXPLOSIONTYPE_* over the net: keep NUM_EXPLOSIONTYPES in constants.h in step");
 
 bool explosionCreateSimple(struct prop *prop, struct coord *pos, RoomNum *rooms, s16 type, s32 playernum)
 {
@@ -292,6 +303,14 @@ bool explosionCreate(struct prop *sourceprop, struct coord *exppos, RoomNum *exp
 		return false;
 	}
 
+	// Every caller in the game names a row with a constant; the one source of a
+	// type number that is not this code's choice is the net event, and both the
+	// host's table read here and the receiver's are plain array indexes. The
+	// receiver says what it dropped (netevents.c); this is the choke point.
+	if (type < 0 || type >= NUM_EXPLOSIONTYPES) {
+		return false;
+	}
+
 	if (g_NetMode == NETMODE_SERVER) netEvExplosion(sourceprop, exppos, exprooms, type, playernum, makescorch, arg6, room, arg8); // netplay E3
 
 	// Bullet holes: only crate the flame (explosion) if within 4 metres.
@@ -409,8 +428,7 @@ bool explosionCreate(struct prop *sourceprop, struct coord *exppos, RoomNum *exp
 			if (g_NetMode == NETMODE_SERVER) netLagCompBlastNote(exp - g_Explosions, type, playernum, exppos); // netplay: a guest's blast, where it saw the chrs
 #endif
 
-			if (type != EXPLOSIONTYPE_BULLETHOLE && type != EXPLOSIONTYPE_PHOENIX
-					&& type != EXPLOSIONTYPE_SHOCKFLASH) {
+			if (type != EXPLOSIONTYPE_BULLETHOLE && type != EXPLOSIONTYPE_PHOENIX) {
 				propSetDangerous(expprop);
 			}
 
@@ -1554,70 +1572,10 @@ Gfx *explosionRender(struct prop *prop, Gfx *gdl, bool xlupass)
 
 		gSPDisplayList(gdl++, g_TexGdl2);
 
-		// The orb's detonation is a brief blue-white flash that expands and
-		// fades, not a flame sequence. One round sprite, no smoke or scorch;
-		// the damage was decided by the hit and by the type's zeroed radii.
-		if (exp->type == EXPLOSIONTYPE_SHOCKFLASH) {
-			struct coord right;
-			struct coord up;
-			struct coord centre;
-			Vtx *vertices = gfxAllocateVertices(4);
-			Mtxf *cameramtx = camGetProjectionMtxF();
-			f32 size = 60.0f + 160.0f * ((f32) exp->age / 8.0f);
-			f32 alpha = 255.0f * (1.0f - (f32) exp->age / 8.0f);
-
-			if (alpha < 0.0f) {
-				alpha = 0.0f;
-			}
-
-			centre.x = prop->pos.x - coord->x;
-			centre.y = prop->pos.y - coord->y;
-			centre.z = prop->pos.z - coord->z;
-
-			right.x = cameramtx->m[0][0] * size;
-			right.y = cameramtx->m[0][1] * size;
-			right.z = cameramtx->m[0][2] * size;
-			up.x = cameramtx->m[1][0] * size;
-			up.y = cameramtx->m[1][1] * size;
-			up.z = cameramtx->m[1][2] * size;
-
-			vertices[0].x = centre.x - right.x - up.x;
-			vertices[0].y = centre.y - right.y - up.y;
-			vertices[0].z = centre.z - right.z - up.z;
-			vertices[1].x = centre.x + right.x - up.x;
-			vertices[1].y = centre.y + right.y - up.y;
-			vertices[1].z = centre.z + right.z - up.z;
-			vertices[2].x = centre.x + right.x + up.x;
-			vertices[2].y = centre.y + right.y + up.y;
-			vertices[2].z = centre.z + right.z + up.z;
-			vertices[3].x = centre.x - right.x + up.x;
-			vertices[3].y = centre.y - right.y + up.y;
-			vertices[3].z = centre.z - right.z + up.z;
-
-			vertices[0].s = 0;
-			vertices[0].t = 0;
-			vertices[1].s = g_TexShadowConfigs[0].width * 32;
-			vertices[1].t = 0;
-			vertices[2].s = g_TexShadowConfigs[0].width * 32;
-			vertices[2].t = g_TexShadowConfigs[0].height * 32;
-			vertices[3].s = 0;
-			vertices[3].t = g_TexShadowConfigs[0].height * 32;
-
-			for (j = 0; j < 4; j++) {
-				vertices[j].colour = 0;
-			}
-
-			texSelect(&gdl, &g_TexShadowConfigs[0], 4, 0, 2, true, NULL);
-			gDPSetCycleType(gdl++, G_CYC_2CYCLE);
-			gDPSetRenderMode(gdl++, G_RM_AA_ZB_XLU_SURF, G_RM_AA_ZB_XLU_SURF2);
-			gDPSetEnvColor(gdl++, 100, 180, 255, (s32) alpha);
-			gDPSetPrimColor(gdl++, 0, 0, 255, 255, 255, (s32) alpha);
-			gDPSetCombineMode(gdl++, G_CC_CUSTOM_00, G_CC_CUSTOM_01);
-			gSPVertex(gdl++, osVirtualToPhysical(vertices), 4, 0);
-			gSPTri2(gdl++, 0, 1, 2, 0, 2, 3);
-
-			return gdl;
-		}
+		// Type 26, the Shock Rifle orb's detonation, needs no branch of its own
+		// here: it is a rocket's blast played through this same flame animation in
+		// half the time (its row in g_ExplosionTypes), which is what makes it read
+		// as a big instant burst rather than a slow fire.
 
 		colours = gfxAllocateColours(1);
 
