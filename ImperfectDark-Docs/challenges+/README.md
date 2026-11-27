@@ -4,6 +4,18 @@ One file per challenge. These are the **source** for the separate Challenges+ da
 
 Every Plus challenge is available (no unlock gating) and a Plus completion ticks only the Plus record for the number of humans in the match (1-4 stars). Plus completions grant no feature unlocks and never touch the standard challenges.
 
+## Converting a challenge
+
+Templates start as `challenge-NN.md`. When you finish rewriting one, rename it
+to `challenge+-NN.md` and change `MPCONFIG_CHALLENGE NN` to
+`MPCONFIG_CHALLENGE+NN` inside the file (both the Source config line and the
+Config index line). A renamed template is the marker that the entry is ready:
+the importer sets its flag in `g_MpChallengesPlusConverted`, and the in-game
+Plus list shows only converted entries. Unconverted templates still feed their
+config data into the build, but their challenges stay hidden in the menus until
+you rename them. Re-run `python3 tools/ci/challengesplus_import.py` after each
+rename, then rebuild.
+
 **Applying edits:** after changing a `challenge-NN.md`, run `python3 tools/ci/challengesplus_import.py` from anywhere (it finds the repo). It currently verifies all 30 docs and their descriptions are present in the plus dataset; the C entries are seeded copies of the stock ones and are edited by hand until the generator is extended. Keep the config identifier (`MPCONFIG_CHALLENGE01` .. `30`) unchanged unless you also move the matching record in `mpconfigsplus.c`.
 
 | # | Config | Arena | Scenario | Description |

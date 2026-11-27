@@ -722,6 +722,27 @@ else()
 endif()
 list(APPEND SRC ${MODELPACK_C})
 
+# Challenges+: the 30 challenge-NN.md / challenge+-NN.md files are the source
+# of truth for the Plus datasets. Regenerate the C snapshots on every build so
+# editing a template takes effect without a manual importer run. CONFIGURE_DEPENDS
+# makes a rename to challenge+-NN.md pick up the new filename at build time.
+file(GLOB CHALLENGEPLUS_DOCS CONFIGURE_DEPENDS
+  "${CMAKE_SOURCE_DIR}/ImperfectDark-Docs/challenges+/challenge*.md"
+  "${CMAKE_SOURCE_DIR}/ImperfectDark-Docs/challenges+/README.md"
+  "${CMAKE_SOURCE_DIR}/ImperfectDark-Docs/challenges+/setup-guide.md")
+set(CHALPLUS_CONFIGS "${CMAKE_SOURCE_DIR}/src/game/mpconfigsplus.c")
+set(CHALPLUS_STRINGS "${CMAKE_SOURCE_DIR}/src/game/mpstringsplus.c")
+if(Python3_Interpreter_FOUND)
+  add_custom_command(
+    OUTPUT ${CHALPLUS_CONFIGS} ${CHALPLUS_STRINGS}
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/ci/challengesplus_import.py ${CMAKE_SOURCE_DIR}
+    DEPENDS ${CMAKE_SOURCE_DIR}/tools/ci/challengesplus_import.py ${CHALLENGEPLUS_DOCS}
+    COMMENT "Regenerating Challenges+ datasets from templates"
+  )
+else()
+  message(WARNING "No Python 3: Challenges+ datasets will not follow template edits")
+endif()
+
 # Game target
 
 set(BIN_NAME "${BIN_BASENAME}")

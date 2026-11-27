@@ -235,3 +235,21 @@ build (new config + array entries) unless you repurpose an unused slot.
 - **Feature unlocks**: some sim types/difficulties are behind
   `MPFEATURE_*` bits; `challengeForceUnlockConfigFeatures()` grants the config's
   declared features, so set `unlockfeatures` if your config uses gated content.
+
+## Challenges+ templates
+
+This file describes the ROM-resident stock configs, so it is pinned to 8 sims.
+The separate Challenges+ templates in `ImperfectDark-Docs/challenges+/` are
+source data for their own C dataset and are not ROM-limited:
+
+- They can list 8 to 16 sims. Slots 9-16 are stored in Plus-only arrays, not in
+  the ROM-resident `mpconfig`, so raising `MAX_BOTS_CONFIG` is not needed.
+- Each has a `## Bonus requirement` section with `bonus_requirement`, `silver`
+  and `gold`. That condition is judged once for the whole team at match end and
+  colours the completed stars bronze, silver or gold.
+- `python3 tools/ci/challengesplus_import.py` regenerates the Plus C files from
+  the templates; `--check` verifies they match. `tools/ci/challengesplusmedals.sh`
+  runs that check plus the runtime wiring gates.
+
+See `ImperfectDark-Docs/challenges+/setup-guide.md` for the full list of
+requirement IDs and how their values are formatted.
