@@ -94,6 +94,14 @@ void mpstatsRecordPlayerKill(void)
 	g_Vars.currentplayerstats->killcount++;
 	g_Vars.currentplayer->killsthislife++;
 
+	// The best single life so far. killsthislife is reset by playerSpawn(), so it
+	// is exactly the kills since the last respawn; taking the height here rather
+	// than at death also catches a spree that ended with the match. maxkills was a
+	// stock field this build never filled.
+	if ((s32) g_Vars.currentplayer->killsthislife > g_Vars.currentplayerstats->maxkills) {
+		g_Vars.currentplayerstats->maxkills = g_Vars.currentplayer->killsthislife;
+	}
+
 	if (g_Vars.normmplayerisrunning) {
 		time = playerGetMissionTime();
 
@@ -137,6 +145,14 @@ void mpstatsRecordPlayerKill(void)
 
 		if (simulkills > g_Vars.currentplayerstats->maxsimulkills) {
 			g_Vars.currentplayerstats->maxsimulkills = simulkills;
+		}
+
+		// Count the streaks too, not just the biggest one: every kill that extends
+		// a streak is a multi-kill, so four kills inside the window add three.
+		// maxsimulkills above only records the largest single streak. Suicides
+		// share the window code above but are not kills and are not counted.
+		if (simulkills > 1) {
+			g_Vars.currentplayerstats->multikillcount += simulkills - 1;
 		}
 	}
 }

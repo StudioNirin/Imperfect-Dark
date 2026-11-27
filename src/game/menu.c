@@ -1309,12 +1309,28 @@ s32 dialogFindItem(struct menudialog *dialog, struct menuitem *item, s32 *rowind
  * If this returns true, the scrollable is rendered with less padding and
  * scrolling is disabled.
  */
+bool menuIsScrollableCompactText(struct menuitem *item)
+{
+	switch (item->param) {
+	case DESCRIPTION_MPCONFIG:
+	case DESCRIPTION_MPCHALLENGE:
+	case DESCRIPTION_DEVICETRAINING:
+	case DESCRIPTION_FRWEAPON:
+	case DESCRIPTION_HOLOTRAINING:
+		return true;
+	}
+
+	return false;
+}
+
 bool menuIsScrollableUnscrollable(struct menuitem *item)
 {
 	if (item->type == MENUITEMTYPE_SCROLLABLE) {
-		if (item->param == DESCRIPTION_MPCONFIG
-				|| item->param == DESCRIPTION_MPCHALLENGE
-				|| item->param == DESCRIPTION_DEVICETRAINING
+		// Challenge descriptions are compact but scrollable: a long template
+		// description plus its bonus lines must be reachable even when it is
+		// taller than the viewport. The other training descriptions are kept
+		// fixed as before.
+		if (item->param == DESCRIPTION_DEVICETRAINING
 				|| item->param == DESCRIPTION_FRWEAPON
 				|| item->param == DESCRIPTION_HOLOTRAINING) {
 			return true;

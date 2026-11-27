@@ -391,6 +391,14 @@ s32 gamefileLoad(s32 device)
 				}
 			}
 
+			// Plus medal levels, appended after everything earlier so a save
+			// from before them reads zeros instead of shifting the fields above.
+			for (i = 0; i < ARRAYCOUNT(g_MpChallengesPlus); i++) {
+				for (j = 1; j < MAX_LOCAL_PLAYERS + 1; j++) {
+					challengeSetMedalIn(g_MpChallengesPlus, i, j, savebufferReadBits(&buffer, 3));
+				}
+			}
+
 #if VERSION >= VERSION_NTSC_1_0
 			if (pakHasBitflag(GAMEFILEFLAG_FOUNDTIMEDMINE, g_GameFile.flags)) {
 				frSetWeaponFound(WEAPON_TIMEDMINE);
@@ -568,6 +576,13 @@ s32 gamefileSave(s32 device, s32 fileid, u16 deviceserial)
 		for (i = 0; i < ARRAYCOUNT(g_MpChallengesPlus); i++) {
 			for (j = 1; j < MAX_LOCAL_PLAYERS + 1; j++) {
 				savebufferOr(&buffer, challengeIsCompletedByAnyPlayerIn(g_MpChallengesPlus, i, j), 1);
+			}
+		}
+
+		// Plus medal levels (see the read side for why this is appended).
+		for (i = 0; i < ARRAYCOUNT(g_MpChallengesPlus); i++) {
+			for (j = 1; j < MAX_LOCAL_PLAYERS + 1; j++) {
+				savebufferOr(&buffer, challengeGetMedalIn(g_MpChallengesPlus, i, j), 3);
 			}
 		}
 

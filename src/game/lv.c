@@ -471,6 +471,7 @@ void lvReset(s32 stagenum)
 			g_Vars.playerstats[i].slowest2kills = 0;
 			g_Vars.playerstats[i].maxkills = 0;
 			g_Vars.playerstats[i].maxsimulkills = 0;
+			g_Vars.playerstats[i].multikillcount = 0;
 			g_Vars.playerstats[i].longestlife = 0;
 			g_Vars.playerstats[i].shortestlife = S32_MAX;
 			g_Vars.playerstats[i].tokenheldtime = 0;

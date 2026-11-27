@@ -1088,6 +1088,12 @@ s32 mpCalculateTeamScoreLimit(void)
 	s32 limit = g_MpSetup.teamscorelimit;
 	s32 i;
 
+	// Plus challenges author an exact per-tier value in the template; the
+	// stock player-count scaling below must not be applied a second time.
+	if (g_ChallengeMode) {
+		return limit;
+	}
+
 	if (g_BossFile.locktype == MPLOCKTYPE_CHALLENGE
 			&& g_MpSetup.teamscorelimit != 400
 			&& (g_MpSetup.scenario == MPSCENARIO_COMBAT || g_MpSetup.scenario == MPSCENARIO_KINGOFTHEHILL)) {
@@ -4667,6 +4673,9 @@ void mpEndMatch(void)
 	mpCalculateAwards();
 
 	if (g_BossFile.locktype == MPLOCKTYPE_CHALLENGE) {
+		// Plus medal stars are judged from the finalized team stats, before
+		// the verdict is marked or sent (the host owns the net judgement).
+		challengeEvaluateBonus();
 #ifndef PLATFORM_N64
 		// a challenge room: the host judges from its own full view and the
 		// verdict marks every machine (protocol 37); the offline marking

@@ -14,7 +14,9 @@
 #include "game/lang.h"
 #include "game/mplayer/mplayer.h"
 #include "game/mplayer/setup.h"
+#include "game/mpstats.h"
 #include "game/options.h"
+#include "game/playermgr.h"
 #include "bss.h"
 #include "lib/main.h"
 #include "data.h"
@@ -580,6 +582,221 @@ struct menudialogdef g_MpEndscreenPlayerStatsMenuDialog = {
 	NULL,
 };
 
+/**
+ * Hidden per-player stats: the graded stats the standard stats panel does not
+ * show. Every row is a plain label item (name from param2, value right-aligned
+ * from param3), so the menu lays out, colours and scrolls the panel like any
+ * other one - no custom display-list code. The player is the one the standard
+ * panel selects; this panel's dropdown writes the same value, so both stay in
+ * step.
+ */
+static const char *const s_ExtStatNames[] = {
+	"Accuracy\n",
+	"K/D Ratio\n",
+	"Headshots\n",
+	"Back shots\n",
+	"Longest life\n",
+	"Fastest 2 kills\n",
+	"Multi-kills\n",
+	"Max multi-kills\n",
+	"Longest spree\n",
+	"Distance\n",
+	"Damage taken\n",
+	"Damage dealt\n",
+	"Objective time\n",
+	"Cloak time\n",
+};
+
+// The character to show: whatever the stats dropdown selects, falling back to
+// the first player in the match. Sim slots have no playerstats of their own.
+static s32 mpExtendedStatsChr(void)
+{
+	s32 chrslot = g_MpSelectedPlayersForStats[g_MpPlayerNum];
+	s32 i;
+
+	if (chrslot >= 0 && chrslot < MAX_PLAYERS && g_Vars.players[chrslot]) {
+		return chrslot;
+	}
+
+	for (i = 0; i < MAX_PLAYERS; i++) {
+		if (g_Vars.players[i]) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+char *mpMenuTextExtendedStatName(struct menuitem *item)
+{
+	if (item->param >= 0 && item->param < (s32) ARRAYCOUNT(s_ExtStatNames)) {
+		return (char *) s_ExtStatNames[item->param];
+	}
+
+	return "";
+}
+
+char *mpMenuTextExtendedStatValue(struct menuitem *item)
+{
+	static char text[24];
+	s32 chrslot = mpExtendedStatsChr();
+	s32 prevplayernum = g_Vars.currentplayernum;
+	struct playerstats *stats;
+	s32 deaths = 0;
+	s32 hits = 0;
+	s32 shots;
+	s32 i;
+
+	if (chrslot < 0) {
+		text[0] = 0;
+		return text;
+	}
+
+	// every read below goes through the current player, including the shot
+	// region counts, so the switch stays on the selected chr until the end
+	setCurrentPlayerNum(chrslot);
+	stats = g_Vars.currentplayerstats;
+
+	// every chr's kills on this one, its own included (the stock panel lists
+	// that diagonal separately as suicides)
+	for (i = 0; i < MAX_MPCHRS; i++) {
+		if (mpIsChrSlotOn(i)) {
+			deaths += MPCHR(i)->killcounts[chrslot];
+		}
+	}
+
+	hits = mpstatsGetPlayerShotCountByRegion(SHOTREGION_HEAD)
+		+ mpstatsGetPlayerShotCountByRegion(SHOTREGION_BODY)
+		+ mpstatsGetPlayerShotCountByRegion(SHOTREGION_LIMB)
+		+ mpstatsGetPlayerShotCountByRegion(SHOTREGION_GUN)
+		+ mpstatsGetPlayerShotCountByRegion(SHOTREGION_HAT)
+		+ mpstatsGetPlayerShotCountByRegion(SHOTREGION_OBJECT);
+	shots = mpstatsGetPlayerShotCountByRegion(SHOTREGION_TOTAL);
+
+	switch (item->param) {
+	case 0: // accuracy of this match, not the saved cross-game average
+		snprintf(text, sizeof(text), "%d%%\n", shots > 0 ? hits * 100 / shots : 0);
+		break;
+	case 1:
+		snprintf(text, sizeof(text), "%.2f\n", deaths > 0
+				? (f32) stats->killcount / deaths : (f32) stats->killcount);
+		break;
+	case 2:
+		snprintf(text, sizeof(text), "%d\n", mpstatsGetPlayerShotCountByRegion(SHOTREGION_HEAD));
+		break;
+	case 3:
+		snprintf(text, sizeof(text), "%d\n", stats->backshotcount);
+		break;
+	case 4:
+		snprintf(text, sizeof(text), "%ds\n", stats->longestlife / 60);
+		break;
+	case 5: // stays at its initial S32_MAX until two kills come in a row
+		if (stats->fastest2kills >= S32_MAX) {
+			snprintf(text, sizeof(text), "-\n");
+		} else {
+			snprintf(text, sizeof(text), "%ds\n", stats->fastest2kills / 60);
+		}
+		break;
+	case 6: // kills that extended a streak, over the whole match
+		snprintf(text, sizeof(text), "%d\n", stats->multikillcount);
+		break;
+	case 7: // the largest single streak, which cannot pass 4
+		snprintf(text, sizeof(text), "%d\n", stats->maxsimulkills);
+		break;
+	case 8: // most kills in one life, from spawn to respawn
+		snprintf(text, sizeof(text), "%d\n", stats->maxkills);
+		break;
+	case 9:
+		snprintf(text, sizeof(text), "%d\n", (s32) (stats->distance / 10000.0f));
+		break;
+	case 10:
+		snprintf(text, sizeof(text), "%d\n", (s32) stats->damreceived);
+		break;
+	case 11:
+		snprintf(text, sizeof(text), "%d\n", (s32) stats->damtransmitted);
+		break;
+	case 12:
+		snprintf(text, sizeof(text), "%ds\n", stats->tokenheldtime / 240);
+		break;
+	case 13:
+		snprintf(text, sizeof(text), "%ds\n", stats->cloaktime / 60);
+		break;
+	default:
+		text[0] = 0;
+		break;
+	}
+
+	setCurrentPlayerNum(prevplayernum);
+
+	return text;
+}
+
+#define EXTSTAT_ROW(n) { \
+	MENUITEMTYPE_LABEL, \
+	(n), \
+	MENUITEMFLAG_SMALLFONT, \
+	(uintptr_t) &mpMenuTextExtendedStatName, \
+	(uintptr_t) &mpMenuTextExtendedStatValue, \
+	NULL, \
+}
+
+struct menuitem g_MpExtendedStatsMenuItems[] = {
+	{
+		MENUITEMTYPE_DROPDOWN,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_DROPDOWN_BELOW,
+		(uintptr_t) "Player\n",
+		0,
+		mpStatsForPlayerDropdownHandler,
+	},
+	EXTSTAT_ROW(0),
+	EXTSTAT_ROW(1),
+	EXTSTAT_ROW(2),
+	EXTSTAT_ROW(3),
+	EXTSTAT_ROW(4),
+	EXTSTAT_ROW(5),
+	EXTSTAT_ROW(6),
+	// two columns of seven, which is what the end screen has height for
+	{
+		MENUITEMTYPE_LABEL,
+		7,
+		MENUITEMFLAG_SMALLFONT | MENUITEMFLAG_NEWCOLUMN,
+		(uintptr_t) &mpMenuTextExtendedStatName,
+		(uintptr_t) &mpMenuTextExtendedStatValue,
+		NULL,
+	},
+	EXTSTAT_ROW(8),
+	EXTSTAT_ROW(9),
+	EXTSTAT_ROW(10),
+	EXTSTAT_ROW(11),
+	EXTSTAT_ROW(12),
+	EXTSTAT_ROW(13),
+	{ MENUITEMTYPE_END },
+};
+
+static char *mpMenuTitleExtendedStats(struct menudialogdef *dialogdef)
+{
+	s32 playernum = g_MpSelectedPlayersForStats[g_MpPlayerNum];
+	struct mpchrconfig *mpchr;
+
+	if (playernum < 0 || playernum >= MAX_PLAYERS || !mpIsChrSlotOn(playernum)) {
+		return "Stats";
+	}
+
+	mpchr = MPCHR(playernum);
+	sprintf(g_StringPointer, langGet(L_MPMENU_280), mpchr->name);
+	return g_StringPointer;
+}
+
+struct menudialogdef g_MpEndscreenExtendedStatsMenuDialog = {
+	MENUDIALOGTYPE_DEFAULT,
+	(uintptr_t)&mpMenuTitleExtendedStats,
+	g_MpExtendedStatsMenuItems,
+	NULL,
+	JPNFLAG_1000,
+	&g_MpEndscreenPlayerStatsMenuDialog,
+};
+
 struct menuitem g_MpPlayerRankingMenuItems[] = {
 	{
 		MENUITEMTYPE_RANKING,
@@ -607,7 +824,7 @@ struct menudialogdef g_MpEndscreenPlayerRankingMenuDialog = {
 	g_MpPlayerRankingMenuItems,
 	NULL,
 	JPNFLAG_1000,
-	&g_MpEndscreenPlayerStatsMenuDialog,
+	&g_MpEndscreenExtendedStatsMenuDialog,
 };
 
 struct menuitem g_MpTeamRankingsMenuItems[] = {
@@ -875,11 +1092,16 @@ void mpPushEndscreenDialog(u32 arg0, u32 playernum)
 
 	if (g_MpSetup.options & MPOPTION_TEAMSENABLED) {
 		if (g_BossFile.locktype == MPLOCKTYPE_CHALLENGE) {
+			// the same verdict the dialog is chosen by, which the result line
+			// words itself with
 			if (g_CheatsActiveBank0 || g_CheatsActiveBank1) {
+				g_ChallengeEndscreenAward = CHALEND_VOID;
 				menuPushRootDialog(&g_MpEndscreenChallengeCheatedMenuDialog, MENUROOT_MPENDSCREEN);
 			} else if (challengeIsCompleteForEndscreen()) {
+				g_ChallengeEndscreenAward = CHALEND_AWARDED;
 				menuPushRootDialog(&g_MpEndscreenChallengeCompletedMenuDialog, MENUROOT_MPENDSCREEN);
 			} else {
+				g_ChallengeEndscreenAward = CHALEND_UNFINISHED;
 				menuPushRootDialog(&g_MpEndscreenChallengeFailedMenuDialog, MENUROOT_MPENDSCREEN);
 			}
 		} else {
@@ -1041,10 +1263,127 @@ struct menudialogdef g_MpEndscreenTeamGameOverMenuDialog = {
 	&g_MpEndscreenTeamRankingMenuDialog,
 };
 
+/**
+ * Challenge result line on the Completed/Failed/Cheated screens. Shows the
+ * team-wide requirement and what the team actually achieved against it.
+ * A label text callback keeps the row in the normal menu layout/scissor.
+ */
+static char *mpMenuTextChallengeResult(struct menuitem *item)
+{
+	static char text[128];
+	const char *suffix = "";
+	const char *verdict;
+	s32 fmt;
+
+	if (!g_ChallengeMode || g_ChallengeAchievedRequirement == CHALBONUS_NONE) {
+		return "";
+	}
+
+	fmt = challengeBonusFormat(g_ChallengeAchievedRequirement);
+	if (fmt == 1) {
+		suffix = "s";
+	} else if (fmt == 2) {
+		suffix = "%";
+	}
+
+	// only a finished challenge earns a star: the thresholds are graded either
+	// way, so a match ended early still shows what the team managed against them
+	switch (g_ChallengeEndscreenAward) {
+	case CHALEND_AWARDED:
+		verdict = g_ChallengeMedalLevel == 3 ? "Perfect star" :
+				g_ChallengeMedalLevel == 2 ? "Gold star" :
+				g_ChallengeMedalLevel == 1 ? "Silver star" : "Bronze star";
+		break;
+	case CHALEND_VOID:
+		verdict = "Not awarded";
+		break;
+	default:
+		verdict = "Unfinished";
+		break;
+	}
+
+	snprintf(text, sizeof(text), "%s: %d%s - %s\n",
+			challengeBonusName(g_ChallengeAchievedRequirement),
+			challengeBonusDisplayValue(g_ChallengeAchievedRequirement, g_ChallengeAchievedValue),
+			suffix, verdict);
+
+	return text;
+}
+
+/**
+ * Tints the challenge result line with the medal it describes, on the same
+ * colours as the star in the challenge list. Not MENUITEMFLAG_LABEL_ALTCOLOUR:
+ * that colour is the palette's checkbox_checked_unfocused, which is 0x00000000
+ * (fully transparent) on the success dialog, so an alternative-colour label drew
+ * invisibly on Challenge Completed and only showed while a swipe was blending two
+ * palettes together.
+ */
+static MenuItemHandlerResult mpChallengeResultMenuColour(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	u32 rgb;
+
+	if (operation != MENUOP_GETCOLOUR) {
+		return 0;
+	}
+
+	if (g_ChallengeEndscreenAward != CHALEND_AWARDED) {
+		return 0; // nothing earned: the dialog's own label colour stands
+	}
+
+	switch (g_ChallengeMedalLevel) {
+	case 3: {
+		// Perfect: the star's holographic purple, shimmering with it
+		u32 wave = (u32) (menuGetSinOscFrac(6) * 0x3f);
+
+		rgb = ((0xc0 - wave / 2) << 24) | ((0x40 + wave) << 16) | 0xff00;
+		break;
+	}
+	case 2:
+		rgb = 0xffe56500; // gold
+		break;
+	case 1:
+		rgb = 0xc0c0c000; // silver
+		break;
+	default:
+		rgb = 0x9a5a1e00; // bronze
+		break;
+	}
+
+	data->label.colour1 = (rgb & 0xffffff00) | 0xff;
+	data->label.colour2 = data->label.colour1;
+
+	return 0;
+}
+
+struct menuitem g_MpChallengeResultMenuItems[] = {
+	{
+		// Before the ranking table, not after it: menuitemRankingRender() sets a
+		// scissor for its own table rows and leaves it set, and dialogRender()
+		// applies the dialog's clip once before the item loop rather than per
+		// item, so a row drawn after the table is clipped away (the result line
+		// took up its 12 units of layout but drew nothing).
+		MENUITEMTYPE_LABEL,
+		0,
+		MENUITEMFLAG_LABEL_CUSTOMCOLOUR,
+		(uintptr_t) &mpMenuTextChallengeResult,
+		0,
+		mpChallengeResultMenuColour,
+	},
+	{
+		MENUITEMTYPE_RANKING,
+		0,
+		0,
+		0x00000001,
+		0,
+		NULL,
+	},
+	{ MENUITEMTYPE_END },
+};
+
 struct menudialogdef g_MpEndscreenChallengeCompletedMenuDialog = {
 	MENUDIALOGTYPE_SUCCESS,
 	L_MPWEAPONS_165, // "Challenge Completed!"
-	g_MpTeamRankingsMenuItems,
+	g_MpChallengeResultMenuItems,
 	NULL,
 	0,
 	&g_MpEndscreenIndGameOverMenuDialog,
@@ -1053,7 +1392,7 @@ struct menudialogdef g_MpEndscreenChallengeCompletedMenuDialog = {
 struct menudialogdef g_MpEndscreenChallengeCheatedMenuDialog = {
 	MENUDIALOGTYPE_DANGER,
 	L_MPWEAPONS_167, // "Challenge Cheated!"
-	g_MpTeamRankingsMenuItems,
+	g_MpChallengeResultMenuItems,
 	NULL,
 	0,
 	&g_MpEndscreenIndGameOverMenuDialog,
@@ -1062,7 +1401,7 @@ struct menudialogdef g_MpEndscreenChallengeCheatedMenuDialog = {
 struct menudialogdef g_MpEndscreenChallengeFailedMenuDialog = {
 	MENUDIALOGTYPE_DANGER,
 	L_MPWEAPONS_166, // "Challenge Failed!"
-	g_MpTeamRankingsMenuItems,
+	g_MpChallengeResultMenuItems,
 	NULL,
 	0,
 	&g_MpEndscreenIndGameOverMenuDialog,

@@ -11,7 +11,10 @@
 #include "game/mplayer/mplayer.h"
 #include "game/mplayer/scenarios.h"
 #include "game/mplayer/setup.h"
+#include "game/modoptions.h"
+#include "game/mpstats.h"
 #include "game/pad.h"
+#include "game/player.h"
 #include "game/playermgr.h"
 #include "game/prop.h"
 #include "game/training.h"
@@ -35,6 +38,10 @@ u8 g_MpFeaturesUnlocked[80];
 
 u32 g_MpChallengeIndex = 0;
 struct mpconfigfull *g_MpCurrentChallengeConfig = NULL;
+
+// Description panel preview state, set by the menu as rows and tabs change.
+static s32 s_PreviewIndex;
+static s32 s_PreviewTier;
 
 // Challenges+: 0 = stock challenge dataset, 1 = the separate Plus copy. The
 // menu sets it when entering the Plus list; net RULES carry it to clients.
@@ -78,11 +85,36 @@ struct challenge g_MpChallenges[] = {
 	{ L_OPTIONS_435, MPCONFIG_CHALLENGE30 }, // "Challenge 30"
 };
 
+s32 challengeHumanCount(void)
+{
+	s32 count = 0;
+	s32 i;
+
+	for (i = 0; i < MAX_LOCAL_PLAYERS; i++) {
+		if (g_MpSetup.chrslots & (1 << i)) {
+			count++;
+		}
+	}
+
+	if (count < 1) {
+		count = 1;
+	}
+
+	return count;
+}
+
+static bool challengePlusConverted(s32 challengeindex)
+{
+	return challengeindex >= 0 && challengeindex < 30
+		&& g_MpChallengesPlusConverted[challengeindex] != 0;
+}
+
 bool challengeIsAvailable(s32 challengeindex)
 {
-	// Every Plus challenge is visible - it has no unlock gating of its own yet.
+	// A Plus challenge appears once its doc has been converted to the new
+	// naming format, so the list grows as each one is finished.
 	if (g_ChallengeMode) {
-		return true;
+		return challengePlusConverted(challengeindex);
 	}
 
 	return (g_MpChallenges[challengeindex].availability & 1) != 0;
@@ -91,7 +123,7 @@ bool challengeIsAvailable(s32 challengeindex)
 bool challengeIsAvailableToPlayer(s32 chrnum, s32 challengeindex)
 {
 	if (g_ChallengeMode) {
-		return true;
+		return challengePlusConverted(challengeindex);
 	}
 
 	if ((g_MpSetup.chrslots & (1 << chrnum)) == 0) {
@@ -104,7 +136,7 @@ bool challengeIsAvailableToPlayer(s32 chrnum, s32 challengeindex)
 bool challengeIsAvailableToAnyPlayer(s32 challengeindex)
 {
 	if (g_ChallengeMode) {
-		return true;
+		return challengePlusConverted(challengeindex);
 	}
 
 	return (g_MpChallenges[challengeindex].availability & (((g_MpSetup.chrslots & 0xf) << 1) | 1)) != 0;
@@ -293,12 +325,17 @@ void challengeSetSimulantsForNumPlayers(s32 numplayers)
 
 	mpClearSimSlots();
 
-	// Challenges are ROM-defined and only describe MAX_BOTS_CONFIG simulants.
-	for (i = 0; i < MAX_BOTS_CONFIG; i++) {
-		g_BotConfigsArray[i].difficulty = g_MpSimulantDifficultiesPerNumPlayers[i][numplayers - 1];
+	// Stock challenges are ROM-defined and only describe MAX_BOTS_CONFIG
+	// simulants. A Plus challenge can configure eight more from its template.
+	{
+		s32 numconfigsims = g_ChallengeMode ? MAX_BOTS_CONFIG + 8 : MAX_BOTS_CONFIG;
 
-		if (g_BotConfigsArray[i].difficulty != BOTDIFF_DISABLED) {
-			mpSetSimSlotOn(i, true);
+		for (i = 0; i < numconfigsims; i++) {
+			g_BotConfigsArray[i].difficulty = g_MpSimulantDifficultiesPerNumPlayers[i][numplayers - 1];
+
+			if (g_BotConfigsArray[i].difficulty != BOTDIFF_DISABLED) {
+				mpSetSimSlotOn(i, true);
+			}
 		}
 	}
 }
@@ -417,6 +454,24 @@ bool challengeIsCompletedByAnyChrWithNumPlayersBySlot(s32 slot, s32 numplayers)
 	}
 
 	return false;
+}
+
+u32 challengeGetMedalBySlot(s32 slot, s32 numplayers)
+{
+	s32 availableindex = 0;
+	s32 i;
+
+	for (i = 0; i < ARRAYCOUNT(g_MpChallenges); i++) {
+		if (challengeIsAvailableToAnyPlayer(i)) {
+			if (availableindex == slot) {
+				return challengeGetMedal(i, numplayers);
+			}
+
+			availableindex++;
+		}
+	}
+
+	return 0;
 }
 
 bool challengeIsCompletedByChrWithNumPlayersBySlot(s32 mpchrnum, s32 slot, s32 numplayers)
@@ -704,6 +759,7 @@ struct mpconfigfull *challengeLoadBySlot(s32 n, u8 *buffer, s32 len)
 	for (challengeindex = 0; challengeindex < ARRAYCOUNT(g_MpChallenges); challengeindex++) {
 		if (challengeIsAvailableToAnyPlayer(challengeindex)) {
 			if (numavailable == n) {
+				challengeSetPreviewIndex(challengeindex);
 				return challengeLoad(challengeindex, buffer, len);
 			}
 
@@ -795,20 +851,17 @@ void challengeForceUnlockConfigFeatures(struct mpconfig *config, u8 *array, s32 
 
 	// config->simulants[] is ROM/save-resident and only has MAX_BOTS_CONFIG
 	// entries. Iterating to MAX_BOTS reads far past the end of the struct,
-	// which callers place in a small stack buffer.
-	for (i = 0; i < MAX_BOTS_CONFIG; i++) {
-		s32 simtype = mpFindBotProfile(config->simulants[i].type, BOTDIFF_NORMAL);
+	// which callers place in a small stack buffer. Plus challenges have eight
+	// more in a separate array.
+	{
+		s32 numconfigsims = (g_ChallengeMode && challengeindex >= 0 && challengeindex < 30)
+			? MAX_BOTS_CONFIG + 8 : MAX_BOTS_CONFIG;
 
-		if (simtype >= 0) {
-			featurenum = g_BotProfiles[simtype].requirefeature;
-
-			if (featurenum) {
-				index = challengeForceUnlockFeature(featurenum, array, index, len);
-			}
-		}
-
-		for (numplayers = 0; numplayers < MAX_LOCAL_PLAYERS; numplayers++) {
-			simtype = mpFindBotProfile(0, config->simulants[i].difficulties[numplayers]);
+		for (i = 0; i < numconfigsims; i++) {
+			struct mpconfigsim *sim = i < MAX_BOTS_CONFIG
+				? &config->simulants[i]
+				: &g_MpPlusExtraSims[challengeindex][i - MAX_BOTS_CONFIG];
+			s32 simtype = mpFindBotProfile(sim->type, BOTDIFF_NORMAL);
 
 			if (simtype >= 0) {
 				featurenum = g_BotProfiles[simtype].requirefeature;
@@ -817,21 +870,33 @@ void challengeForceUnlockConfigFeatures(struct mpconfig *config, u8 *array, s32 
 					index = challengeForceUnlockFeature(featurenum, array, index, len);
 				}
 			}
-		}
 
-		if (config->simulants[i].mpbodynum < g_MpListCounts.bodies) {
-			featurenum = g_MpBodies[config->simulants[i].mpbodynum].requirefeature;
+			for (numplayers = 0; numplayers < MAX_LOCAL_PLAYERS; numplayers++) {
+				simtype = mpFindBotProfile(0, sim->difficulties[numplayers]);
 
-			if (featurenum) {
-				index = challengeForceUnlockFeature(featurenum, array, index, len);
+				if (simtype >= 0) {
+					featurenum = g_BotProfiles[simtype].requirefeature;
+
+					if (featurenum) {
+						index = challengeForceUnlockFeature(featurenum, array, index, len);
+					}
+				}
 			}
-		}
 
-		if (config->simulants[i].mpheadnum < g_MpListCounts.heads) {
-			featurenum = g_MpHeads[config->simulants[i].mpheadnum].requirefeature;
+			if (sim->mpbodynum < g_MpListCounts.bodies) {
+				featurenum = g_MpBodies[sim->mpbodynum].requirefeature;
 
-			if (featurenum) {
-				index = challengeForceUnlockFeature(featurenum, array, index, len);
+				if (featurenum) {
+					index = challengeForceUnlockFeature(featurenum, array, index, len);
+				}
+			}
+
+			if (sim->mpheadnum < g_MpListCounts.heads) {
+				featurenum = g_MpHeads[sim->mpheadnum].requirefeature;
+
+				if (featurenum) {
+					index = challengeForceUnlockFeature(featurenum, array, index, len);
+				}
 			}
 		}
 	}
@@ -963,16 +1028,75 @@ void challengeRemoveForceUnlocks(void)
 	challengeDetermineUnlockedFeatures();
 }
 
+/**
+ * A Plus challenge can configure 16 sims. The ROM-resident config only holds
+ * eight, so mpApplyConfig() clones the rest disabled; overwrite slots 8-15
+ * from the Plus-only arrays loaded from the challenge-NN.md files.
+ */
+void challengeApplyPlusSims(void)
+{
+	s32 i;
+	s32 j;
+	s32 slot;
+	struct mpconfigsim *sim;
+	u8 *name;
+
+	if (!g_ChallengeMode || g_MpChallengeIndex < 0 || g_MpChallengeIndex >= 30) {
+		return;
+	}
+
+	for (i = 0; i < 8; i++) {
+		slot = MAX_BOTS_CONFIG + i;
+		sim = &g_MpPlusExtraSims[g_MpChallengeIndex][i];
+		name = g_MpPlusExtraBotNames[g_MpChallengeIndex][i];
+
+		g_BotConfigsArray[slot].type = sim->type;
+		mpResetBotStats(slot);
+
+		for (j = 0; j < MAX_LOCAL_PLAYERS; j++) {
+			g_MpSimulantDifficultiesPerNumPlayers[slot][j] = sim->difficulties[j];
+		}
+
+		g_BotConfigsArray[slot].difficulty = g_MpSimulantDifficultiesPerNumPlayers[slot][0];
+		strcpy(g_BotConfigsArray[slot].base.name, name);
+		g_BotConfigsArray[slot].base.mpheadnum = sim->mpheadnum;
+		g_BotConfigsArray[slot].base.mpbodynum = sim->mpbodynum;
+		g_BotConfigsArray[slot].base.team = sim->team;
+	}
+}
+
 void challengeApply(void)
 {
 	s32 i;
 	u8 buffer[0x1ca];
 
 	mpApplyConfig(challengeLoadCurrent(buffer, 0x1ca));
+	challengeApplyPlusSims();
 	mpSetLock(MPLOCKTYPE_CHALLENGE, 5);
 
 	for (i = 0; i < MAX_LOCAL_PLAYERS; i++) {
 		g_PlayerConfigsArray[i].base.team = 0;
+	}
+
+	// Every challenge is a team game, even a lone player against sims. One
+	// authored score row feeds the team limit and the player score limit is
+	// left off, so the tier's value is the only goal that ends the match.
+	g_MpSetup.options |= MPOPTION_TEAMSENABLED;
+	g_MpSetup.scorelimit = 100;
+
+	if (g_ChallengeMode && g_MpChallengeIndex >= 0 && g_MpChallengeIndex < 30) {
+		s32 tier = challengeHumanCount() - 1;
+
+		if (tier < 0) {
+			tier = 0;
+		} else if (tier > 3) {
+			tier = 3;
+		}
+
+		g_MpSetup.teamscorelimit = g_MpPlusScoreLimits[g_MpChallengeIndex][tier];
+		// Mod.StartArmed is a NETKEY_SYNC option, so setting it here on the
+		// host before RULES go out hands clients the same starting gun.
+		g_ModOptions.spawnweapon = g_MpPlusStartArmed[g_MpChallengeIndex];
 	}
 
 #ifndef PLATFORM_N64
@@ -1004,6 +1128,10 @@ bool challengeIsLoaded(void)
 
 char *challengeGetCurrentDescription(void)
 {
+	if (g_ChallengeMode) {
+		return challengeGetTierDescription(g_MpChallengeIndex, s_PreviewTier);
+	}
+
 	if (g_MpCurrentChallengeConfig) {
 		return g_MpCurrentChallengeConfig->strings.description;
 	}
@@ -1013,6 +1141,10 @@ char *challengeGetCurrentDescription(void)
 
 char *challengeGetConfigDescription(struct mpconfigfull *mpconfig)
 {
+	if (g_ChallengeMode) {
+		return challengeGetTierDescription(s_PreviewIndex, s_PreviewTier);
+	}
+
 	if (mpconfig) {
 		return mpconfig->strings.description;
 	}
@@ -1041,6 +1173,20 @@ s32 challengeGetAutoFocusedIndex(s32 mpchrnum)
 
 	if (index < 4) {
 		index = 4;
+	}
+
+	// In Plus mode only converted challenges are listed, so a saved
+	// completion on an unconverted one must not focus past the last row.
+	if (g_ChallengeMode) {
+		s32 numavailable = challengeGetNumAvailable();
+
+		if (numavailable < 1) {
+			return 0;
+		}
+
+		if (index >= numavailable) {
+			index = numavailable - 1;
+		}
 	}
 
 	return index;
@@ -1107,7 +1253,331 @@ void challengeSetCompletedByPlayerWithNumPlayers(u32 mpchrnum, s32 index, s32 nu
 	CHAL_REC[index].completions[numplayers - 1] &= ~(2 << mpchrnum);
 }
 
+// The medal level lives in spare bits 5-7 of each per-tier completion byte.
+// Bits 0-4 are the any-player bit and the four per-player bits.
+u32 challengeGetMedalIn(struct challenge *list, s32 index, s32 numplayers)
+{
+	return (list[index].completions[numplayers - 1] >> 5) & 7;
+}
+
+void challengeSetMedalIn(struct challenge *list, s32 index, s32 numplayers, u32 medal)
+{
+	u8 *completion = &list[index].completions[numplayers - 1];
+
+	*completion = (*completion & ~(7 << 5)) | ((medal & 7) << 5);
+}
+
+u32 challengeGetMedal(s32 index, s32 numplayers)
+{
+	return challengeGetMedalIn(challengeActiveList(), index, numplayers);
+}
+
+void challengeSetMedal(s32 index, s32 numplayers, u32 medal)
+{
+	challengeSetMedalIn(challengeActiveList(), index, numplayers, medal);
+}
+
 #undef CHAL_REC
+
+void challengeSetPreviewIndex(s32 index)
+{
+	s_PreviewIndex = index;
+}
+
+void challengeSetPreviewTier(s32 tier)
+{
+	if (tier < 0) {
+		tier = 0;
+	} else if (tier > 3) {
+		tier = 3;
+	}
+
+	s_PreviewTier = tier;
+}
+
+s32 challengeGetPreviewTier(void)
+{
+	return s_PreviewTier;
+}
+
+char *challengeGetTierDescription(s32 index, s32 tier)
+{
+	if (!g_ChallengeMode || index < 0 || index >= 30) {
+		return "";
+	}
+
+	if (tier < 0) {
+		tier = 0;
+	} else if (tier > 3) {
+		tier = 3;
+	}
+
+	return g_MpPlusTierDescriptions[index][tier];
+}
+
+s32 g_ChallengeMedalLevel;
+s32 g_ChallengeAchievedValue;
+u8 g_ChallengeAchievedRequirement;
+s32 g_ChallengeEndscreenAward = CHALEND_UNFINISHED;
+
+/**
+ * Display strings for the end-screen challenge result panel. The format code
+ * is 0 for a plain count, 1 for seconds and 2 for a percentage.
+ */
+const char *challengeBonusName(u8 requirement)
+{
+	switch (requirement) {
+	case CHALBONUS_HEADSHOTS:    return "Headshots";
+	case CHALBONUS_ACCURACY:     return "Accuracy";
+	case CHALBONUS_KILLS:        return "Kills";
+	case CHALBONUS_DEATHS:       return "Deaths";
+	case CHALBONUS_KD_RATIO:     return "K/D Ratio";
+	case CHALBONUS_FASTEST_2KILLS: return "Fastest 2 Kills";
+	case CHALBONUS_LONGEST_LIFE: return "Longest Life";
+	case CHALBONUS_MAX_SIMUL_KILLS: return "Max Multi-Kills";
+	case CHALBONUS_MULTIKILLS:   return "Multi-Kills";
+	case CHALBONUS_LONGEST_SPREE: return "Longest Spree";
+	case CHALBONUS_TOKEN_HELD_TIME: return "Objective Time";
+	case CHALBONUS_BACKSHOTS:    return "Back Shots";
+	case CHALBONUS_DISTANCE:     return "Distance";
+	case CHALBONUS_DAM_RECEIVED: return "Damage Received";
+	case CHALBONUS_ITEM_USE:     return "Item Use";
+	case CHALBONUS_FINISH_TIME:  return "Finish Time";
+	default:                     return "None";
+	}
+}
+
+s32 challengeBonusFormat(u8 requirement)
+{
+	switch (requirement) {
+	case CHALBONUS_FINISH_TIME:
+	case CHALBONUS_TOKEN_HELD_TIME:
+	case CHALBONUS_LONGEST_LIFE:
+	case CHALBONUS_FASTEST_2KILLS:
+		return 1;
+	case CHALBONUS_ACCURACY:
+	case CHALBONUS_KD_RATIO:
+		return 2;
+	default:
+		return 0;
+	}
+}
+
+/**
+ * Achieved value in display units: times are stored as 60 Hz ticks and shown
+ * in seconds, except token-held time which accumulates at 240 Hz.
+ */
+s32 challengeBonusDisplayValue(u8 requirement, s32 value)
+{
+	if (challengeBonusFormat(requirement) == 1) {
+		return value / (requirement == CHALBONUS_TOKEN_HELD_TIME ? 240 : 60);
+	}
+
+	return value;
+}
+
+struct challengemetrics {
+	s32 kills;
+	s32 deaths;
+	s32 headshots;
+	s32 hits;
+	s32 shots;
+	s32 backshots;
+	s32 tokentime;
+	s32 distance;
+	s32 damreceived;
+	s32 cloaktime;
+	s32 fastest2kills;
+	s32 longestlife;
+	s32 maxsimulkills;
+	s32 multikills;
+	s32 longestspree;
+};
+
+/**
+ * Combine one team's stats across every chr on team 0. Team 0 is the human
+ * players plus any ally sims the config placed on MPTEAM_0; enemy sims on
+ * other teams are deliberately excluded. setCurrentPlayerNum() is required
+ * because the stat accessors read the global currentplayerstats.
+ */
+static void challengeGetTeamMetrics(struct challengemetrics *m)
+{
+	s32 i;
+	s32 v;
+	s32 prevplayernum = g_Vars.currentplayernum;
+
+	memset(m, 0, sizeof(*m));
+	m->fastest2kills = S32_MAX;
+
+	for (i = 0; i < PLAYERCOUNT(); i++) {
+		struct mpchrconfig *mpchr = mpGetChrConfigBySlotNum(i);
+
+		if (!mpchr || mpchr->team != 0) {
+			continue;
+		}
+
+		setCurrentPlayerNum(i);
+
+		m->kills += g_Vars.currentplayerstats->killcount;
+		m->deaths += mpchr->numdeaths;
+		m->headshots += mpstatsGetPlayerShotCountByRegion(SHOTREGION_HEAD);
+		m->hits += mpstatsGetPlayerShotCountByRegion(SHOTREGION_HEAD)
+			+ mpstatsGetPlayerShotCountByRegion(SHOTREGION_BODY)
+			+ mpstatsGetPlayerShotCountByRegion(SHOTREGION_LIMB)
+			+ mpstatsGetPlayerShotCountByRegion(SHOTREGION_GUN)
+			+ mpstatsGetPlayerShotCountByRegion(SHOTREGION_HAT)
+			+ mpstatsGetPlayerShotCountByRegion(SHOTREGION_OBJECT);
+		m->shots += mpstatsGetPlayerShotCountByRegion(SHOTREGION_TOTAL);
+		m->backshots += g_Vars.currentplayerstats->backshotcount;
+		m->tokentime += g_Vars.currentplayerstats->tokenheldtime;
+		m->distance += (s32)(g_Vars.currentplayerstats->distance / 10000.0f);
+		m->damreceived += (s32)g_Vars.currentplayerstats->damreceived;
+		m->cloaktime += g_Vars.currentplayerstats->cloaktime;
+
+		v = g_Vars.currentplayerstats->fastest2kills;
+		if (v > 0 && v < m->fastest2kills) {
+			m->fastest2kills = v;
+		}
+
+		v = g_Vars.currentplayerstats->longestlife;
+		if (v > m->longestlife) {
+			m->longestlife = v;
+		}
+
+		v = g_Vars.currentplayerstats->maxsimulkills;
+		if (v > m->maxsimulkills) {
+			m->maxsimulkills = v;
+		}
+
+		m->multikills += g_Vars.currentplayerstats->multikillcount;
+
+		// A team's spree is its best single life, not the lives added together
+		v = g_Vars.currentplayerstats->maxkills;
+		if (v > m->longestspree) {
+			m->longestspree = v;
+		}
+	}
+
+	setCurrentPlayerNum(prevplayernum);
+}
+
+/**
+ * Judge the Plus medal level from the team's aggregated stat. The host calls
+ * this once at match end; clients take the verdict from MATCH_END. 0 is bronze
+ * (any completion), 1 silver, 2 gold.
+ */
+void challengeEvaluateBonus(void)
+{
+	struct challengemetrics m;
+	struct challengebonus *bonus;
+	s32 value;
+	bool lowerisbetter = false;
+
+	g_ChallengeMedalLevel = 0;
+	g_ChallengeAchievedValue = 0;
+	g_ChallengeAchievedRequirement = CHALBONUS_NONE;
+
+	if (!g_ChallengeMode || g_MpChallengeIndex < 0 || g_MpChallengeIndex >= 30) {
+		return;
+	}
+
+	bonus = &g_MpChallengeBonusPlus[g_MpChallengeIndex];
+	if (bonus->requirement == CHALBONUS_NONE) {
+		return;
+	}
+
+	challengeGetTeamMetrics(&m);
+
+	switch (bonus->requirement) {
+	case CHALBONUS_HEADSHOTS:
+		value = m.headshots;
+		break;
+	case CHALBONUS_ACCURACY:
+		value = m.shots > 0 ? m.hits * 100 / m.shots : 0;
+		break;
+	case CHALBONUS_KILLS:
+		value = m.kills;
+		break;
+	case CHALBONUS_DEATHS:
+		value = m.deaths;
+		lowerisbetter = true;
+		break;
+	case CHALBONUS_KD_RATIO:
+		value = m.deaths > 0 ? m.kills * 100 / m.deaths : m.kills * 100;
+		break;
+	case CHALBONUS_FASTEST_2KILLS:
+		value = m.fastest2kills;
+		lowerisbetter = true;
+		break;
+	case CHALBONUS_LONGEST_LIFE:
+		value = m.longestlife;
+		break;
+	case CHALBONUS_MAX_SIMUL_KILLS:
+		value = m.maxsimulkills;
+		break;
+	case CHALBONUS_MULTIKILLS:
+		value = m.multikills;
+		break;
+	case CHALBONUS_LONGEST_SPREE:
+		value = m.longestspree;
+		break;
+	case CHALBONUS_TOKEN_HELD_TIME:
+		value = m.tokentime;
+		break;
+	case CHALBONUS_BACKSHOTS:
+		value = m.backshots;
+		break;
+	case CHALBONUS_DISTANCE:
+		value = m.distance;
+		break;
+	case CHALBONUS_DAM_RECEIVED:
+		value = m.damreceived;
+		lowerisbetter = true;
+		break;
+	case CHALBONUS_ITEM_USE:
+		value = m.cloaktime;
+		break;
+	case CHALBONUS_FINISH_TIME:
+		value = playerGetMissionTime();
+		lowerisbetter = true;
+		break;
+	default:
+		return;
+	}
+
+	// Kept for the end-screen's challenge result panel, which shows what the
+	// team actually achieved against the requirement's thresholds.
+	g_ChallengeAchievedValue = value;
+	g_ChallengeAchievedRequirement = bonus->requirement;
+
+	{
+		s32 tier = challengeHumanCount() - 1;
+
+		if (tier < 0) {
+			tier = 0;
+		} else if (tier > 3) {
+			tier = 3;
+		}
+
+		if (lowerisbetter) {
+			if (bonus->perfect[tier] > 0 && value <= bonus->perfect[tier]) {
+				g_ChallengeMedalLevel = 3;
+			} else if (value <= bonus->gold[tier]) {
+				g_ChallengeMedalLevel = 2;
+			} else if (value <= bonus->silver[tier]) {
+				g_ChallengeMedalLevel = 1;
+			}
+		} else {
+			if (bonus->perfect[tier] > 0 && value >= bonus->perfect[tier]) {
+				g_ChallengeMedalLevel = 3;
+			} else if (value >= bonus->gold[tier]) {
+				g_ChallengeMedalLevel = 2;
+			} else if (value >= bonus->silver[tier]) {
+				g_ChallengeMedalLevel = 1;
+			}
+		}
+	}
+}
 
 bool challengeIsCompleteForEndscreen(void)
 {
@@ -1160,6 +1630,7 @@ void challengeConsiderMarkingComplete(void)
 		}
 
 		challengeSetCompletedByAnyPlayerWithNumPlayers(g_MpChallengeIndex, PLAYERCOUNT(), 1);
+		challengeSetMedal(g_MpChallengeIndex, PLAYERCOUNT(), g_ChallengeMedalLevel);
 		prevplayernum = g_Vars.currentplayernum;
 
 		for (i = 0; i < PLAYERCOUNT(); i++) {

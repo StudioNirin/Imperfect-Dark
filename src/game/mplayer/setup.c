@@ -8,6 +8,7 @@
 #include "game/modspectate.h"
 #include "game/filemgr.h"
 #include "game/game_1531a0.h"
+#include "game/game_006900.h"
 #include "game/music.h"
 #include "game/mplayer/ingame.h"
 #include "game/mplayer/setup.h"
@@ -7478,7 +7479,7 @@ struct menuitem g_MpConfirmChallengeViaListOrDetailsMenuItems[] = {
 		DESCRIPTION_MPCONFIG,
 		0,
 		0x0000007c,
-		PAL ? 0x41 : 0x37,
+		PAL ? 0x78 : 0x68,
 		NULL,
 	},
 	{
@@ -7523,7 +7524,7 @@ struct menuitem g_MpChallengesListOrDetailsMenuItems[] = {
 		0,
 		MENUITEMFLAG_LIST_CUSTOMRENDER,
 		0x00000078,
-		0x0000004d,
+		0x00000068,
 		mpChallengesListMenuHandler,
 	},
 #if VERSION < VERSION_NTSC_1_0
@@ -7541,7 +7542,7 @@ struct menuitem g_MpChallengesListOrDetailsMenuItems[] = {
 		DESCRIPTION_MPCHALLENGE,
 		0,
 		0x0000007c,
-		PAL ? 0x41 : 0x37,
+		PAL ? 0x78 : 0x68,
 		menuhandler0017e9d8,
 	},
 	{
@@ -7614,7 +7615,7 @@ struct menuitem g_MpConfirmChallengeMenuItems[] = {
 		DESCRIPTION_MPCONFIG,
 		0,
 		0x0000007c,
-		PAL ? 0x41 : 0x37,
+		PAL ? 0x78 : 0x68,
 		NULL,
 	},
 	{
@@ -7652,6 +7653,44 @@ struct menudialogdef g_MpConfirmChallengeMenuDialog = {
 	MENUDIALOGFLAG_STARTSELECTS,
 	NULL,
 };
+
+/**
+ * Colour of a completed challenge star. Stock challenges stay gold as before;
+ * a Plus challenge uses the medal level stored for that player-count tier.
+ */
+static u32 mpChallengeStarColour(s32 slot, s32 numplayers, u8 fade)
+{
+	u32 rgb;
+
+	if (!g_ChallengeMode) {
+		rgb = 0xffe56500;
+	} else {
+		switch (challengeGetMedalBySlot(slot, numplayers)) {
+		case 3: {
+			// Perfect: a bright holographic purple that shimmers.
+			u32 wave = (u32) (menuGetSinOscFrac(6) * 0x3f);
+			rgb = ((0xc0 - wave / 2) << 24) | ((0x40 + wave) << 16) | 0xff00;
+			break;
+		}
+		case 2:
+			rgb = 0xffe56500; // gold
+			break;
+		case 1:
+			rgb = 0xc0c0c000; // silver
+			break;
+		default:
+			rgb = 0x9a5a1e00; // bronze
+			break;
+		}
+	}
+
+#if VERSION >= VERSION_NTSC_1_0
+	rgb = (rgb & 0xffffff00) | ((fade * 0xff) >> 8);
+#else
+	rgb |= 0xff;
+#endif
+	return rgb;
+}
 
 MenuItemHandlerResult mpChallengesListMenuHandler(s32 operation, struct menuitem *item, union handlerdata *data)
 {
@@ -7727,19 +7766,16 @@ MenuItemHandlerResult mpChallengesListMenuHandler(s32 operation, struct menuitem
 		gDPSetTextureFilter(gdl++, G_TF_POINT);
 
 		for (i = 0; i < maxchrs; i++) {
+			if (challengeIsCompletedByAnyChrWithNumPlayersBySlot(data->type19.unk04, i + 1)) {
+				gDPSetEnvColorViaWord(gdl++,
+						mpChallengeStarColour(data->type19.unk04, i + 1, renderdata->colour & 0xff));
+			} else {
 #if VERSION >= VERSION_NTSC_1_0
-			if (challengeIsCompletedByAnyChrWithNumPlayersBySlot(data->type19.unk04, i + 1)) {
-				gDPSetEnvColorViaWord(gdl++, (renderdata->colour & 0xff) * 0xff >> 8 | 0xffe56500);
-			} else {
 				gDPSetEnvColorViaWord(gdl++, (renderdata->colour & 0xff) * 0xff >> 8 | 0x43430000);
-			}
 #else
-			if (challengeIsCompletedByAnyChrWithNumPlayersBySlot(data->type19.unk04, i + 1)) {
-				gDPSetEnvColorViaWord(gdl++, 0xffe565ff);
-			} else {
 				gDPSetEnvColorViaWord(gdl++, 0x434300ff);
-			}
 #endif
+			}
 
 			gDPSetCombineLERP(gdl++,
 				TEXEL0, 0, ENVIRONMENT, 0,
@@ -7917,22 +7953,70 @@ static MenuItemHandlerResult mpChallengesEntryListHandler(s32 operation, struct 
 	return mpChallengesListMenuHandler(operation, item, data);
 }
 
+#ifndef PLATFORM_N64
+/**
+ * Four tabs, one per player-count star tier. The highlighted tab selects
+ * which tier's bonus requirement the description panel shows. Up and Down
+ * stay with the challenge list; shoulders and Left/Right turn the tabs.
+ */
+static MenuItemHandlerResult mpChallengesTierTabsMenuHandler(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	static const char *const names[4] = { "1p", "2p", "3p", "4p+" };
+
+	switch (operation) {
+	case MENUOP_CHECKHIDDEN:
+		return 0;
+	case MENUOP_GETOPTIONCOUNT:
+		data->list.value = 4;
+		break;
+	case MENUOP_GETOPTIONTEXT:
+		if (data->list.value < 4) {
+			return (uintptr_t) names[data->list.value];
+		}
+		return (uintptr_t) "";
+	case MENUOP_GETSELECTEDINDEX:
+		data->list.value = challengeGetPreviewTier();
+		break;
+	case MENUOP_SET:
+		challengeSetPreviewTier(data->list.value);
+		break;
+	}
+
+	return 0;
+}
+#endif
+
 struct menuitem g_MpChallengesMenuItems[] = {
 	{
 		MENUITEMTYPE_LIST,
 		1,
 		MENUITEMFLAG_LIST_CUSTOMRENDER,
 		0x00000078,
-		0x0000004d,
+		0x00000068,
 		mpChallengesEntryListHandler,
 	},
+#ifndef PLATFORM_N64
+	{
+		// right column: the player-count tabs above the description
+		MENUITEMTYPE_TABS,
+		0,
+		MENUITEMFLAG_NEWCOLUMN,
+		0x000000a0,
+		0x000000f0,
+		mpChallengesTierTabsMenuHandler,
+	},
+#endif
 	{
 		// right column: the highlighted challenge's own description
 		MENUITEMTYPE_SCROLLABLE,
 		DESCRIPTION_MPCONFIG,
+#ifndef PLATFORM_N64
+		0,
+#else
 		MENUITEMFLAG_NEWCOLUMN,
+#endif
 		0x0000007c,
-		PAL ? 0x41 : 0x37,
+		PAL ? 0x78 : 0x68,
 		NULL,
 	},
 	{ MENUITEMTYPE_END },

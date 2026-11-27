@@ -99,7 +99,7 @@ struct playerstats {
 	/*0x58*/ s32 maxsimulkills;
 	/*0x5c*/ f32 damagescale; // of received damage
 	/*0x60*/ s32 tokenheldtime;
-	/*0x64*/ s32 unk64;
+	/*0x64*/ s32 multikillcount; // kills that extended a streak, see mpstats
 	/*0x68*/ s32 cloaktime;
 	/*0x6c*/ s32 speedpillcount;
 

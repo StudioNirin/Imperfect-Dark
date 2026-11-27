@@ -63,6 +63,10 @@ void dialog0f0f1ef4(struct menudialog *dialog);
 void dialogCalculateContentSize(struct menudialogdef *dialogdef, struct menudialog *dialog, struct menu *menu);
 s32 dialogFindItem(struct menudialog *dialog, struct menuitem *item, s32 *rowindex, s32 *colindex);
 bool menuIsScrollableUnscrollable(struct menuitem *item);
+// Challenge and training descriptions use the compact (less padded) text
+// layout. This controls padding only; use menuIsScrollableUnscrollable to
+// decide whether the item's text can scroll.
+bool menuIsScrollableCompactText(struct menuitem *item);
 bool menuIsItemDisabled(struct menuitem *item, struct menudialog *dialog);
 bool menuIsItemFocusable(struct menuitem *item, struct menudialog *dialog, s32 arg2);
 struct menuitem *dialogFindItemAtColY(s32 targety, s32 colindex, struct menudialogdef *dialogdef, s32 *rowindexptr, struct menudialog *dialog);

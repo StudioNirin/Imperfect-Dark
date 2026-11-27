@@ -2917,6 +2917,7 @@ void netChallengeMatchEnded(void)
 
 						challengeSetCompletedByAnyPlayerWithNumPlayers(s_End.challengeindex, tier, true);
 						challengeSetCompletedByPlayerWithNumPlayers(0, s_End.challengeindex, tier, true);
+						challengeSetMedal(s_End.challengeindex, tier, (s_End.challenge >> 2) & 3);
 						sysLogPrintf(LOG_NOTE, "net: challenge %d: the host's verdict marked this machine's record at %d players, completions[%d] now %d",
 								s_End.challengeindex, tier, tier - 1,
 								challengeActiveList()[s_End.challengeindex].completions[tier - 1]);
@@ -3078,7 +3079,11 @@ void netHostMatchEnded(void)
 	// the challenge verdict (protocol 37): the host marked its own record
 	// at mpEndMatch; every other machine marks from this (bit 0 won, bit 1
 	// the room played a challenge at all)
-	netBufWriteU8(&b, (u8) ((s_ChallengePresent ? 2 : 0) | (s_ChallengeWon ? 1 : 0)));
+	// bits 2-3 carry the host's medal level so every client stores the same
+	// star colour (no protocol bump - the byte had six spare bits)
+	netBufWriteU8(&b, (u8) ((s_ChallengePresent ? 2 : 0)
+		| (s_ChallengeWon ? 1 : 0)
+		| ((g_ChallengeMedalLevel & 3) << 2)));
 	netBufWriteU16(&b, (u16) g_MpChallengeIndex);
 	// the record's tier is the match's human count (protocol 38): a challenge's
 	// sims are players, so PLAYERCOUNT() would give clients a higher tier

@@ -40,6 +40,31 @@
 #
 # mod-base 69
 
+notes 119 2026-11-27
+Multiplayer: the end-game stats now show the longest killing spree, the most kills one life managed. Challenges+ can grade a challenge on it too.
+
+notes 118 2026-11-27
+Multiplayer: the Multi-kills stat adds up every kill that extended a streak, so a four kill spree is worth three, and it now shows beside the best single streak. Challenges+ can grade a challenge on it too.
+
+notes 117 2026-11-27
+Challenges+: the challenge end screen shows the bonus requirement and what the team achieved against it; only a finished challenge names a star, otherwise the line reads Unfinished (or Not awarded with cheats on).
+Multiplayer: a new end-game panel shows the hidden per-player stats, including accuracy, K/D ratio, longest life and multi-kills.
+
+notes 116 2026-11-27
+Challenges+: each challenge can now set its own Start Armed option (none, first, fiesta or loadout) in its template.
+
+notes 115 2026-11-27
+Challenges+: a Perfect tier has been added above Gold. It is the hardest requirement and earns a bright purple star; Bronze simply means a win.
+Challenges+: the requirements shown in the description panel now list Bronze, Silver, Gold and Perfect for the selected player count.
+
+notes 114 2026-11-27
+Challenges+: the score goal and the medal thresholds can now be set separately for one, two, three and four players. Tabs on the Challenge list pick which player count's bonus is shown.
+Challenges+: only Challenges+ entries whose templates have been converted to the new naming are listed.
+
+notes 113 2026-11-26
+Challenges+: completed stars are now bronze, silver or gold. Each Custom Challenge can set its own team requirement and thresholds for silver and gold in its template.
+Challenges+: Custom Challenges can now configure up to sixteen simulants instead of eight.
+
 notes 112 2026-11-26
 Shock Rifle: the orb is a round glowing ball that sits behind scenery as it should, and shooting one sets off a blast as large as a rocket's.
 Shock Rifle: spawning with the gun now gives orbs as well as beam cells.

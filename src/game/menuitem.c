@@ -3656,7 +3656,7 @@ Gfx *menuitemScrollableRender(Gfx *gdl, struct menurendercontext *context)
 
 	rawtext = menuitemScrollableGetText(context->item->param);
 
-	if (menuIsScrollableUnscrollable(context->item)) {
+	if (menuIsScrollableCompactText(context->item)) {
 		paddingright = 10;
 	}
 
@@ -3737,7 +3737,7 @@ Gfx *menuitemScrollableRender(Gfx *gdl, struct menurendercontext *context)
 			0xff4444ff, context->width - 4, context->height - 4, -data->scrolloffset, 0);
 
 	// Body text
-	x = menuIsScrollableUnscrollable(context->item) ? context->x + 5 : context->x + 12;
+	x = menuIsScrollableCompactText(context->item) ? context->x + 5 : context->x + 12;
 	y = context->y + 2;
 
 	gdl = textRenderProjected(gdl, &x, &y, bodytext, g_CharsHandelGothicSm, g_FontHandelGothicSm,
@@ -3787,7 +3787,7 @@ bool menuitemScrollableTick(struct menuitem *item, struct menudialog *dialog, st
 		colwidth = g_Menus[g_MpPlayerNum].cols[colindex].width;
 		rowheight = g_Menus[g_MpPlayerNum].rows[rowindex].height;
 
-		if (menuIsScrollableUnscrollable(item)) {
+		if (menuIsScrollableCompactText(item)) {
 			width = colwidth - 10;
 		} else {
 			width = colwidth - 24;
