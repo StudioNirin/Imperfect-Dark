@@ -15,6 +15,7 @@
 #include "game/mplayer/setup.h"
 #include "game/modrules.h"
 #include "game/mplayer/scenarios.h"
+#include "game/lv.h"
 #include "game/radar.h"
 #include "game/bot.h"
 #include "game/botcmd.h"
@@ -53,6 +54,10 @@
 struct chrdata *g_MpBotChrPtrs[MAX_BOTS];
 
 u8 g_BotCount = 0;
+
+#ifndef PLATFORM_N64
+extern s32 g_MpTimeLimit60;
+#endif
 
 struct botdifficulty g_BotDifficulties[] = {
 	//           shootdelay
@@ -97,6 +102,7 @@ void botReset(struct chrdata *chr, u8 respawning)
 		aibot->navdetourwp = NULL;
 		aibot->navdetour60 = 0;
 		aibot->navedgefree60 = 0;
+		aibot->vulturepatience60 = 0;
 #endif
 
 		if (respawning) {
@@ -288,6 +294,13 @@ void botReset(struct chrdata *chr, u8 respawning)
  * with its nose in a wall looks worse than one that stood still.
  */
 #define BOTROLL_CLEARANCE 200
+
+/**
+ * How long a VultureSim waits for somebody to get hurt before it gives up
+ * and takes on a healthy target. Long enough to be the point of the type,
+ * short enough that a roomful of them cannot stare at each other all match.
+ */
+#define VULTURE_PATIENCE SECSTOTIME60(30)
 
 
 /**
@@ -1540,6 +1553,71 @@ s32 botTick(struct prop *prop)
 
 #ifndef PLATFORM_N64
 /**
+ * How far a SurgeSim has come through its ramp, 0 at the start and 1 at the
+ * end. The match clock is the engine's own, so a host and its clients read
+ * the same number. Linear on purpose: a squared ramp over a ten-minute
+ * match leaves the first half almost untouched and the change is hard to see.
+ */
+static f32 botSurgeProgress(void)
+{
+	s32 duration;
+	f32 progress;
+
+	if (g_MpSetup.scenario == MPSCENARIO_ZOMBIES) {
+		// Zombies turns its round over in botSpawn(), so a round gets its
+		// own ramp instead of carrying the last one's strength forward.
+		duration = g_MpTimeLimit60 > 0 ? TICKS(g_MpTimeLimit60) : TICKS(SECSTOTIME60(180));
+		progress = 1.0f - (f32) g_ScenarioData.zombies.roundtime60 / (f32) duration;
+	} else {
+		duration = g_MpTimeLimit60 > 0 ? TICKS(g_MpTimeLimit60) : TICKS(SECSTOTIME60(300));
+		progress = (f32) lvGetStageTime60() / (f32) duration;
+	}
+
+	if (progress < 0.0f) {
+		progress = 0.0f;
+	} else if (progress > 1.0f) {
+		progress = 1.0f;
+	}
+
+	return progress;
+}
+
+static bool botIsSurge(struct chrdata *chr)
+{
+	return chr && chr->aibot && chr->aibot->config
+			&& chr->aibot->config->type == BOTTYPE_SURGE;
+}
+
+/**
+ * A difficulty value for aim and reaction. A SurgeSim starts at MeatSim's
+ * value and finishes at PerfectSim's, so a zero at the top really is zero;
+ * everybody else keeps the value their own difficulty gave them.
+ */
+static f32 botGetSkillValue(struct chrdata *chr, f32 own, f32 floor, f32 ceiling)
+{
+	if (botIsSurge(chr)) {
+		f32 progress = botSurgeProgress();
+		return floor + (ceiling - floor) * progress;
+	}
+
+	return own;
+}
+
+/**
+ * SurgeSim's damage, toughness and speed grow with the same ramp. Its aim
+ * and reaction come from botGetSkillValue() instead, so the slider's scale
+ * is not applied twice to them.
+ */
+static f32 botGetSurgeScale(struct chrdata *chr, s32 stat)
+{
+	if (botIsSurge(chr) && (stat == BOTSTAT_DAMAGE || stat == BOTSTAT_TOUGHNESS || stat == BOTSTAT_SPEED)) {
+		return 1.0f + 1.5f * botSurgeProgress();
+	}
+
+	return 1.0f;
+}
+
+/**
  * How far one of a simulant's stat sliders has been moved, as a multiplier:
  * 1 for a stock simulant, 0.1 at the bottom of the slider and 5 at the top.
  * Anything that is not a simulant gets 1.
@@ -1560,7 +1638,7 @@ f32 botGetStatScale(struct chrdata *chr, s32 stat)
 		value = BOTSTAT_MAX;
 	}
 
-	return 1.0f + value * 0.1f;
+	return (1.0f + value * 0.1f) * botGetSurgeScale(chr, stat);
 }
 
 /**
@@ -1589,8 +1667,12 @@ static f32 botStatWorse(f32 value, f32 hardvalue, f32 scale)
  */
 s32 botGetShootDelay(struct chrdata *chr)
 {
-	return botStatWorse(g_BotDifficulties[chr->aibot->config->difficulty].shootdelay,
-			g_BotDifficulties[BOTDIFF_HARD].shootdelay, botGetStatScale(chr, BOTSTAT_REACTION));
+	s32 diff = chr->aibot->config->difficulty;
+	f32 delay = botGetSkillValue(chr, g_BotDifficulties[diff].shootdelay,
+			g_BotDifficulties[BOTDIFF_MEAT].shootdelay,
+			g_BotDifficulties[BOTDIFF_PERFECT].shootdelay);
+
+	return botStatWorse(delay, g_BotDifficulties[BOTDIFF_HARD].shootdelay, botGetStatScale(chr, BOTSTAT_REACTION));
 }
 #else
 #define botGetShootDelay(chr) (g_BotDifficulties[(chr)->aibot->config->difficulty].shootdelay)
@@ -2018,15 +2100,32 @@ void bot0f192a74(struct chrdata *chr)
 #ifndef PLATFORM_N64
 	// The reaction slider shortens the time the aim takes to settle on a
 	// target in sight, and the accuracy slider narrows the error it settles to
-	f32 settletime = botStatWorse(g_BotDifficulties[diff].unk0c,
-			g_BotDifficulties[BOTDIFF_HARD].unk0c, botGetStatScale(chr, BOTSTAT_REACTION));
+	f32 settletime;
 	f32 accuracy = botGetStatScale(chr, BOTSTAT_ACCURACY);
+	f32 skill04;
+	f32 skill08;
+	f32 skill18;
 	// PerfectSim and DarkSim turned down: their errors grow from HardSim's
 	// (botStatWorse()) rather than being divided, which leaves 0 at 0
-	bool liftaim = accuracy < 1.0f && diff > BOTDIFF_HARD;
-	f32 err04 = liftaim ? botStatWorse(g_BotDifficulties[diff].unk04, g_BotDifficulties[BOTDIFF_HARD].unk04, accuracy) : g_BotDifficulties[diff].unk04;
-	f32 err08 = liftaim ? botStatWorse(g_BotDifficulties[diff].unk08, g_BotDifficulties[BOTDIFF_HARD].unk08, accuracy) : g_BotDifficulties[diff].unk08;
-	f32 err18 = liftaim ? botStatWorse(g_BotDifficulties[diff].unk18, g_BotDifficulties[BOTDIFF_HARD].unk18, accuracy) : g_BotDifficulties[diff].unk18;
+	bool liftaim;
+	f32 err04;
+	f32 err08;
+	f32 err18;
+
+	settletime = botStatWorse(botGetSkillValue(chr, g_BotDifficulties[diff].unk0c,
+			g_BotDifficulties[BOTDIFF_MEAT].unk0c, g_BotDifficulties[BOTDIFF_PERFECT].unk0c),
+			g_BotDifficulties[BOTDIFF_HARD].unk0c, botGetStatScale(chr, BOTSTAT_REACTION));
+	skill04 = botGetSkillValue(chr, g_BotDifficulties[diff].unk04,
+			g_BotDifficulties[BOTDIFF_MEAT].unk04, g_BotDifficulties[BOTDIFF_PERFECT].unk04);
+	skill08 = botGetSkillValue(chr, g_BotDifficulties[diff].unk08,
+			g_BotDifficulties[BOTDIFF_MEAT].unk08, g_BotDifficulties[BOTDIFF_PERFECT].unk08);
+	skill18 = botGetSkillValue(chr, g_BotDifficulties[diff].unk18,
+			g_BotDifficulties[BOTDIFF_MEAT].unk18, g_BotDifficulties[BOTDIFF_PERFECT].unk18);
+
+	liftaim = accuracy < 1.0f && diff > BOTDIFF_HARD;
+	err04 = liftaim ? botStatWorse(skill04, g_BotDifficulties[BOTDIFF_HARD].unk04, accuracy) : skill04;
+	err08 = liftaim ? botStatWorse(skill08, g_BotDifficulties[BOTDIFF_HARD].unk08, accuracy) : skill08;
+	err18 = liftaim ? botStatWorse(skill18, g_BotDifficulties[BOTDIFF_HARD].unk18, accuracy) : skill18;
 #else
 	f32 settletime = g_BotDifficulties[diff].unk0c;
 	f32 err04 = g_BotDifficulties[diff].unk04;
@@ -2048,7 +2147,9 @@ void bot0f192a74(struct chrdata *chr)
 			aibot->targetinsighttemperature -= g_Vars.diffframe60;
 		}
 
-		tmp = g_BotDifficulties[diff].unk10 * (aibot->speedtheta * g_Vars.lvupdate60f);
+		tmp = botGetSkillValue(chr, g_BotDifficulties[diff].unk10,
+				g_BotDifficulties[BOTDIFF_MEAT].unk10, g_BotDifficulties[BOTDIFF_PERFECT].unk10)
+				* (aibot->speedtheta * g_Vars.lvupdate60f);
 
 		if (tmp < 0) {
 			tmp = -tmp;
@@ -2079,8 +2180,11 @@ void bot0f192a74(struct chrdata *chr)
 		struct prop *target = chrGetTargetProp(chr);
 
 		if (target->chr->hidden & CHRHFLAG_CLOAKED) {
-			if (fVar11 < g_BotDifficulties[diff].unk14) {
-				fVar11 = g_BotDifficulties[diff].unk14;
+			f32 cloakerror = botGetSkillValue(chr, g_BotDifficulties[diff].unk14,
+					g_BotDifficulties[BOTDIFF_MEAT].unk14, g_BotDifficulties[BOTDIFF_PERFECT].unk14);
+
+			if (fVar11 < cloakerror) {
+				fVar11 = cloakerror;
 			}
 		}
 	}
@@ -2154,6 +2258,34 @@ bool botPassesCowardCheck(struct chrdata *botchr, struct chrdata *otherchr)
 	}
 
 	return pass;
+}
+
+/**
+ * Return true if the bot is not a vulture, or is one that can fight this chr.
+ *
+ * VultureSims ignore healthy enemies: they hang back until somebody draws
+ * blood, then go after the wounded. Patience is what stops a pack of them
+ * from waiting forever for someone else to take the first hit. Players'
+ * bondhealth runs from 0 to 1; simulants carry the damage they have taken.
+ */
+bool botPassesVultureCheck(struct chrdata *botchr, struct chrdata *otherchr)
+{
+#ifndef PLATFORM_N64
+	struct aibot *aibot = botchr->aibot;
+
+	if (aibot && aibot->config && aibot->config->type == BOTTYPE_VULTURE
+			&& aibot->vulturepatience60 < VULTURE_PATIENCE) {
+		if (otherchr->aibot) {
+			return otherchr->damage > 0;
+		} else {
+			s32 playernum = playermgrGetPlayerNumByProp(otherchr->prop);
+
+			return playernum >= 0 && g_Vars.players[playernum]->bondhealth < 1.0f;
+		}
+	}
+#endif
+
+	return true;
 }
 
 /**
@@ -2313,6 +2445,10 @@ void botChooseGeneralTarget(struct chrdata *botchr)
 			botchr->target = -1;
 		}
 
+		if (!botPassesVultureCheck(botchr, targetprop->chr)) {
+			botchr->target = -1;
+		}
+
 		if (!botchr->aibot->targetinsight && !botPassesCowardCheck(botchr, targetprop->chr)) {
 			botchr->target = -1;
 		}
@@ -2331,7 +2467,8 @@ void botChooseGeneralTarget(struct chrdata *botchr)
 			if (trychr != botchr
 					&& !chrIsDead(trychr)
 					&& chrCompareTeams(botchr, trychr, COMPARE_ENEMIES)
-					&& botPassesPeaceCheck(botchr, trychr)) {
+					&& botPassesPeaceCheck(botchr, trychr)
+					&& botPassesVultureCheck(botchr, trychr)) {
 				// If the chr is in sight, that's it
 				if (aibot->chrsinsight[i]) {
 					botSetTarget(botchr, trychr->prop - g_Vars.props);
@@ -2401,7 +2538,8 @@ void botChooseGeneralTarget(struct chrdata *botchr)
 			if (trychr != botchr
 					&& !chrIsDead(trychr)
 					&& chrCompareTeams(botchr, trychr, COMPARE_ENEMIES)
-					&& botPassesPeaceCheck(botchr, trychr)) {
+					&& botPassesPeaceCheck(botchr, trychr)
+					&& botPassesVultureCheck(botchr, trychr)) {
 				botSetTarget(botchr, trychr->prop - g_Vars.props);
 				return;
 			}
@@ -3137,6 +3275,16 @@ void botTickUnpaused(struct chrdata *chr)
 	if (!chrIsDead(chr)) {
 		struct aibot *aibot = chr->aibot;
 		s32 i;
+
+#ifndef PLATFORM_N64
+		if (aibot->config->type == BOTTYPE_VULTURE && aibot->vulturepatience60 < VULTURE_PATIENCE) {
+			aibot->vulturepatience60 += g_Vars.lvupdate60;
+
+			if (aibot->vulturepatience60 > VULTURE_PATIENCE) {
+				aibot->vulturepatience60 = VULTURE_PATIENCE;
+			}
+		}
+#endif
 
 		// Consider updating random values
 		aibot->random2ttl60 -= g_Vars.lvupdate60;

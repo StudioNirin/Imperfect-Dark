@@ -925,6 +925,9 @@ struct aibot {
 	// Until this lvframe60 the edge rules in chr0f01f378() leave the bot
 	// be: set when it is held in the air with no detour to take.
 	s32 navedgefree60;
+	// VultureSim waits this long in 60ths for somebody to get hurt before it
+	// gives up waiting and takes on a healthy target.
+	s32 vulturepatience60;
 #endif
 };
 
@@ -3491,8 +3494,9 @@ struct botprofile {
 	/*0x00*/ u8 type;
 	/*0x01*/ u8 difficulty;
 	/*0x02*/ s16 name;
-	/*0x04*/ s16 body;
-	/*0x06*/ u8 requirefeature;
+	/*0x04*/ s16 description;
+	/*0x06*/ s16 body;
+	/*0x08*/ u8 requirefeature;
 };
 
 struct mpbody {

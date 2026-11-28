@@ -539,6 +539,9 @@ s32 langpackIsCjk(void);
 #define BOTTYPE_SPEED   10 // Runs faster
 #define BOTTYPE_TURTLE  11 // Moves slower and has double shield
 #define BOTTYPE_VENGE   12 // Targets the last player who killed it
+#define BOTTYPE_BOOMSTICK 13 // Prefers shotguns, but uses any gun it finds
+#define BOTTYPE_VULTURE 14 // Waits for a wounded enemy, then goes after it
+#define BOTTYPE_SURGE   15 // Starts weak and grows stronger as the match runs
 
 #define BRIEFINGTYPE_LOCATION 0
 #define BRIEFINGTYPE_TEXT_PA  1

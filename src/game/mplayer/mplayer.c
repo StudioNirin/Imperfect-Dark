@@ -924,6 +924,10 @@ void func0f1881d4(s32 index)
 	g_BotConfigsArray[index].difficulty = BOTDIFF_DISABLED;
 }
 
+#ifndef PLATFORM_N64
+static void mpInitSimulantText(void);
+#endif
+
 void mpInit(bool resetplayers)
 {
 	s32 i;
@@ -938,6 +942,8 @@ void mpInit(bool resetplayers)
 
 	extern void dbShotgunInitNames(void);
 	dbShotgunInitNames();
+
+	mpInitSimulantText();
 #endif
 
 	g_MpSetup.scenario = MPSCENARIO_COMBAT;
@@ -4028,26 +4034,55 @@ u32 g_BotHeads[] = {
 };
 
 struct botprofile g_BotProfiles[] = {
-	// type,           difficulty,      name,       body,                 require feature
-	{ BOTTYPE_GENERAL, BOTDIFF_MEAT,    L_MISC_088, MPBODY_DD_GUARD,      0                         },
-	{ BOTTYPE_GENERAL, BOTDIFF_EASY,    L_MISC_089, MPBODY_DD_SECGUARD,   0                         },
-	{ BOTTYPE_GENERAL, BOTDIFF_NORMAL,  L_MISC_090, MPBODY_DD_SHOCK_INF,  0                         },
-	{ BOTTYPE_GENERAL, BOTDIFF_HARD,    L_MISC_091, MPBODY_DDSHOCK,       MPFEATURE_BOTDIFF_HARD    },
-	{ BOTTYPE_GENERAL, BOTDIFF_PERFECT, L_MISC_092, MPBODY_STRIPES,       MPFEATURE_BOTDIFF_PERFECT },
-	{ BOTTYPE_GENERAL, BOTDIFF_DARK,    L_MISC_093, MPBODY_MOORE,         MPFEATURE_BOTDIFF_DARK    },
-	{ BOTTYPE_PEACE,   BOTDIFF_NORMAL,  L_MISC_094, MPBODY_DD_LABTECH,    0                         },
-	{ BOTTYPE_SHIELD,  BOTDIFF_NORMAL,  L_MISC_095, MPBODY_G5_SWAT_GUARD, 0                         },
-	{ BOTTYPE_ROCKET,  BOTDIFF_NORMAL,  L_MISC_096, MPBODY_G5_GUARD,      0                         },
-	{ BOTTYPE_KAZE,    BOTDIFF_NORMAL,  L_MISC_097, MPBODY_PRES_SECURITY, 0                         },
-	{ BOTTYPE_FIST,    BOTDIFF_NORMAL,  L_MISC_098, MPBODY_PELAGIC_GUARD, 0                         },
-	{ BOTTYPE_PREY,    BOTDIFF_NORMAL,  L_MISC_099, MPBODY_DDSHOCK,       0                         },
-	{ BOTTYPE_COWARD,  BOTDIFF_NORMAL,  L_MISC_100, MPBODY_PRESIDENT,     0                         },
-	{ BOTTYPE_JUDGE,   BOTDIFF_NORMAL,  L_MISC_101, MPBODY_STEWARD,       0                         },
-	{ BOTTYPE_FEUD,    BOTDIFF_NORMAL,  L_MISC_102, MPBODY_NSA_LACKEY,    0                         },
-	{ BOTTYPE_SPEED,   BOTDIFF_NORMAL,  L_MISC_103, MPBODY_MRBLONDE,      0                         },
-	{ BOTTYPE_TURTLE,  BOTDIFF_NORMAL,  L_MISC_104, MPBODY_CARRINGTON,    0                         },
-	{ BOTTYPE_VENGE,   BOTDIFF_NORMAL,  L_MISC_105, MPBODY_ALASKAN_GUARD, 0                         },
+	// type,              difficulty,      name,       description, body,                 require feature
+	{ BOTTYPE_GENERAL,    BOTDIFF_MEAT,    L_MISC_088, L_MISC_106,  MPBODY_DD_GUARD,      0                         },
+	{ BOTTYPE_GENERAL,    BOTDIFF_EASY,    L_MISC_089, L_MISC_107,  MPBODY_DD_SECGUARD,   0                         },
+	{ BOTTYPE_GENERAL,    BOTDIFF_NORMAL,  L_MISC_090, L_MISC_108,  MPBODY_DD_SHOCK_INF,  0                         },
+	{ BOTTYPE_GENERAL,    BOTDIFF_HARD,    L_MISC_091, L_MISC_109,  MPBODY_DDSHOCK,       MPFEATURE_BOTDIFF_HARD    },
+	{ BOTTYPE_GENERAL,    BOTDIFF_PERFECT, L_MISC_092, L_MISC_110,  MPBODY_STRIPES,       MPFEATURE_BOTDIFF_PERFECT },
+	{ BOTTYPE_GENERAL,    BOTDIFF_DARK,    L_MISC_093, L_MISC_111,  MPBODY_MOORE,         MPFEATURE_BOTDIFF_DARK    },
+	{ BOTTYPE_PEACE,      BOTDIFF_NORMAL,  L_MISC_094, L_MISC_112,  MPBODY_DD_LABTECH,    0                         },
+	{ BOTTYPE_SHIELD,     BOTDIFF_NORMAL,  L_MISC_095, L_MISC_113,  MPBODY_G5_SWAT_GUARD, 0                         },
+	{ BOTTYPE_ROCKET,     BOTDIFF_NORMAL,  L_MISC_096, L_MISC_114,  MPBODY_G5_GUARD,      0                         },
+	{ BOTTYPE_KAZE,       BOTDIFF_NORMAL,  L_MISC_097, L_MISC_115,  MPBODY_PRES_SECURITY, 0                         },
+	{ BOTTYPE_FIST,       BOTDIFF_NORMAL,  L_MISC_098, L_MISC_116,  MPBODY_PELAGIC_GUARD, 0                         },
+	{ BOTTYPE_PREY,       BOTDIFF_NORMAL,  L_MISC_099, L_MISC_117,  MPBODY_DDSHOCK,       0                         },
+	{ BOTTYPE_COWARD,     BOTDIFF_NORMAL,  L_MISC_100, L_MISC_118,  MPBODY_PRESIDENT,     0                         },
+	{ BOTTYPE_JUDGE,      BOTDIFF_NORMAL,  L_MISC_101, L_MISC_119,  MPBODY_STEWARD,       0                         },
+	{ BOTTYPE_FEUD,       BOTDIFF_NORMAL,  L_MISC_102, L_MISC_120,  MPBODY_NSA_LACKEY,    0                         },
+	{ BOTTYPE_SPEED,      BOTDIFF_NORMAL,  L_MISC_103, L_MISC_121,  MPBODY_MRBLONDE,      0                         },
+	{ BOTTYPE_TURTLE,     BOTDIFF_NORMAL,  L_MISC_104, L_MISC_122,  MPBODY_CARRINGTON,    0                         },
+	{ BOTTYPE_VENGE,      BOTDIFF_NORMAL,  L_MISC_105, L_MISC_123,  MPBODY_ALASKAN_GUARD, 0                         },
+	{ BOTTYPE_BOOMSTICK,  BOTDIFF_NORMAL,  0,          0,          MPBODY_DD_GUARD,      0                         },
+	{ BOTTYPE_VULTURE,    BOTDIFF_NORMAL,  0,          0,          MPBODY_DD_SECGUARD,   0                         },
+	{ BOTTYPE_SURGE,      BOTDIFF_NORMAL,  0,          0,          MPBODY_DD_SHOCK_INF,  0                         },
 };
+
+#ifndef PLATFORM_N64
+/**
+ * The new sims' names and blurbs are port strings. The ROM's text bank has no
+ * spare slot after L_MISC_123 (the menu used to index blurbs from 106 with
+ * the profile number), so keep the ids in the profile rows like every other
+ * name and let every reader - menu, census, lobby - use the same lookup.
+ */
+static void mpInitSimulantText(void)
+{
+	static bool done = false;
+
+	if (done) {
+		return;
+	}
+	done = true;
+
+	g_BotProfiles[18].name = langAddPortText("Boomstick\n");
+	g_BotProfiles[19].name = langAddPortText("Vulture\n");
+	g_BotProfiles[20].name = langAddPortText("Surge\n");
+
+	g_BotProfiles[18].description = langAddPortText("Boomstick: prefers shotguns, but picks up and uses any gun it finds.\n");
+	g_BotProfiles[19].description = langAddPortText("Vulture: hangs back until somebody is hurt, then goes after the wounded.\n");
+	g_BotProfiles[20].description = langAddPortText("Surge: starts weak and grows stronger as the match runs.\n");
+}
+#endif
 
 struct mpbody g_MpBodies[MAX_MPBODIES] = {
 	// global body ID,                name,            head,             require feature

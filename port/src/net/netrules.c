@@ -1348,7 +1348,7 @@ s32 netRulesRead(struct netbuf *b)
 	for (i = 0; i < MAX_BOTS; i++) {
 		struct netrulessim *sim = &s_NetRules.sims[i];
 
-		if (sim->on && (sim->type > BOTTYPE_VENGE || sim->difficulty > BOTDIFF_DISABLED || sim->team >= MAX_TEAMS)) {
+		if (sim->on && (sim->type > BOTTYPE_SURGE || sim->difficulty > BOTDIFF_DISABLED || sim->team >= MAX_TEAMS)) {
 			b->error = 1;
 		}
 

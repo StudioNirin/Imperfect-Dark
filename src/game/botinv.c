@@ -597,7 +597,17 @@ void botinvScoreWeapon(struct chrdata *chr, s32 weaponnum, s32 funcnum, s32 arg3
 				extra = 50;
 			}
 
-			if (chr->aibot->config->type == BOTTYPE_ROCKET) {
+			// BoomstickSim wants a scattergun the way RocketSim wants an
+			// explosive: a score boost, never a veto. It still picks up,
+			// holds and fires anything else it finds. The DB-Shotgun hosts
+			// itself, so it needs its own entry beside the stock shotgun.
+			if (chr->aibot->config->type == BOTTYPE_BOOMSTICK) {
+				if (weaponHost(weaponnum) == WEAPON_SHOTGUN) {
+					score1 = extra + 300;
+				} else if (weaponHost(weaponnum) == WEAPON_GESHOTGUN) {
+					score1 = extra + 299;
+				}
+			} else if (chr->aibot->config->type == BOTTYPE_ROCKET) {
 				if (weaponHost(weaponnum) == WEAPON_ROCKETLAUNCHER) {
 					score1 = extra + 300;
 				} else if (weaponHost(weaponnum) == WEAPON_SLAYER) {

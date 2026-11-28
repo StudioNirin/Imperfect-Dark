@@ -5218,7 +5218,7 @@ MenuItemHandlerResult mpAddChangeSimulantMenuHandler(s32 operation, struct menui
 
 char *mpMenuTextSimulantDescription(struct menuitem *item)
 {
-	return langGet(L_MISC_106 + g_Menus[g_MpPlayerNum].mpsetup.unke24);
+	return langGet(g_BotProfiles[g_Menus[g_MpPlayerNum].mpsetup.unke24].description);
 }
 
 MenuItemHandlerResult menuhandlerMpSimulantHead(s32 operation, struct menuitem *item, union handlerdata *data)
