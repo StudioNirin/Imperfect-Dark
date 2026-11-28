@@ -245,7 +245,7 @@ fi
 # match's RULES). Pin that shape in source; the clamped case already proves the
 # tier follows the human count, not the 2-player PLAYERCOUNT() of the pair.
 NS=$ROOT/port/src/net/netsession.c
-if grep -q 'tier = s_MatchHumans;' "$NS" \
+if grep -q 'tier = netChallengeRecordTier();' "$NS" \
 		&& ! grep -q 'tier = s_End.numplayers;' "$NS" \
 		&& grep -q 'challengeSetSimulantsForNumPlayers(s_MatchHumans);' "$NS" \
 		&& [ "$(grep -c 'challengeSetSimulantsForNumPlayers(s_MatchHumans);' "$NS")" = 1 ]; then

@@ -103,6 +103,17 @@ s32 challengeHumanCount(void)
 	return count;
 }
 
+s32 challengeRecordTier(s32 humans)
+{
+	if (humans < 1) {
+		return 1;
+	} else if (humans > MAX_LOCAL_PLAYERS) {
+		return MAX_LOCAL_PLAYERS;
+	}
+
+	return humans;
+}
+
 static bool challengePlusConverted(s32 challengeindex)
 {
 	return challengeindex >= 0 && challengeindex < 30
@@ -1609,6 +1620,29 @@ bool challengeIsCompleteForEndscreen(void)
 	return result;
 }
 
+static void challengeMarkCompleteAtTier(s32 tier, s32 medal)
+{
+	u32 prevplayernum;
+	s32 i;
+
+	challengeSetCompletedByAnyPlayerWithNumPlayers(g_MpChallengeIndex, tier, true);
+	challengeSetMedal(g_MpChallengeIndex, tier, medal);
+	prevplayernum = g_Vars.currentplayernum;
+
+	for (i = 0; i < PLAYERCOUNT(); i++) {
+		setCurrentPlayerNum(i);
+
+		// the per-player bits are 2 << mpchrnum in a single byte, so a sim's
+		// slot (4 or higher) would spill into the next tier and the medal
+		// bits. The team's any-player bit above records the result.
+		if (g_Vars.currentplayerstats->mpindex < MAX_LOCAL_PLAYERS) {
+			challengeSetCompletedByPlayerWithNumPlayers(g_Vars.currentplayerstats->mpindex, g_MpChallengeIndex, tier, true);
+		}
+	}
+
+	setCurrentPlayerNum(prevplayernum);
+}
+
 void challengeConsiderMarkingComplete(void)
 {
 	bool result = challengeIsCompleteForEndscreen();
@@ -1621,24 +1655,10 @@ void challengeConsiderMarkingComplete(void)
 	if (result && g_CheatsActiveBank0 == 0 && g_CheatsActiveBank1 == 0)
 #endif
 	{
-		u32 prevplayernum;
-		s32 i;
-
-		// completions[] holds 1-4 players (gamefile-serialized)
-		if (PLAYERCOUNT() > MAX_LOCAL_PLAYERS) {
-			return;
-		}
-
-		challengeSetCompletedByAnyPlayerWithNumPlayers(g_MpChallengeIndex, PLAYERCOUNT(), 1);
-		challengeSetMedal(g_MpChallengeIndex, PLAYERCOUNT(), g_ChallengeMedalLevel);
-		prevplayernum = g_Vars.currentplayernum;
-
-		for (i = 0; i < PLAYERCOUNT(); i++) {
-			setCurrentPlayerNum(i);
-			challengeSetCompletedByPlayerWithNumPlayers(g_Vars.currentplayerstats->mpindex, g_MpChallengeIndex, PLAYERCOUNT(), true);
-		}
-
-		setCurrentPlayerNum(prevplayernum);
+		// completions[] holds 1-4 players (gamefile-serialized), indexed by
+		// human count. Simulants are players on this machine but are not
+		// people, so they must not pick a tier or invalidate the whole mark.
+		challengeMarkCompleteAtTier(challengeRecordTier(challengeHumanCount()), g_ChallengeMedalLevel);
 		// A Plus completion grants nothing: it must not feed the shared feature
 		// unlocks or change which challenges are available. Availability stays
 		// driven by the stock list. (The marking above already routed to the

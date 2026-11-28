@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 122 2026-11-28
+Challenges+: a challenge record now always uses the human player count for its tier, and rooms with more than four humans no longer lose the mark entirely.
+
 notes 121 2026-11-28
 Saves: eeprom, setups, weapon sets, ghosts and mod saves now live in a saves folder beside the game. Existing saves move there on the next launch; settings, backups and recordings stay where they were.
 Challenges+: earned stars are now actually written to disk, one set per agent, so they survive a restart. Online, the host keeps the star it judges and both sides use the room's player count for the medal thresholds.

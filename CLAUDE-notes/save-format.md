@@ -43,6 +43,12 @@ sets and filters, `MODGHOST_DIR` in `src/include/game/modghost.h`,
 
 ## Challenge records
 
+The tier byte is indexed by human count, not `PLAYERCOUNT()`: `g_Vars.players[]`
+holds humans, while simulants live in `g_MpSimSlots[]` as chrs. The old guard
+that threw away a whole mark when `PLAYERCOUNT()` passed four was for rooms with
+more than four humans; `challengeRecordTier()` now clamps the tier instead, and
+per-player bits are written only for the four slots the byte can hold.
+
 Stock completions are bits in the GAME note. Challenges+ stars are *not*: that
 note is 0xa0 bytes with only three bits spare, so `port/src/challengeplus.c`
 keeps them in `$V/challengeplus.bin`, one file per save directory with a block

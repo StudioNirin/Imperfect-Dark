@@ -2867,15 +2867,7 @@ static void netHostOwnNameBack(void)
  */
 s32 netChallengeRecordTier(void)
 {
-	s32 tier = s_MatchHumans;
-
-	if (tier < 1) {
-		tier = 1;
-	} else if (tier > MAX_LOCAL_PLAYERS) {
-		tier = MAX_LOCAL_PLAYERS;
-	}
-
-	return tier;
+	return challengeRecordTier(s_MatchHumans);
 }
 
 void netChallengeMatchEnded(void)
@@ -2917,17 +2909,9 @@ void netChallengeMatchEnded(void)
 					// the record's tier is the human count, not PLAYERCOUNT():
 					// a challenge's sims are players on each machine (protocol
 					// 38), so numplayers would tick a higher tier than the host
-					tier = s_End.challengehumans ? s_End.challengehumans : s_End.numplayers;
+					tier = challengeRecordTier(s_End.challengehumans ? s_End.challengehumans : s_End.numplayers);
 
 					if (s_End.challengeindex < (u16) ARRAYCOUNT(g_MpChallenges)) {
-						if (tier < 1) {
-							tier = 1;
-						}
-
-						if (tier > MAX_LOCAL_PLAYERS) {
-							tier = MAX_LOCAL_PLAYERS;
-						}
-
 						challengeSetCompletedByAnyPlayerWithNumPlayers(s_End.challengeindex, tier, true);
 						challengeSetCompletedByPlayerWithNumPlayers(0, s_End.challengeindex, tier, true);
 						challengeSetMedal(s_End.challengeindex, tier, (s_End.challenge >> 2) & 3);
@@ -2973,15 +2957,7 @@ void netChallengeMatchEnded(void)
 	// room simply finished is won; an abort loses it, as offline)
 	s_ChallengeWon = challengeIsCompleteForEndscreen() && !g_CheatsActiveBank0 && !g_CheatsActiveBank1;
 
-	tier = s_MatchHumans;
-
-	if (tier < 1) {
-		tier = 1;
-	}
-
-	if (tier > MAX_LOCAL_PLAYERS) {
-		tier = MAX_LOCAL_PLAYERS;
-	}
+	tier = netChallengeRecordTier();
 
 	if (s_ChallengeWon) {
 		challengeSetCompletedByAnyPlayerWithNumPlayers(g_MpChallengeIndex, tier, true);

@@ -91,6 +91,19 @@ grep -qF 's32 tier = challengeHumanCount() - 1;' "$CHAL" || fail 'thresholds not
 grep -qF 'bonus->perfect[tier] > 0' "$CHAL" || fail 'perfect tier not gated on a set threshold'
 pass 'grader aggregates team 0 with per-tier goals and thresholds'
 
+# --- marking with simulants --------------------------------------------------
+# The mark belongs at the human-count tier. The old blanket return threw away
+# the whole mark with more than four humans; per-player bits must also stay
+# inside their one byte.
+if grep -qF 'PLAYERCOUNT() > MAX_LOCAL_PLAYERS' "$CHAL"; then
+	fail 'simulants still discard the whole challenge mark'
+fi
+grep -qF 'challengeMarkCompleteAtTier(challengeRecordTier(challengeHumanCount())' "$CHAL" || fail 'offline mark does not use the human tier'
+grep -qF 'mpindex < MAX_LOCAL_PLAYERS' "$CHAL" || fail 'per-player bits can spill past four players'
+grep -qF 'return challengeRecordTier(s_MatchHumans);' "$NS" || fail 'host tier does not use the shared clamp'
+grep -qF 'tier = challengeRecordTier(s_End.challengehumans' "$NS" || fail 'client tier does not use the shared clamp'
+pass 'simulants never change the record tier or spill into medal bits'
+
 # --- storage and net ---------------------------------------------------------
 NETPLUS=$ROOT/port/src/challengeplus.c
 grep -qF 'challengeSetMedalIn(g_MpChallengesPlus, i, j + 1, value - 1)' "$NETPLUS" || fail 'stars not read from the star file'

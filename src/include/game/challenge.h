@@ -53,6 +53,9 @@ extern u8 g_MpPlusStartArmed[30];
 extern u16 g_MpPlusScoreLimits[30][4];
 // Number of humans in the match, used to pick the tier's goal and thresholds.
 s32 challengeHumanCount(void);
+// Clamp a human count to the four completion tiers. The grader and both
+// marking paths use this, so sims never choose a different tier than humans.
+s32 challengeRecordTier(s32 humans);
 // Description panel preview: which challenge is highlighted and which of its
 // four player-count tiers the tabs are showing.
 extern char g_MpPlusTierDescriptions[30][4][320];
