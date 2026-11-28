@@ -16,7 +16,7 @@
 
 #define EEPROM_SIZE (EEP16K_MAXBLOCKS * 8)
 #define EEPROM_FNAME "eeprom.bin"
-#define EEPROM_PATH "$S/" EEPROM_FNAME
+#define EEPROM_PATH "$V/" EEPROM_FNAME
 
 #define OS_COUNTER_RATE 46875000ULL
 #define OS_COUNTER_NUM (OS_COUNTER_RATE / 1000ULL)
@@ -284,7 +284,7 @@ static void osEepromDefaultPath(char *out)
 			strncpy(out, extPath, FS_MAXPATH);
 		} else {
 			// just a filename, look for it in the save dir
-			snprintf(out, FS_MAXPATH, "$S/%s", extPath);
+			snprintf(out, FS_MAXPATH, "$V/%s", extPath);
 		}
 	} else {
 		strncpy(out, EEPROM_PATH, FS_MAXPATH);

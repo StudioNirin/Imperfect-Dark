@@ -229,7 +229,7 @@ void modModeTick(void)
 extern void osEepromSwitchFile(const char *path);
 extern const char *osEepromDefaultFile(void);
 
-#define MODMODE_SAVES_DIR "$S/modsaves"
+#define MODMODE_SAVES_DIR "$V/modsaves"
 
 static void modModeCopyFile(const char *from, const char *to)
 {

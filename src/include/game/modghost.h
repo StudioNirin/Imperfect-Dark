@@ -133,7 +133,7 @@
  */
 #define MODGHOST_MAXRACERS 10
 
-#define MODGHOST_DIR      "$S/ghosts"
+#define MODGHOST_DIR      "$V/ghosts"
 #define MODGHOST_EXT      ".pdg"
 #define MODGHOST_MAGIC    "PDGHOST"
 #define MODGHOST_VERSION  2

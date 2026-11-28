@@ -43,6 +43,9 @@ static s32 numOverlayModDirs;
 static s32 portable;
 
 static char saveDir[FS_MAXPATH + 1]; // replaces $S
+// Save files used to sit in $S next to pd.ini and everything else. $V is their
+// own folder, $S/saves by default, or $S itself for an explicit --savedir.
+static char saveFilesDir[FS_MAXPATH + 1]; // replaces $V
 static char homeDir[FS_MAXPATH + 1]; // replaces $H
 static char exeDir[FS_MAXPATH + 1];  // replaces $E
 
@@ -412,6 +415,7 @@ const char *fsFullPath(const char *relPath)
 			case 'M': expStr = numModDirs ? modDirs[0] : NULL; break;
 			case 'B': expStr = baseDir; break;
 			case 'S': expStr = saveDir; break;
+			case 'V': expStr = saveFilesDir; break;
 			default: break;
 		}
 		if (expStr) {
@@ -662,6 +666,73 @@ s32 fsGetNumOverlayModDirs(void)
 	return numOverlayModDirs;
 }
 
+/**
+ * Move the port's save files out of the save directory root and into its
+ * saves/ folder, leaving config, backups, times files and recordings where
+ * they are. Renamed rather than copied, and never over an existing target, so
+ * an interrupted run simply finishes on the next start.
+ *
+ * Only for the default layout: an explicit --savedir already names the folder
+ * the save files go in (the gates pass one and then read eeprom.bin from it),
+ * so that directory stays flat.
+ */
+static void fsMoveSaveFilesIntoSubdir(const char *from, const char *to)
+{
+	static const char *const files[] = {
+		"eeprom.bin", "mpsetups.bin", "mpsetups-ext.bin",
+		"mpweaponsets.bin", "mpweaponsets-test.bin",
+		"mpweaponfilters.bin", "mpweaponfilters-test.bin",
+	};
+	static const char *const dirs[] = { "ghosts", "exported", "modsaves" };
+	char src[FS_MAXPATH + 1];
+	char dst[FS_MAXPATH + 1];
+	s32 moved = 0;
+	s32 i;
+
+	if (fsFileSize(to) >= 0) {
+		return; // already migrated, or something is in the way
+	}
+
+	if (fsCreateDir(to) != 0) {
+		sysLogPrintf(LOG_WARNING, "saves: could not create %s", to);
+		return;
+	}
+
+	for (i = 0; i < (s32) (sizeof(files) / sizeof(files[0])); i++) {
+		snprintf(src, sizeof(src), "%s/%s", from, files[i]);
+		snprintf(dst, sizeof(dst), "%s/%s", to, files[i]);
+
+		if (fsFileSize(src) < 0 || fsFileSize(dst) >= 0) {
+			continue;
+		}
+
+		if (fsRename(src, dst) == 0) {
+			moved++;
+		} else {
+			sysLogPrintf(LOG_WARNING, "saves: could not move %s", files[i]);
+		}
+	}
+
+	for (i = 0; i < (s32) (sizeof(dirs) / sizeof(dirs[0])); i++) {
+		snprintf(src, sizeof(src), "%s/%s", from, dirs[i]);
+		snprintf(dst, sizeof(dst), "%s/%s", to, dirs[i]);
+
+		if (fsFileSize(src) < 0 || fsFileSize(dst) >= 0) {
+			continue;
+		}
+
+		if (fsRename(src, dst) == 0) {
+			moved++;
+		} else {
+			sysLogPrintf(LOG_WARNING, "saves: could not move %s/", dirs[i]);
+		}
+	}
+
+	if (moved > 0) {
+		sysLogPrintf(LOG_NOTE, "saves: moved %d save files and folders into %s", moved, to);
+	}
+}
+
 s32 fsInit(void)
 {
 	sysGetExecutablePath(exeDir, FS_MAXPATH);
@@ -777,11 +848,25 @@ s32 fsInit(void)
 
 	strncpy(saveDir, fsFullPath(path), FS_MAXPATH);
 
+	if (sysArgGetString("--savedir")) {
+		// the chosen folder is already the save-files folder
+		snprintf(saveFilesDir, sizeof(saveFilesDir), "%s", saveDir);
+	} else {
+		char from[FS_MAXPATH + 1];
+		char to[FS_MAXPATH + 1];
+
+		snprintf(from, sizeof(from), "%s", saveDir);
+		snprintf(to, sizeof(to), "%s/saves", saveDir);
+		snprintf(saveFilesDir, sizeof(saveFilesDir), "%s", to);
+		fsMoveSaveFilesIntoSubdir(from, to);
+	}
+
 	for (s32 i = 0; i < numModDirs; ++i) {
 		sysLogPrintf(LOG_NOTE, " mod dir: %s%s", modDirs[i], i < numOverlayModDirs ? "" : " (maps only)");
 	}
 	sysLogPrintf(LOG_NOTE, "base dir: %s", baseDir);
 	sysLogPrintf(LOG_NOTE, "save dir: %s", saveDir);
+	sysLogPrintf(LOG_NOTE, "save files: %s", saveFilesDir);
 
 	return 0;
 }

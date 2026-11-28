@@ -33,7 +33,7 @@ MP Setup File Format
 
 #define MPSETUP_VERSION MPSETUP_VERSION_LATEST
 
-#define MPSETUP_EXPORTDIR "$S/exported/"
+#define MPSETUP_EXPORTDIR "$V/exported/"
 #define MPSETUP_FILENAME "mpsetups"
 #define MPSETUP_FILENAME_EXP "mpsetups-ext"
 
@@ -425,12 +425,12 @@ static char s_MpSetupPath[FS_MAXPATH + 1];
 
 static const char *mpsetupPath(void)
 {
-	return s_MpSetupPath[0] ? s_MpSetupPath : "$S/" MPSETUP_FILENAME ".bin";
+	return s_MpSetupPath[0] ? s_MpSetupPath : "$V/" MPSETUP_FILENAME ".bin";
 }
 
 const char *mpsetupDefaultFile(void)
 {
-	return "$S/" MPSETUP_FILENAME ".bin";
+	return "$V/" MPSETUP_FILENAME ".bin";
 }
 
 static FILE *mpsetupOpenFile(bool write, u8 op) {
@@ -446,7 +446,7 @@ static FILE *mpsetupOpenFile(bool write, u8 op) {
 		filename = fsFullPath(MPSETUP_EXPORTDIR MPSETUP_FILENAME_EXP ".bin");
 	} else if (op == MPSETUP_OP_IMPORT) {
 		// same name as export but different folder
-		filename = fsFullPath("$S/" MPSETUP_FILENAME_EXP ".bin");
+		filename = fsFullPath("$V/" MPSETUP_FILENAME_EXP ".bin");
 	}
 
 	FILE *f;
@@ -910,7 +910,7 @@ static MenuItemHandlerResult menuhandlerOpenImportExportDialog(s32 operation, st
 	case MENUOP_SET:
 		if (item->param == MPSETUP_OP_IMPORT) {
 			strcpy(g_TitleImportExportDialog, LANG_N("Import Settings\n"));
-			if (fsFileSize("$S/" MPSETUP_FILENAME_EXP ".bin") < 0) {
+			if (fsFileSize("$V/" MPSETUP_FILENAME_EXP ".bin") < 0) {
 				snprintf(
 					g_StatusText, sizeof(g_StatusText),
 					langTr("No import file found.\n"

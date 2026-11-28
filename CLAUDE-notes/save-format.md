@@ -25,6 +25,34 @@ file for every mod, unlike `mpsetups.bin`, because a set names guns by their
 weapon numbers and a setup names arenas and weapons by a mod's numbers
 (`mpsetupSwitchFile()`).
 
+## Save folder
+
+`$S` is the directory the game writes into, but save files now live in its
+`saves/` child, reached as `$V`. `fsInit()` in `port/src/fs.c` sets that up:
+with no `--savedir`, `$V` is `$S/saves` and a one-time migration moves
+`eeprom.bin`, the setup and weapon files, `modsaves/`, `ghosts/` and `exported/`
+into it with `fsRename()`, skipping anything already there. With an explicit
+`--savedir`, `$V` is that directory itself, so gates and players choosing their
+own folder keep the flat layout they asked for. Config (`pd.ini`), update
+backups, times files and recordings stay on `$S`.
+
+Paths that must use `$V`: `EEPROM_PATH` and the `--eeprom-file` fallback in
+`port/src/libultra.c`, setup and export paths in `port/src/mpsetups.c`, weapon
+sets and filters, `MODGHOST_DIR` in `src/include/game/modghost.h`,
+`MODMODE_SAVES_DIR` in `port/src/modmode.c`, and `challengeplus.bin` below.
+
+## Challenge records
+
+Stock completions are bits in the GAME note. Challenges+ stars are *not*: that
+note is 0xa0 bytes with only three bits spare, so `port/src/challengeplus.c`
+keeps them in `$V/challengeplus.bin`, one file per save directory with a block
+per agent keyed by `{deviceserial, fileid, agent name}`. Each block is 120
+three-bit records (30 challenges x 4 player counts), 0 for no record and 1-4
+for bronze through perfect; the file is versioned, and a missing or damaged
+file reads as blank progress. `gamefileLoad()` and `gamefileSave()` call it;
+the host's net verdict writes its own medal too, and the grader's tier is the
+room's human count so it matches the tier the record is stored at.
+
 `savebufferOr()` does no bounds checking. `stagenum` is stored in 7 bits.
 
 **Everything lives beside the executable now** — saves, `pd.ini`, screenshots and

@@ -71,12 +71,12 @@ static char s_Path[FS_MAXPATH + 1];
 
 static const char *mpWeaponSetsPath(void)
 {
-	return s_Path[0] ? s_Path : "$S/" MPWEAPONSET_FILENAME ".bin";
+	return s_Path[0] ? s_Path : "$V/" MPWEAPONSET_FILENAME ".bin";
 }
 
 void mpWeaponSetsTestFile(void)
 {
-	snprintf(s_Path, sizeof(s_Path), "$S/%s-test.bin", MPWEAPONSET_FILENAME);
+	snprintf(s_Path, sizeof(s_Path), "$V/%s-test.bin", MPWEAPONSET_FILENAME);
 	remove(fsFullPath(s_Path));
 }
 

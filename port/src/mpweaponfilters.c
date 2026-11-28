@@ -43,12 +43,12 @@ static s32 mpWeaponFiltersCurrentGuns(u8 *guns);
 
 static const char *mpWeaponFiltersPath(void)
 {
-	return s_Path[0] ? s_Path : "$S/" MPWEAPONFILTER_FILENAME ".bin";
+	return s_Path[0] ? s_Path : "$V/" MPWEAPONFILTER_FILENAME ".bin";
 }
 
 void mpWeaponFiltersTestFile(void)
 {
-	snprintf(s_Path, sizeof(s_Path), "$S/%s-test.bin", MPWEAPONFILTER_FILENAME);
+	snprintf(s_Path, sizeof(s_Path), "$V/%s-test.bin", MPWEAPONFILTER_FILENAME);
 	remove(fsFullPath(s_Path));
 }
 
