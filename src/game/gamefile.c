@@ -20,6 +20,9 @@
 #include "lib/str.h"
 #include "data.h"
 #include "types.h"
+#ifndef PLATFORM_N64
+#include "challengeplus.h"
+#endif
 
 u8 *gamefileGetFlags(void)
 {
@@ -382,22 +385,11 @@ s32 gamefileLoad(s32 device)
 				g_GameFile.weaponsfound[i] = savebufferReadBits(&buffer, 8);
 			}
 
-			// Challenges+ records: a second block appended after everything the
-			// stock save wrote. A save from before this block reads as zeros,
-			// so Plus progress starts blank and the standard records are intact.
-			for (i = 0; i < ARRAYCOUNT(g_MpChallengesPlus); i++) {
-				for (j = 1; j < MAX_LOCAL_PLAYERS + 1; j++) {
-					challengeSetCompletedByAnyPlayerIn(g_MpChallengesPlus, i, j, savebufferReadBits(&buffer, 1));
-				}
-			}
-
-			// Plus medal levels, appended after everything earlier so a save
-			// from before them reads zeros instead of shifting the fields above.
-			for (i = 0; i < ARRAYCOUNT(g_MpChallengesPlus); i++) {
-				for (j = 1; j < MAX_LOCAL_PLAYERS + 1; j++) {
-					challengeSetMedalIn(g_MpChallengesPlus, i, j, savebufferReadBits(&buffer, 3));
-				}
-			}
+#ifndef PLATFORM_N64
+			// Plus stars are in their own per-agent file. The old blocks
+			// appended here were cut off by the GAME note's body length.
+			challengeplusLoad();
+#endif
 
 #if VERSION >= VERSION_NTSC_1_0
 			if (pakHasBitflag(GAMEFILEFLAG_FOUNDTIMEDMINE, g_GameFile.flags)) {
@@ -571,27 +563,17 @@ s32 gamefileSave(s32 device, s32 fileid, u16 deviceserial)
 			savebufferOr(&buffer, g_GameFile.weaponsfound[i], 8);
 		}
 
-		// Challenges+ records, appended after everything stock (see the read
-		// side). Both blocks are written regardless of the current mode.
-		for (i = 0; i < ARRAYCOUNT(g_MpChallengesPlus); i++) {
-			for (j = 1; j < MAX_LOCAL_PLAYERS + 1; j++) {
-				savebufferOr(&buffer, challengeIsCompletedByAnyPlayerIn(g_MpChallengesPlus, i, j), 1);
-			}
-		}
-
-		// Plus medal levels (see the read side for why this is appended).
-		for (i = 0; i < ARRAYCOUNT(g_MpChallengesPlus); i++) {
-			for (j = 1; j < MAX_LOCAL_PLAYERS + 1; j++) {
-				savebufferOr(&buffer, challengeGetMedalIn(g_MpChallengesPlus, i, j), 3);
-			}
-		}
-
 		ret = pakSaveAtGuid(device, fileid, PAKFILETYPE_GAME, buffer.bytes, &newfileid, 0);
 		g_FilemgrLastPakError = ret;
 
 		if (ret == 0) {
 			g_GameFileGuid.fileid = newfileid;
 			g_GameFileGuid.deviceserial = deviceserial;
+
+#ifndef PLATFORM_N64
+			// The GAME note stays byte-for-byte compatible with stock saves.
+			challengeplusSave();
+#endif
 
 			return 0;
 		}

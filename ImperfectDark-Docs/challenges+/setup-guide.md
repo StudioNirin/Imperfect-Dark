@@ -167,5 +167,10 @@ and the panel shares that choice with the standard panel. Fastest two kills show
 
 ## Checks
 
+Stars are kept in `challengeplus.bin` beside the other save files, one block
+per agent so two players using different agent saves on one computer do not
+share progress. A missing file starts blank. On an N64 build there is no side
+file and Plus stars do not survive a reload.
+
 `tools/ci/challengesplusmedals.sh` verifies all 30 templates parse, the
 generated C matches them, and the runtime wiring is intact.
