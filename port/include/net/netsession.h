@@ -47,6 +47,9 @@ void netClientApplyMatchEnd(void);
 // H9/H10 mplayer.c mpEndMatch, challenge locktype: the room's challenge is
 // judged and marked (the host at its own end, a client from the verdict)
 void netChallengeMatchEnded(void);
+// The room's human count, clamped to a record tier. The grader uses this so
+// its thresholds match the tier the completion and medal are stored at.
+s32 netChallengeRecordTier(void);
 // H11 ingame.c End Game: a client leaves the session
 void netClientLeave(void);
 // H12 pdmain.c after lvStop: the rules come off after a net match

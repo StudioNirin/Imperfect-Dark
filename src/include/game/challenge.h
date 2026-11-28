@@ -80,7 +80,7 @@ enum challengeendscreenaward {
 	CHALEND_VOID
 };
 extern s32 g_ChallengeEndscreenAward;
-void challengeEvaluateBonus(void);
+void challengeEvaluateBonus(s32 numplayers);
 const char *challengeBonusName(u8 requirement);
 s32 challengeBonusFormat(u8 requirement);
 s32 challengeBonusDisplayValue(u8 requirement, s32 value);

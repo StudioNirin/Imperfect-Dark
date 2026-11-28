@@ -1466,7 +1466,7 @@ static void challengeGetTeamMetrics(struct challengemetrics *m)
  * this once at match end; clients take the verdict from MATCH_END. 0 is bronze
  * (any completion), 1 silver, 2 gold.
  */
-void challengeEvaluateBonus(void)
+void challengeEvaluateBonus(s32 numplayers)
 {
 	struct challengemetrics m;
 	struct challengebonus *bonus;
@@ -1551,7 +1551,7 @@ void challengeEvaluateBonus(void)
 	g_ChallengeAchievedRequirement = bonus->requirement;
 
 	{
-		s32 tier = challengeHumanCount() - 1;
+		s32 tier = numplayers - 1;
 
 		if (tier < 0) {
 			tier = 0;

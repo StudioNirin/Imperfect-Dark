@@ -4710,7 +4710,13 @@ void mpEndMatch(void)
 	if (g_BossFile.locktype == MPLOCKTYPE_CHALLENGE) {
 		// Plus medal stars are judged from the finalized team stats, before
 		// the verdict is marked or sent (the host owns the net judgement).
-		challengeEvaluateBonus();
+		// the record tier and the threshold tier must be the same: a net
+		// room counts humans on the host, not this machine's local players
+		challengeEvaluateBonus(
+#ifndef PLATFORM_N64
+				g_NetMode != NETMODE_NONE ? netChallengeRecordTier() :
+#endif
+				challengeHumanCount());
 #ifndef PLATFORM_N64
 		// a challenge room: the host judges from its own full view and the
 		// verdict marks every machine (protocol 37); the offline marking

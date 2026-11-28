@@ -79,7 +79,10 @@ pass '16 sims wired without growing the ROM structs'
 
 # --- team-aggregated grader --------------------------------------------------
 grep -q 'void challengeEvaluateBonus' "$CHAL" || fail 'no grader'
-grep -qF 'challengeEvaluateBonus();' "$MP" || fail 'grader not called at match end'
+grep -qF 'challengeEvaluateBonus(' "$MP" || fail 'grader not called at match end'
+grep -q 'netChallengeRecordTier' "$MP" || fail 'grader does not use the room tier'
+grep -qF 'challengeSetMedal(g_MpChallengeIndex, tier, g_ChallengeMedalLevel)' "$NS" || fail 'host keeps bronze while the client gets the graded star'
+grep -qF 'g_ChallengeMedalLevel = (s_End.challenge >> 2) & 3' "$NS" || fail 'client does not show the host verdict'
 grep -qF 'mpchr->team != 0' "$CHAL" || fail 'grader does not filter team 0'
 grep -qF 'setCurrentPlayerNum(i)' "$CHAL" || fail 'grader does not switch current player'
 grep -qF 'm.hits * 100 / m.shots' "$CHAL" || fail 'accuracy not combined from raw counters'
@@ -89,8 +92,9 @@ grep -qF 'bonus->perfect[tier] > 0' "$CHAL" || fail 'perfect tier not gated on a
 pass 'grader aggregates team 0 with per-tier goals and thresholds'
 
 # --- storage and net ---------------------------------------------------------
-[ "$(count "$GF" 'challengeSetMedalIn(g_MpChallengesPlus')" -eq 1 ] || fail 'medal bits not read from save'
-[ "$(count "$GF" 'challengeGetMedalIn(g_MpChallengesPlus')" -eq 1 ] || fail 'medal bits not written to save'
+NETPLUS=$ROOT/port/src/challengeplus.c
+grep -qF 'challengeSetMedalIn(g_MpChallengesPlus, i, j + 1, value - 1)' "$NETPLUS" || fail 'stars not read from the star file'
+grep -qF 'u32 value = (completion & 1)' "$NETPLUS" || fail 'stars not written to the star file'
 grep -qF '(7 << 5)' "$CHAL" || fail 'medal bits not in spare byte bits'
 grep -qF '(g_ChallengeMedalLevel & 3) << 2' "$NS" || fail 'medal not packed into MATCH_END'
 grep -qF 'challengeSetMedal(s_End.challengeindex, tier' "$NS" || fail 'client does not store host medal'
@@ -152,5 +156,24 @@ for f in "${TPLS[@]}"; do
 	grep -qF '`LONGEST_SPREE`' "$f" || fail "$(basename "$f") does not list the LONGEST_SPREE tag"
 done
 pass 'streak stats tracked, gradable, shown and listed in all 30 templates'
+
+# --- save layout and star records -------------------------------------------
+# The GAME note body is 0xa0 and stock used all but three bits of it, so stars
+# go in a per-agent file beside the setups rather than being appended there.
+# Save files moved from $S to $V to keep them apart from config and recordings.
+GATEFS=$ROOT/port/src/fs.c
+GATELIB=$ROOT/port/src/libultra.c
+GATEPLUS=$ROOT/port/src/challengeplus.c
+GATEGFILE=$SRC/game/gamefile.c
+grep -qF 'expStr = saveFilesDir' "$GATEFS" || fail 'no $V placeholder'
+grep -q 'fsMoveSaveFilesIntoSubdir' "$GATEFS" || fail 'flat saves are not migrated into saves/'
+grep -qF '"$V/" EEPROM_FNAME' "$GATELIB" || fail 'eeprom not in the save-files folder'
+grep -qF '"$V/challengeplus.bin"' "$GATEPLUS" || fail 'star file not in the save-files folder'
+grep -qF 'challengeplusLoad();' "$GATEGFILE" || fail 'stars not loaded with the agent'
+grep -qF 'challengeplusSave();' "$GATEGFILE" || fail 'stars not saved with the agent'
+if grep -qF 'savebufferOr(&buffer, challengeGetMedalIn' "$GATEGFILE"; then
+	fail 'plus medals still appended to the truncated GAME note'
+fi
+pass 'save files in their own folder, stars in a per-agent file'
 
 echo "challengesplusmedals: all gates passed"

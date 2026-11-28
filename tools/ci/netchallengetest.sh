@@ -291,13 +291,19 @@ else
 	fail "offline: the entry lists do not match the online picker"
 fi
 
-# Challenges+ independence: two record arrays, both read AND written in the
-# gamefile (symmetric save block), and Plus completions grant no shared unlocks.
+# Challenges+ independence: stock records stay in the GAME note, Plus records
+# are read and written by their own per-agent file, and a Plus completion
+# grants no shared unlocks.
 CH=$ROOT/src/game/challenge.c
 GF=$ROOT/src/game/gamefile.c
+PLUSFILE=$ROOT/port/src/challengeplus.c
 if grep -q 'challengeActiveList()' "$CH" \
-		&& [ "$(grep -c 'challengeSetCompletedByAnyPlayerIn(g_MpChallenges' "$GF")" -ge 2 ] \
-		&& [ "$(grep -c 'challengeIsCompletedByAnyPlayerIn(g_MpChallenges' "$GF")" -ge 2 ]; then
+		&& grep -q 'challengeSetCompletedByAnyPlayerIn(g_MpChallenges' "$GF" \
+		&& grep -q 'challengeIsCompletedByAnyPlayerIn(g_MpChallenges' "$GF" \
+		&& grep -q 'challengeplusLoad();' "$GF" \
+		&& grep -q 'challengeplusSave();' "$GF" \
+		&& grep -q 'challengeSetCompletedByAnyPlayerIn(g_MpChallengesPlus' "$PLUSFILE" \
+		&& grep -q 'completion = g_MpChallengesPlus' "$PLUSFILE"; then
 	pass "plus: two independent record sets, both read and written by the save"
 else
 	fail "plus: the standard and Plus records are not both saved independently"

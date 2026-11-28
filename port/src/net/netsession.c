@@ -2865,6 +2865,19 @@ static void netHostOwnNameBack(void)
  * can be 11, where the offline loop would corrupt the table. The gamefile
  * save that follows every net match end takes the tick to disk with it.
  */
+s32 netChallengeRecordTier(void)
+{
+	s32 tier = s_MatchHumans;
+
+	if (tier < 1) {
+		tier = 1;
+	} else if (tier > MAX_LOCAL_PLAYERS) {
+		tier = MAX_LOCAL_PLAYERS;
+	}
+
+	return tier;
+}
+
 void netChallengeMatchEnded(void)
 {
 	s32 tier;
@@ -2918,6 +2931,9 @@ void netChallengeMatchEnded(void)
 						challengeSetCompletedByAnyPlayerWithNumPlayers(s_End.challengeindex, tier, true);
 						challengeSetCompletedByPlayerWithNumPlayers(0, s_End.challengeindex, tier, true);
 						challengeSetMedal(s_End.challengeindex, tier, (s_End.challenge >> 2) & 3);
+						// the end screen describes the host's verdict, not this
+						// machine's locally graded copy of it
+						g_ChallengeMedalLevel = (s_End.challenge >> 2) & 3;
 						sysLogPrintf(LOG_NOTE, "net: challenge %d: the host's verdict marked this machine's record at %d players, completions[%d] now %d",
 								s_End.challengeindex, tier, tier - 1,
 								challengeActiveList()[s_End.challengeindex].completions[tier - 1]);
@@ -2970,6 +2986,10 @@ void netChallengeMatchEnded(void)
 	if (s_ChallengeWon) {
 		challengeSetCompletedByAnyPlayerWithNumPlayers(g_MpChallengeIndex, tier, true);
 		challengeSetCompletedByPlayerWithNumPlayers(0, g_MpChallengeIndex, tier, true);
+		// the host judged from its own stats, so its own record needs the
+		// medal too: before this the client got the graded star and the host
+		// kept bronze from the bits the completion set left behind
+		challengeSetMedal(g_MpChallengeIndex, tier, g_ChallengeMedalLevel);
 		// the host plays on its own unlock table, as offline; a client's
 		// stays the room's (the host's RULES) until its profile next loads.
 		// A Plus completion grants nothing - it must not feed the shared
