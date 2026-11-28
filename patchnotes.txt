@@ -40,6 +40,9 @@
 #
 # mod-base 69
 
+notes 120 2026-11-28
+Combat Simulator: three new simulants - Boomstick prefers shotguns, Vulture hunts the wounded, Surge grows stronger as the match runs.
+
 notes 119 2026-11-27
 Multiplayer: the end-game stats now show the longest killing spree, the most kills one life managed. Challenges+ can grade a challenge on it too.
 

@@ -9,6 +9,7 @@ the long form.
 - **Simulants running on the spot at the head of a ladder** — chrs-and-memory.md, the section of that name: the jump's floor-reaching collision box was given to every simulant whose smoothed ground was over its real one, which is every step down and every ladder head (a simulant goes down a ladder by walking off it) - `chrGetBbox()` is the box a chr's *own* moves are tested with, so it stood inside the ledge; `botIsJumping()` now, `tools/simstall/run.sh` is the probe, stock stalls too (2-21% a run), and `--spectate` hides it
 - **A head on a body it was not made for** — chrs-and-memory.md, "Heads fitted to bodies by measurement": `port/src/headfit.c` replaces the ROM's type table for mixed pairs (own heads and stock one-type pairs untouched); a list's vertices are in the space of the G_MTX loaded before them, not the node's; the release's meshes now take a head's offset through `xblaMeshPose()`
 - **A simulant's stat sliders, and what the player count really changes** — chrs-and-memory.md, the section of that name: no code scales a simulant by the player count except a challenge's per-player-count *difficulty* table; `botGetStatScale()` and its five sites; `g_MpAllChrPtrs[i]` is not bot slot `i - 1`
+- **Boomstick, Vulture and Surge: three new simulant types** — chrs-and-memory.md, the section of that name: the profile table gained a description field because blurbs were `L_MISC_106 + profile index` and the ROM has no spare slot at index 18; names and blurbs are port text patched in `mpInit()`; Surge ramps skill values from Meat to Perfect without changing `config->difficulty`, and Zombies uses its round clock; Vulture's patience lives on the aibot and is reset with it; netplay's RULES gate had to move off `BOTTYPE_VENGE`
 - **A head past the Combat Simulator's list** — chrs-and-memory.md, "A head past the Combat Simulator's list: Perfect Heads the port never has" (2026-09-22): an `mpheadnum` at or past `mpGetNumHeads2()` means a Perfect Head, whose store `pheadInit()` never allocates on the port, and the list shrinks under a saved number when the release's pool or a mod's borrowed heads come off its tail - `mpHeadNumSafe()` at every reader, `modGhostCiHead()` for the Institute's pick
 - **Chrs above 60 FPS** — chrs-and-memory.md, "Chrs above 60 FPS: what runs per frame and what per 60th" (2026-10-10): an alert chr's list and action tick ran every frame; the shapes that keep a count, a roll or a timer per 60th; `chraTick()`'s `runlist` gate (`diffframe240 >= 4 || lvupdate60 > 0`, a chr's first tick exempt); off-screen props' turns in `propsTickPlayer()` (`bgturn`) once per 60th; probing chraiExecute with gdb
 
@@ -693,3 +694,36 @@ memory; growing it)` once a stage, then `vtx pool grown from A to B bytes`. Prov
 busy `--boot-stage 0x32 --mpsims 40` match - it grows once to 128 KB and plays
 to the end. Stock stages never reach the
 guard, so 60 fps replays are unchanged.
+
+
+## Boomstick, Vulture and Surge: three new simulant types (2026-11-28)
+
+The three types are appended to `BOTTYPE_*` and to `g_BotProfiles[]`; the
+setup file's type field is five bits, so no format version changed. Three
+things were not automatic:
+
+- **The blurb lookup was positional.** `mpMenuTextSimulantDescription()` read
+  `L_MISC_106 + profile index`, which works for the ROM's eighteen profiles
+  because their names and blurbs are two contiguous runs. Index 18 would have
+  read "Dark Combat". `struct botprofile` now carries a `description` id and
+  the menu reads that. The new names and blurbs are `langAddPortText()` ids
+  patched into the last three rows by `mpInitSimulantText()`; adding new
+  `L_MISC_*` rows to the ROM banks would have shifted every later id.
+- **Netplay had a max-type gate.** RULES rejects `sim->type > BOTTYPE_VENGE`
+  in `netrules.c`; it now reads `BOTTYPE_SURGE`. The wire type is a `u8`, so
+  no protocol bump was needed - an older build refuses a room that names one
+  of the new types, which is the honest answer.
+- **Surge must not rewrite difficulty.** `config->difficulty` still says what
+  the menu picked and hands out the kit and shield; `botGetSkillValue()`
+  blends the aim/reaction numbers from Meat toward Perfect using the match
+  clock, and `botGetStatScale()` grows damage, toughness and speed. A Dark
+  ceiling is not reachable by dividing a nonzero error, hence the blend.
+  Zombies has its own round clock in `g_ScenarioData.zombies.roundtime60`,
+  so its ramp restarts with each round.
+
+Vulture's patience is an aibot field, cleared by `botReset()`, and its target
+check runs next to `botPassesPeaceCheck()` in all three places. A stock
+simulant pays for none of this: the new checks return before doing work, and
+the skill reads return the difficulty table's own value. Prove it with
+`replaytest.sh compare` against a build of the parent commit, and with
+`--mpsims 4 --boot-stage 0x32` boots for each new type.

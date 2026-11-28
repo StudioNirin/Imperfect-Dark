@@ -137,6 +137,14 @@ copy, and they save with the setup. A challenge or a preset always plays stock
 simulants. A setup file that holds a moved slider is in a newer format that
 older builds of this fork cannot read; one with every slider at 100% is not.
 
+Three extra types sit at the end of the Special Simulants list: **Boomstick**
+hunts shotguns but picks up and uses any other gun it finds, **Vulture** holds
+back until somebody is hurt and then goes after the wounded, and **Surge**
+starts as a MeatSim and grows to PerfectSim over the match. Surge ignores the
+difficulty setting; its ramp follows the time limit, or five minutes in an
+untimed match, and Zombies restarts it each round. All three save and host
+normally, but an older client will refuse a room whose rules name one.
+
 ### Bodies
 
 Bodies stay where they fell instead of vanishing. **Bodies** caps how many are
